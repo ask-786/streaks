@@ -72,7 +72,7 @@ export const buildMarkedDates = (
     marked[today] = {
       customStyles: {
         container: {
-          backgroundColor: Colors.calendarToday,
+          backgroundColor: Colors.calendarLogged,
           borderRadius: BorderRadius.sm,
         },
         text: {
