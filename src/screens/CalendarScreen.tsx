@@ -16,10 +16,11 @@ export const CalendarScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
   const [logDetailsVisible, setLogDetailsVisible] = React.useState(false);
   const [logModalDate, setLogModalDate] = React.useState('');
+  const [logModalDateKey, setLogModalDateKey] = React.useState('');
   const [logModalTime, setLogModalTime] = React.useState<string | null>(null);
   const [logModalNote, setLogModalNote] = React.useState<string | undefined>(undefined);
 
-  const { logs, notes, selectedActivityId, activities } = useAttendanceStore();
+  const { logs, notes, selectedActivityId, activities, updateNote } = useAttendanceStore();
   const selectedActivity = activities.find(a => a.id === selectedActivityId);
   const loggedDates = selectedActivityId ? logs[selectedActivityId] || [] : [];
   const today = todayStr();
@@ -59,6 +60,7 @@ export const CalendarScreen: React.FC = () => {
             );
             if (rawLog) {
               const containsTime = rawLog.includes('T');
+              const dateKey = day.dateString;
               if (containsTime) {
                 setLogModalDate(dayjs(day.dateString).format('MMMM D, YYYY'));
                 setLogModalTime(dayjs(rawLog).format('h:mm A'));
@@ -66,6 +68,7 @@ export const CalendarScreen: React.FC = () => {
                 setLogModalDate(dayjs(day.dateString).format('MMMM D, YYYY'));
                 setLogModalTime(null);
               }
+              setLogModalDateKey(dateKey);
               // Look up note for this date
               const note = selectedActivityId
                 ? notes[selectedActivityId]?.[day.dateString]
@@ -106,6 +109,14 @@ export const CalendarScreen: React.FC = () => {
         timeStr={logModalTime}
         note={logModalNote}
         activityName={selectedActivity?.name}
+        dateKey={logModalDateKey}
+        isToday={logModalDateKey === today}
+        onNoteUpdate={selectedActivityId ? async (newNote) => {
+          await updateNote(selectedActivityId, logModalDateKey, newNote);
+          // Refresh modal note from updated store
+          const refreshed = newNote.trim() || undefined;
+          setLogModalNote(refreshed);
+        } : undefined}
         onClose={() => setLogDetailsVisible(false)}
       />
     </ScrollView>

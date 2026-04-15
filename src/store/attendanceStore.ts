@@ -27,6 +27,7 @@ interface AttendanceState {
   setConfettiEnabled: (enabled: boolean) => Promise<void>;
   logToday: (activityId: string, note?: string) => Promise<void>;
   resetActivityData: (id: string) => Promise<void>;
+  updateNote: (activityId: string, dateStr: string, note: string) => Promise<void>;
   exportData: () => Promise<string>;
   importData: (jsonData: string) => Promise<boolean>;
 
@@ -145,6 +146,23 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     }
 
     set({ logs: updatedLogs, notes: updatedNotes, isLoading: false });
+  },
+
+  updateNote: async (activityId: string, dateStr: string, note: string) => {
+    const { notes } = get();
+    const updatedNotes = { ...notes };
+    if (!updatedNotes[activityId]) updatedNotes[activityId] = {};
+    const trimmed = note.trim();
+    if (trimmed) {
+      updatedNotes[activityId] = { ...updatedNotes[activityId], [dateStr]: trimmed };
+    } else {
+      // Remove note if empty
+      const dateMap = { ...updatedNotes[activityId] };
+      delete dateMap[dateStr];
+      updatedNotes[activityId] = dateMap;
+    }
+    await attendanceService.saveNotes(updatedNotes);
+    set({ notes: updatedNotes });
   },
 
   resetActivityData: async (id: string) => {
