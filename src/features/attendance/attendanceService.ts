@@ -10,8 +10,14 @@ export interface Activity {
   requiresNote?: boolean;
 }
 
-// Notes: { [activityId]: { [dateStr YYYY-MM-DD]: noteText } }
-export type NotesMap = Record<string, Record<string, string>>;
+export interface NoteEntry {
+  text: string;
+  /** ISO timestamp when this note was written. Null for notes migrated from the old single-string format. */
+  time: string | null;
+}
+
+// Notes: { [activityId]: { [dateStr YYYY-MM-DD]: NoteEntry[] } }
+export type NotesMap = Record<string, Record<string, NoteEntry[]>>;
 
 /**
  * Attendance Service
@@ -34,7 +40,7 @@ export const attendanceService = {
 
   updateActivity: async (id: string, newName: string): Promise<void> => {
     const activities = await attendanceService.getActivities();
-    const updated = activities.map(a => a.id === id ? { ...a, name: newName } : a);
+    const updated = activities.map(a => (a.id === id ? { ...a, name: newName } : a));
     await attendanceService.saveActivities(updated);
   },
 
@@ -56,7 +62,22 @@ export const attendanceService = {
     try {
       const raw = await AsyncStorage.getItem(StorageKeys.NOTES);
       if (!raw) return {};
-      return JSON.parse(raw) as NotesMap;
+      const parsed = JSON.parse(raw) as Record<string, Record<string, unknown>>;
+
+      // Migrate: older versions stored a plain string per date — wrap in NoteEntry[]
+      const migrated: NotesMap = {};
+      for (const actId of Object.keys(parsed)) {
+        migrated[actId] = {};
+        for (const dateStr of Object.keys(parsed[actId])) {
+          const val = parsed[actId][dateStr];
+          if (typeof val === 'string') {
+            migrated[actId][dateStr] = [{ text: val, time: null }];
+          } else if (Array.isArray(val)) {
+            migrated[actId][dateStr] = val as NoteEntry[];
+          }
+        }
+      }
+      return migrated;
     } catch {
       return {};
     }
@@ -82,11 +103,45 @@ export const attendanceService = {
     if (note && note.trim()) {
       const notes = await attendanceService.getNotes();
       if (!notes[activityId]) notes[activityId] = {};
-      notes[activityId][today] = note.trim();
+      notes[activityId][today] = [{ text: note.trim(), time: dayjs().toISOString() }];
       await attendanceService.saveNotes(notes);
     }
 
     return true;
+  },
+
+  /**
+   * Appends a new NoteEntry to the list for the given activity + date.
+   * Multiple calls on the same day accumulate entries (journal-style).
+   */
+  appendNote: async (activityId: string, dateStr: string, text: string): Promise<void> => {
+    const notes = await attendanceService.getNotes();
+    if (!notes[activityId]) notes[activityId] = {};
+    const existing = notes[activityId][dateStr] || [];
+    notes[activityId][dateStr] = [
+      ...existing,
+      { text: text.trim(), time: dayjs().toISOString() },
+    ];
+    await attendanceService.saveNotes(notes);
+  },
+
+  /**
+   * Edits the text of an existing NoteEntry at a specific index.
+   * The original timestamp is preserved.
+   */
+  editNote: async (
+    activityId: string,
+    dateStr: string,
+    index: number,
+    text: string,
+  ): Promise<void> => {
+    const notes = await attendanceService.getNotes();
+    const entries = notes[activityId]?.[dateStr];
+    if (!entries || index < 0 || index >= entries.length) return;
+    const updated = [...entries];
+    updated[index] = { ...updated[index], text: text.trim() };
+    notes[activityId][dateStr] = updated;
+    await attendanceService.saveNotes(notes);
   },
 
   clearAll: async (): Promise<void> => {

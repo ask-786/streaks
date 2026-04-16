@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import dayjs from 'dayjs';
-import { attendanceService, Activity, NotesMap } from '../features/attendance/attendanceService';
+import { attendanceService, Activity, NotesMap, NoteEntry } from '../features/attendance/attendanceService';
 import { calculateCurrentStreak, calculateLongestStreak } from '../utils/streakUtils';
 import { todayStr } from '../utils/dateUtils';
 
@@ -27,14 +27,19 @@ interface AttendanceState {
   setConfettiEnabled: (enabled: boolean) => Promise<void>;
   logToday: (activityId: string, note?: string) => Promise<void>;
   resetActivityData: (id: string) => Promise<void>;
-  updateNote: (activityId: string, dateStr: string, note: string) => Promise<void>;
+  /** Appends a new note entry to the activity's journal for the given date. */
+  appendNote: (activityId: string, dateStr: string, text: string) => Promise<void>;
+  /** Edits the text of an existing note entry by index. The original timestamp is preserved. */
+  editNote: (activityId: string, dateStr: string, index: number, text: string) => Promise<void>;
   exportData: () => Promise<string>;
   importData: (jsonData: string) => Promise<boolean>;
 
   // Derived getters
   getActivityStats: (activityId: string) => ActivityStats;
-  getNote: (activityId: string, dateStr: string) => string | undefined;
+  getNoteEntries: (activityId: string, dateStr: string) => NoteEntry[] | undefined;
 }
+
+export { NoteEntry };
 
 export const useAttendanceStore = create<AttendanceState>((set, get) => ({
   activities: [],
@@ -49,7 +54,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     const activities = await attendanceService.getActivities();
     const logs = await attendanceService.getLogs();
     const notes = await attendanceService.getNotes();
-    
+
     // Load confetti setting (default to true)
     try {
       const { default: AsyncStorage } = await import('@react-native-async-storage/async-storage');
@@ -90,16 +95,13 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
   deleteActivity: async (id: string) => {
     const { activities, logs, notes, selectedActivityId } = get();
 
-    // Remove activity
     const updatedActivities = activities.filter(a => a.id !== id);
     await attendanceService.saveActivities(updatedActivities);
 
-    // Remove logs
     const updatedLogs = { ...logs };
     delete updatedLogs[id];
     await attendanceService.saveLogs(updatedLogs);
 
-    // Remove notes
     const updatedNotes = { ...notes };
     delete updatedNotes[id];
     await attendanceService.saveNotes(updatedNotes);
@@ -137,31 +139,50 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     const updatedLogs = { ...logs };
     updatedLogs[activityId] = [...activityLogs, dayjs().toISOString()];
 
-    // Update local notes map too if a note was provided
+    // Update local notes map if a note was provided
     let updatedNotes = notes;
     if (note && note.trim()) {
       updatedNotes = { ...notes };
       if (!updatedNotes[activityId]) updatedNotes[activityId] = {};
-      updatedNotes[activityId] = { ...updatedNotes[activityId], [today]: note.trim() };
+      updatedNotes[activityId] = {
+        ...updatedNotes[activityId],
+        [today]: [{ text: note.trim(), time: dayjs().toISOString() }],
+      };
     }
 
     set({ logs: updatedLogs, notes: updatedNotes, isLoading: false });
   },
 
-  updateNote: async (activityId: string, dateStr: string, note: string) => {
+  appendNote: async (activityId: string, dateStr: string, text: string) => {
     const { notes } = get();
+    const trimmed = text.trim();
+    if (!trimmed) return;
+
+    await attendanceService.appendNote(activityId, dateStr, trimmed);
+
     const updatedNotes = { ...notes };
     if (!updatedNotes[activityId]) updatedNotes[activityId] = {};
-    const trimmed = note.trim();
-    if (trimmed) {
-      updatedNotes[activityId] = { ...updatedNotes[activityId], [dateStr]: trimmed };
-    } else {
-      // Remove note if empty
-      const dateMap = { ...updatedNotes[activityId] };
-      delete dateMap[dateStr];
-      updatedNotes[activityId] = dateMap;
-    }
-    await attendanceService.saveNotes(updatedNotes);
+    const existing = updatedNotes[activityId][dateStr] || [];
+    updatedNotes[activityId] = {
+      ...updatedNotes[activityId],
+      [dateStr]: [...existing, { text: trimmed, time: dayjs().toISOString() }],
+    };
+    set({ notes: updatedNotes });
+  },
+
+  editNote: async (activityId: string, dateStr: string, index: number, text: string) => {
+    const { notes } = get();
+    const trimmed = text.trim();
+    if (!trimmed) return;
+
+    await attendanceService.editNote(activityId, dateStr, index, trimmed);
+
+    const updatedNotes = { ...notes };
+    const entries = updatedNotes[activityId]?.[dateStr];
+    if (!entries || index < 0 || index >= entries.length) return;
+    const updated = [...entries];
+    updated[index] = { ...updated[index], text: trimmed };
+    updatedNotes[activityId] = { ...updatedNotes[activityId], [dateStr]: updated };
     set({ notes: updatedNotes });
   },
 
@@ -202,7 +223,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     };
   },
 
-  getNote: (activityId: string, dateStr: string) => {
+  getNoteEntries: (activityId: string, dateStr: string) => {
     return get().notes[activityId]?.[dateStr];
   },
 }));

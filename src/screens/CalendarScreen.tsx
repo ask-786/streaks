@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text } from 'react-native-paper';
 import { Calendar } from 'react-native-calendars';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -18,13 +18,18 @@ export const CalendarScreen: React.FC = () => {
   const [logModalDate, setLogModalDate] = React.useState('');
   const [logModalDateKey, setLogModalDateKey] = React.useState('');
   const [logModalTime, setLogModalTime] = React.useState<string | null>(null);
-  const [logModalNote, setLogModalNote] = React.useState<string | undefined>(undefined);
 
-  const { logs, notes, selectedActivityId, activities, updateNote } = useAttendanceStore();
+  const { logs, notes, selectedActivityId, activities, appendNote, editNote } = useAttendanceStore();
   const selectedActivity = activities.find(a => a.id === selectedActivityId);
   const loggedDates = selectedActivityId ? logs[selectedActivityId] || [] : [];
   const today = todayStr();
   const markedDates = buildMarkedDates(loggedDates, today, selectedActivity?.createdAt);
+
+  // Derive note entries reactively from the store so they stay fresh after appending
+  const logModalNotes =
+    selectedActivityId && logModalDateKey
+      ? notes[selectedActivityId]?.[logModalDateKey]
+      : undefined;
 
   return (
     <ScrollView
@@ -69,11 +74,6 @@ export const CalendarScreen: React.FC = () => {
                 setLogModalTime(null);
               }
               setLogModalDateKey(dateKey);
-              // Look up note for this date
-              const note = selectedActivityId
-                ? notes[selectedActivityId]?.[day.dateString]
-                : undefined;
-              setLogModalNote(note);
               setLogDetailsVisible(true);
             }
           }}
@@ -107,16 +107,24 @@ export const CalendarScreen: React.FC = () => {
         visible={logDetailsVisible}
         dateStr={logModalDate}
         timeStr={logModalTime}
-        note={logModalNote}
+        notes={logModalNotes}
         activityName={selectedActivity?.name}
         dateKey={logModalDateKey}
         isToday={logModalDateKey === today}
-        onNoteUpdate={selectedActivityId ? async (newNote) => {
-          await updateNote(selectedActivityId, logModalDateKey, newNote);
-          // Refresh modal note from updated store
-          const refreshed = newNote.trim() || undefined;
-          setLogModalNote(refreshed);
-        } : undefined}
+        onNoteAppend={
+          selectedActivityId
+            ? async (text) => {
+                await appendNote(selectedActivityId, logModalDateKey, text);
+              }
+            : undefined
+        }
+        onNoteEdit={
+          selectedActivityId
+            ? async (index, text) => {
+                await editNote(selectedActivityId, logModalDateKey, index, text);
+              }
+            : undefined
+        }
         onClose={() => setLogDetailsVisible(false)}
       />
     </ScrollView>
