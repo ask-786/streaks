@@ -2,7 +2,6 @@ import React from 'react';
 import {
   View,
   StyleSheet,
-  TouchableOpacity,
   Modal,
   Pressable,
   TextInput,
@@ -10,6 +9,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Keyboard,
+  BackHandler,
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import Animated, {
@@ -33,6 +34,8 @@ export interface LogDetailsModalProps {
   activityName?: string;
   dateKey?: string;
   isToday?: boolean;
+  /** Whether this activity has notes enabled (requiresNote). */
+  requiresNote?: boolean;
   /** Appends a new note entry for today. */
   onNoteAppend?: (text: string) => Promise<void>;
   /** Edits an existing note entry by index. */
@@ -47,6 +50,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
   notes,
   activityName,
   isToday = false,
+  requiresNote = false,
   onNoteAppend,
   onNoteEdit,
   onClose,
@@ -71,18 +75,32 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
     }
   }, [visible]);
 
+  // Handle hardware back button since we removed Modal
+  React.useEffect(() => {
+    if (visible || noteModalVisible) {
+      const backAction = () => {
+        if (noteModalVisible) {
+          handleCloseNoteModal();
+        } else {
+          onClose();
+        }
+        return true; // prevent default behavior
+      };
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+      return () => backHandler.remove();
+    }
+  }, [visible, noteModalVisible, onClose]);
+
   const openAdd = () => {
     setEditingIndex(null);
     setDraftNote('');
     setNoteModalVisible(true);
-    setTimeout(() => inputRef.current?.focus(), 80);
   };
 
   const openEdit = (index: number) => {
     setEditingIndex(index);
     setDraftNote(notes?.[index]?.text ?? '');
     setNoteModalVisible(true);
-    setTimeout(() => inputRef.current?.focus(), 80);
   };
 
   const handleSave = async () => {
@@ -95,6 +113,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
       } else {
         await onNoteAppend?.(trimmed);
       }
+      Keyboard.dismiss();
       setNoteModalVisible(false);
       setEditingIndex(null);
       setDraftNote('');
@@ -104,30 +123,28 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
   };
 
   const handleCloseNoteModal = () => {
+    Keyboard.dismiss();
     setNoteModalVisible(false);
     setEditingIndex(null);
     setDraftNote('');
   };
 
-  const canAddNote = isToday && !!onNoteAppend;
+  const canAddNote = isToday && !!onNoteAppend && requiresNote;
   const hasNotes = notes && notes.length > 0;
+  // Show notes section only if the habit has notes enabled
+  const showNotesSection = requiresNote;
 
   return (
     <>
       {/* ── Main log-details sheet ─────────────────────────────────────────── */}
-      <Modal
-        visible={visible}
-        transparent
-        animationType="none"
-        onRequestClose={onClose}
-        statusBarTranslucent
-      >
-        <Animated.View entering={FadeIn.duration(120)} style={styles.backdrop}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
-        </Animated.View>
+      {(visible || noteModalVisible) && (
+        <View style={[StyleSheet.absoluteFill, { zIndex: 9999, elevation: 9999 }]} pointerEvents="box-none">
+          <Animated.View entering={FadeIn.duration(120)} style={[styles.backdrop, { zIndex: 0 }]}>
+            <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+          </Animated.View>
 
-        <View style={styles.kvWrapper}>
-          <View style={styles.wrapper}>
+        <View style={[styles.kvWrapper, { zIndex: 1 }]} pointerEvents="box-none">
+          <View style={styles.wrapper} pointerEvents="box-none">
             <Animated.View
               entering={SlideInDown.duration(220).easing(Easing.out(Easing.cubic))}
               exiting={SlideOutDown.duration(160).easing(Easing.in(Easing.cubic))}
@@ -241,9 +258,11 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                     ) : null}
                   </View>
 
-                  {/* ── Notes section ── */}
-                  <View style={[styles.divider, { backgroundColor: colors.surfaceVariant }]} />
-                  <View style={styles.notesSection}>
+                  {/* ── Notes section — only shown when requiresNote is true ── */}
+                  {showNotesSection ? (
+                    <>
+                      <View style={[styles.divider, { backgroundColor: colors.surfaceVariant }]} />
+                      <View style={styles.notesSection}>
                     {/* Section header */}
                     <View style={styles.notesSectionHeader}>
                       <View
@@ -286,6 +305,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                         showsVerticalScrollIndicator={false}
                         nestedScrollEnabled
                         bounces={false}
+                        keyboardShouldPersistTaps="handled"
                       >
                         {notes!.map((entry, i) => (
                           <Animated.View
@@ -347,26 +367,28 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                                   <View style={{ flex: 1 }} />
                                 )}
 
-                                {/* Edit icon — shown whenever onNoteEdit is provided */}
-                                {!!onNoteEdit ? (
-                                  <TouchableOpacity
-                                    style={[
+                                {/* Edit icon — shown whenever onNoteEdit is provided and isToday is true */}
+                                {!!onNoteEdit && isToday ? (
+                                  <Pressable
+                                    style={({ pressed }) => [
                                       styles.editIconBtn,
                                       {
                                         backgroundColor: isDark
                                           ? colors.surfaceVariant
                                           : colors.background,
+                                        opacity: pressed ? 0.55 : 1,
                                       },
                                     ]}
                                     onPress={() => openEdit(i)}
-                                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                    hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                                    android_ripple={{ color: Colors.primary + '33', radius: 16, borderless: true }}
                                   >
                                     <MaterialIcons
                                       name="edit"
                                       size={13}
                                       color={colors.textSecondary}
                                     />
-                                  </TouchableOpacity>
+                                  </Pressable>
                                 ) : null}
                               </View>
 
@@ -385,58 +407,60 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
 
                     {/* Add Note button — outside the scroll area */}
                     {canAddNote ? (
-                      <TouchableOpacity
-                        style={[
+                      <Pressable
+                        style={({ pressed }) => [
                           styles.addNoteBtn,
                           {
                             backgroundColor: isDark
                               ? Colors.dark.primaryContainer
                               : Colors.primaryContainer,
+                            opacity: pressed ? 0.7 : 1,
                           },
                         ]}
                         onPress={openAdd}
-                        activeOpacity={0.7}
+                        android_ripple={{ color: Colors.primary + '33', radius: 80 }}
                       >
                         <Ionicons name="add-circle-outline" size={16} color={Colors.primary} />
                         <Text style={[styles.addNoteBtnText, { color: Colors.primary }]}>
                           {hasNotes ? 'Add Another Note' : 'Add Note'}
                         </Text>
-                      </TouchableOpacity>
+                      </Pressable>
                     ) : null}
-                  </View>
+                      </View>
+                    </>
+                  ) : null}
                 </View>
 
                 {/* Done button */}
-                <TouchableOpacity
-                  style={[styles.btnDone, { backgroundColor: Colors.primary }]}
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.btnDone,
+                    { backgroundColor: Colors.primary, opacity: pressed ? 0.85 : 1 },
+                  ]}
                   onPress={onClose}
-                  activeOpacity={0.8}
+                  android_ripple={{ color: '#ffffff33' }}
                 >
                   <Text style={styles.btnDoneText}>Done</Text>
-                </TouchableOpacity>
+                </Pressable>
               </View>
             </Animated.View>
           </View>
         </View>
-      </Modal>
 
-      {/* ── Add / Edit note modal (stacked on top) ───────────────────────── */}
-      <Modal
-        visible={noteModalVisible}
-        transparent
-        animationType="none"
-        onRequestClose={handleCloseNoteModal}
-        statusBarTranslucent
-      >
-        <Animated.View entering={FadeIn.duration(100)} style={styles.backdrop}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={handleCloseNoteModal} />
-        </Animated.View>
+        {/* ── Add / Edit note layer (stacked on top inside same Modal) ───────────────────────── */}
+        {noteModalVisible && (
+          <View style={[StyleSheet.absoluteFill, { zIndex: 100, elevation: 100 }]} pointerEvents="box-none">
+            <Animated.View entering={FadeIn.duration(100)} style={[styles.backdrop, { zIndex: 0 }]}>
+              <Pressable style={StyleSheet.absoluteFill} onPress={handleCloseNoteModal} />
+            </Animated.View>
 
-        <KeyboardAvoidingView
-          style={styles.kvWrapper}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            <KeyboardAvoidingView
+              style={[styles.kavWrapper, { zIndex: 1 }]}
+              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}
+          pointerEvents="box-none"
         >
-          <View style={styles.wrapper}>
+          <View style={styles.kavInner} pointerEvents="box-none">
             <Animated.View
               entering={SlideInDown.duration(200).easing(Easing.out(Easing.cubic))}
               exiting={SlideOutDown.duration(150).easing(Easing.in(Easing.cubic))}
@@ -473,16 +497,20 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                     </Text>
                   ) : null}
                 </View>
-                <TouchableOpacity
+                <Pressable
                   onPress={handleCloseNoteModal}
                   hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                  style={[
+                  style={({ pressed }) => [
                     styles.closeBtn,
-                    { backgroundColor: isDark ? colors.surfaceVariant : colors.background },
+                    {
+                      backgroundColor: isDark ? colors.surfaceVariant : colors.background,
+                      opacity: pressed ? 0.6 : 1,
+                    },
                   ]}
+                  android_ripple={{ color: colors.textSecondary + '33', radius: 20, borderless: true }}
                 >
                   <Ionicons name="close" size={18} color={colors.textSecondary} />
-                </TouchableOpacity>
+                </Pressable>
               </View>
 
               <Text style={[styles.addNoteHint, { color: colors.textSecondary }]}>
@@ -525,28 +553,31 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
 
               {/* Actions */}
               <View style={styles.addNoteActions}>
-                <TouchableOpacity
-                  style={[styles.cancelBtn, { backgroundColor: colors.surfaceVariant }]}
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.cancelBtn,
+                    { backgroundColor: colors.surfaceVariant, opacity: pressed ? 0.7 : 1 },
+                  ]}
                   onPress={handleCloseNoteModal}
                   disabled={isSaving}
-                  activeOpacity={0.7}
+                  android_ripple={{ color: colors.textSecondary + '22' }}
                 >
                   <Text style={[styles.cancelBtnText, { color: colors.textSecondary }]}>
                     Cancel
                   </Text>
-                </TouchableOpacity>
+                </Pressable>
 
-                <TouchableOpacity
-                  style={[
+                <Pressable
+                  style={({ pressed }) => [
                     styles.saveBtn,
                     {
                       backgroundColor: Colors.primary,
-                      opacity: !draftNote.trim() || isSaving ? 0.5 : 1,
+                      opacity: !draftNote.trim() || isSaving ? 0.5 : pressed ? 0.85 : 1,
                     },
                   ]}
                   onPress={handleSave}
                   disabled={isSaving || !draftNote.trim()}
-                  activeOpacity={0.8}
+                  android_ripple={{ color: '#ffffff33' }}
                 >
                   {isSaving ? (
                     <ActivityIndicator size={16} color="#fff" />
@@ -558,12 +589,15 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                       </Text>
                     </>
                   )}
-                </TouchableOpacity>
+                </Pressable>
               </View>
             </Animated.View>
           </View>
         </KeyboardAvoidingView>
-      </Modal>
+      </View>
+    )}
+  </View>
+  )}
     </>
   );
 };
@@ -579,6 +613,14 @@ const styles = StyleSheet.create({
   wrapper: {
     flex: 1,
     justifyContent: 'flex-end',
+  },
+  kavWrapper: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  kavInner: {
+    justifyContent: 'flex-end',
+    flex: 1,
   },
   // Main sheet — no scroll wrapper; only notes section scrolls
   sheet: {

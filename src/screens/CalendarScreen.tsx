@@ -32,11 +32,12 @@ export const CalendarScreen: React.FC = () => {
       : undefined;
 
   return (
-    <ScrollView
-      style={[styles.scrollView, { backgroundColor: colors.background }]}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-    >
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
       {/* Header */}
       <Animated.View entering={FadeInDown.delay(0).springify()} style={styles.header}>
         <Text style={[styles.title, { color: colors.textPrimary }]}>Attendance Calendar</Text>
@@ -103,6 +104,8 @@ export const CalendarScreen: React.FC = () => {
         <CalendarLegend />
       </Animated.View>
 
+      </ScrollView>
+
       <LogDetailsModal
         visible={logDetailsVisible}
         dateStr={logModalDate}
@@ -111,6 +114,7 @@ export const CalendarScreen: React.FC = () => {
         activityName={selectedActivity?.name}
         dateKey={logModalDateKey}
         isToday={logModalDateKey === today}
+        requiresNote={selectedActivity?.requiresNote}
         onNoteAppend={
           selectedActivityId
             ? async (text) => {
@@ -127,7 +131,7 @@ export const CalendarScreen: React.FC = () => {
         }
         onClose={() => setLogDetailsVisible(false)}
       />
-    </ScrollView>
+    </View>
   );
 };
 
