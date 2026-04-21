@@ -7,13 +7,19 @@ import {
   Modal,
   KeyboardAvoidingView,
   Platform,
-  TouchableWithoutFeedback,
-  Keyboard,
   Pressable,
   Switch,
 } from 'react-native';
 import { Text } from 'react-native-paper';
-import Animated, { FadeIn, SlideInDown, SlideOutDown, Easing } from 'react-native-reanimated';
+import Animated, {
+  FadeIn,
+  SlideInDown,
+  SlideOutDown,
+  Easing,
+  useAnimatedStyle,
+  withTiming,
+  useSharedValue,
+} from 'react-native-reanimated';
 import { Colors, Typography, Spacing, BorderRadius } from '../constants';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
@@ -23,33 +29,60 @@ export interface ActivityFormModalProps {
   editingItemId: string | null;
   initialName: string;
   initialRequiresNote?: boolean;
+  initialWeeklyGoal?: number;
   onClose: () => void;
-  onSave: (name: string, requiresNote: boolean) => void;
+  onSave: (name: string, requiresNote: boolean, weeklyGoal?: number) => void;
 }
+
+const GOAL_OPTIONS = [1, 2, 3, 4, 5, 6, 7];
 
 export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
   visible,
   editingItemId,
   initialName,
   initialRequiresNote = false,
+  initialWeeklyGoal,
   onClose,
   onSave,
 }) => {
   const { colors, isDark } = useTheme();
   const [name, setName] = useState('');
   const [requiresNote, setRequiresNote] = useState(false);
+  const [weeklyModeEnabled, setWeeklyModeEnabled] = useState(false);
+  const [weeklyGoal, setWeeklyGoal] = useState(3);
   const inputRef = useRef<TextInput>(null);
+
+  const pickerHeight = useSharedValue(0);
+  const pickerOpacity = useSharedValue(0);
+
+  const pickerStyle = useAnimatedStyle(() => ({
+    height: pickerHeight.value,
+    opacity: pickerOpacity.value,
+    overflow: 'hidden',
+  }));
 
   useEffect(() => {
     if (visible) {
       setName(initialName);
       setRequiresNote(initialRequiresNote);
+      const hasGoal = !!initialWeeklyGoal && initialWeeklyGoal > 0;
+      setWeeklyModeEnabled(hasGoal);
+      setWeeklyGoal(initialWeeklyGoal && initialWeeklyGoal > 0 ? initialWeeklyGoal : 3);
+      // Animate picker to correct state immediately (no animation on open)
+      pickerHeight.value = hasGoal ? 60 : 0;
+      pickerOpacity.value = hasGoal ? 1 : 0;
     }
-  }, [visible, initialName, initialRequiresNote]);
+  }, [visible, initialName, initialRequiresNote, initialWeeklyGoal]);
+
+  const handleWeeklyToggle = (val: boolean) => {
+    setWeeklyModeEnabled(val);
+    pickerHeight.value = withTiming(val ? 60 : 0, { duration: 250 });
+    pickerOpacity.value = withTiming(val ? 1 : 0, { duration: 200 });
+  };
 
   const handleSave = () => {
     if (!name.trim()) return;
-    onSave(name.trim(), requiresNote);
+    onSave(name.trim(), requiresNote, weeklyModeEnabled ? weeklyGoal : undefined);
   };
 
   const isEditing = !!editingItemId;
@@ -89,7 +122,7 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
           {/* Subtitle */}
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
             {isEditing
-              ? 'Update the name of your habit'
+              ? 'Update the settings of your habit'
               : 'Give your habit a clear, motivating name'}
           </Text>
 
@@ -120,9 +153,78 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
             {name.length}/40
           </Text>
 
+          {/* ── Weekly Goal Mode toggle ────────────────────────── */}
+          <View style={[styles.toggleRow, {
+            backgroundColor: weeklyModeEnabled
+              ? (isDark ? Colors.dark?.primaryContainer ?? '#1E1B4B' : '#EEF2FF')
+              : colors.background,
+            borderColor: weeklyModeEnabled ? Colors.primary : colors.surfaceVariant,
+          }]}>
+            <View style={[styles.toggleIconWrap, {
+              backgroundColor: weeklyModeEnabled
+                ? (isDark ? Colors.dark?.primaryContainer ?? '#1E1B4B' : Colors.primaryContainer)
+                : colors.surfaceVariant,
+            }]}>
+              <FontAwesome5
+                name="calendar-check"
+                size={14}
+                color={weeklyModeEnabled ? Colors.primary : colors.textSecondary}
+              />
+            </View>
+            <View style={styles.toggleTextWrap}>
+              <Text style={[styles.toggleLabel, { color: colors.textPrimary }]}>
+                Weekly Goal Mode
+              </Text>
+              <Text style={[styles.toggleSub, { color: colors.textSecondary }]}>
+                {weeklyModeEnabled
+                  ? `Streak counts weeks you hit ${weeklyGoal}x`
+                  : 'Track streaks by consecutive days'}
+              </Text>
+            </View>
+            <Switch
+              value={weeklyModeEnabled}
+              onValueChange={handleWeeklyToggle}
+              trackColor={{ false: colors.surfaceVariant, true: Colors.primaryContainer }}
+              thumbColor={weeklyModeEnabled ? Colors.primary : colors.textSecondary}
+            />
+          </View>
+
+          {/* Goal picker — animates in/out */}
+          <Animated.View style={pickerStyle}>
+            <View style={[styles.goalPicker, { backgroundColor: colors.background, borderColor: colors.surfaceVariant }]}>
+              <Text style={[styles.goalPickerLabel, { color: colors.textSecondary }]}>
+                Sessions per week
+              </Text>
+              <View style={styles.goalOptions}>
+                {GOAL_OPTIONS.map(n => (
+                  <TouchableOpacity
+                    key={n}
+                    style={[
+                      styles.goalOption,
+                      {
+                        backgroundColor: weeklyGoal === n
+                          ? Colors.primary
+                          : colors.surfaceVariant,
+                      },
+                    ]}
+                    onPress={() => setWeeklyGoal(n)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[
+                      styles.goalOptionText,
+                      { color: weeklyGoal === n ? '#FFFFFF' : colors.textSecondary },
+                    ]}>
+                      {n}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          </Animated.View>
+
           {/* Require note toggle */}
-          <View style={[styles.toggleRow, { backgroundColor: colors.background, borderColor: colors.surfaceVariant }]}>
-            <View style={[styles.toggleIconWrap, { backgroundColor: requiresNote ? (isDark ? Colors.dark.primaryContainer : Colors.primaryContainer) : colors.surfaceVariant }]}>
+          <View style={[styles.toggleRow, { backgroundColor: colors.background, borderColor: colors.surfaceVariant, marginBottom: Spacing.xl }]}>
+            <View style={[styles.toggleIconWrap, { backgroundColor: requiresNote ? (isDark ? Colors.dark?.primaryContainer ?? '#1E1B4B' : Colors.primaryContainer) : colors.surfaceVariant }]}>
               <FontAwesome5
                 name="sticky-note"
                 size={14}
@@ -236,7 +338,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.md,
-    marginBottom: Spacing.xl,
+    marginBottom: Spacing.sm,
     gap: Spacing.md,
   },
   toggleIconWrap: {
@@ -256,6 +358,36 @@ const styles = StyleSheet.create({
   toggleSub: {
     ...Typography.bodySmall,
     marginTop: 2,
+  },
+  goalPicker: {
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1.5,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    marginBottom: Spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  goalPickerLabel: {
+    ...Typography.bodySmall,
+    fontWeight: '600',
+    flex: 1,
+  },
+  goalOptions: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  goalOption: {
+    width: 28,
+    height: 28,
+    borderRadius: BorderRadius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  goalOptionText: {
+    ...Typography.labelMedium,
+    fontWeight: '700',
   },
   actions: {
     flexDirection: 'row',

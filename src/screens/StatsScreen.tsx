@@ -9,19 +9,18 @@ import { StreakBadge } from '../components/StreakBadge';
 import { MonthlyProgress } from '../components/MonthlyProgress';
 import { Colors, Spacing, Typography, BorderRadius } from '../constants';
 import { useTheme } from '../hooks/useTheme';
-import {
-  loggedDaysThisMonth,
-  totalDaysPassedThisMonth,
-} from '../utils/dateUtils';
+import { loggedDaysThisMonth, totalDaysPassedThisMonth, todayStr } from '../utils/dateUtils';
+
 
 export const StatsScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
-  const { logs, selectedActivityId, getActivityStats, resetActivityData } = useAttendanceStore();
+  const { logs, selectedActivityId, activities, getActivityStats, resetActivityData } = useAttendanceStore();
   const loggedDates = selectedActivityId ? logs[selectedActivityId] || [] : [];
   const stats = selectedActivityId
     ? getActivityStats(selectedActivityId)
-    : { currentStreak: 0, longestStreak: 0 };
-  const { currentStreak, longestStreak } = stats;
+    : { currentStreak: 0, longestStreak: 0, unit: 'day' as const, isThisWeekGoalMet: false, weeklyGoal: undefined };
+  const { currentStreak, longestStreak, unit, weeklyGoal } = stats;
+  const isWeekly = unit === 'week';
 
   const thisMonthLogged = loggedDaysThisMonth(loggedDates);
   const thisMonthTotal = totalDaysPassedThisMonth();
@@ -66,7 +65,7 @@ export const StatsScreen: React.FC = () => {
       {/* Streak Badges */}
       <Animated.View entering={FadeInDown.delay(100).springify()} style={styles.badgeRow}>
         <StreakBadge
-          label="Current Streak"
+          label={isWeekly ? 'Week Streak' : 'Current Streak'}
           count={currentStreak}
           icon="fire"
           accent={Colors.primary}
@@ -74,7 +73,7 @@ export const StatsScreen: React.FC = () => {
         />
         <View style={styles.badgeDivider} />
         <StreakBadge
-          label="Best Streak"
+          label={isWeekly ? 'Best Week Streak' : 'Best Streak'}
           count={longestStreak}
           icon="trophy"
           accent={Colors.warning}
@@ -89,6 +88,30 @@ export const StatsScreen: React.FC = () => {
           totalDays={thisMonthTotal}
         />
       </Animated.View>
+
+      {/* Weekly Progress Card — only for weekly-goal activities */}
+      {isWeekly && weeklyGoal && (
+        <Animated.View entering={FadeInDown.delay(290).springify()} style={[styles.weeklyCard, { backgroundColor: colors.surface }]}>
+          <FontAwesome5 name="calendar-check" size={22} color={Colors.primary} style={{ marginRight: Spacing.md }} />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.weeklyCardLabel, { color: colors.textSecondary }]}>This Week's Progress</Text>
+            <Text style={[styles.weeklyCardValue, { color: colors.textPrimary }]}>
+              {(() => {
+                const today = todayStr();
+                const d = dayjs(today);
+                const weekStart = d.subtract((d.day() + 6) % 7, 'day').format('YYYY-MM-DD');
+                const weekEnd = dayjs(weekStart).add(6, 'day').format('YYYY-MM-DD');
+                const thisWeekLogs = loggedDates.filter(dt => {
+                  const ds = dayjs(dt).format('YYYY-MM-DD');
+                  return ds >= weekStart && ds <= weekEnd;
+                });
+                const uniqueThisWeek = new Set(thisWeekLogs.map(dt => dayjs(dt).format('YYYY-MM-DD'))).size;
+                return `${uniqueThisWeek} / ${weeklyGoal} sessions`;
+              })()}
+            </Text>
+          </View>
+        </Animated.View>
+      )}
 
       {/* Summary Cards */}
       <Animated.View entering={FadeInDown.delay(300).springify()} style={styles.summaryGrid}>
@@ -184,6 +207,26 @@ const styles = StyleSheet.create({
     ...Typography.bodySmall,
     marginTop: Spacing.xs,
     textAlign: 'center',
+  },
+  weeklyCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.md,
+    marginBottom: Spacing.md,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  weeklyCardLabel: {
+    ...Typography.bodySmall,
+  },
+  weeklyCardValue: {
+    ...Typography.titleMedium,
+    fontWeight: '700',
+    marginTop: 2,
   },
   infoCard: {
     flexDirection: 'row',

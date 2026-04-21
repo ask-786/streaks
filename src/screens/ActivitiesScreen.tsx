@@ -31,12 +31,13 @@ export const ActivitiesScreen: React.FC = () => {
 
   const { activities, createActivity, editActivity, deleteActivity, selectActivity, getActivityStats } = useAttendanceStore();
   const [editingRequiresNote, setEditingRequiresNote] = useState<boolean>(false);
+  const [editingWeeklyGoal, setEditingWeeklyGoal] = useState<number | undefined>(undefined);
 
-  const handleSaveActivity = (name: string, requiresNote: boolean) => {
+  const handleSaveActivity = (name: string, requiresNote: boolean, weeklyGoal?: number) => {
     if (editingItemId) {
-      editActivity(editingItemId, name, requiresNote);
+      editActivity(editingItemId, name, requiresNote, weeklyGoal);
     } else {
-      createActivity(name, requiresNote);
+      createActivity(name, requiresNote, weeklyGoal);
     }
     closeModal();
   };
@@ -53,6 +54,7 @@ export const ActivitiesScreen: React.FC = () => {
     setEditingItemId(id);
     setEditingItemName(currentName);
     setEditingRequiresNote(activity?.requiresNote ?? false);
+    setEditingWeeklyGoal(activity?.weeklyGoal);
     setSelectedItemId(null);
     setIsModalVisible(true);
   };
@@ -62,6 +64,7 @@ export const ActivitiesScreen: React.FC = () => {
     setEditingItemId(null);
     setEditingItemName('');
     setEditingRequiresNote(false);
+    setEditingWeeklyGoal(undefined);
   };
 
   const handleSelectActivity = (id: string) => {
@@ -186,6 +189,7 @@ export const ActivitiesScreen: React.FC = () => {
           editingItemId={editingItemId}
           initialName={editingItemName}
           initialRequiresNote={editingRequiresNote}
+          initialWeeklyGoal={editingWeeklyGoal}
           onClose={closeModal}
           onSave={handleSaveActivity}
         />

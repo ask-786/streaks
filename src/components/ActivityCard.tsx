@@ -10,6 +10,10 @@ export interface ActivityStats {
   currentStreak: number;
   longestStreak: number;
   isTodayLogged: boolean;
+  unit: 'day' | 'week';
+  isThisWeekGoalMet: boolean;
+  weeklyGoal?: number;
+  thisWeekCount: number;
 }
 
 export interface ActivityCardProps {
@@ -106,7 +110,7 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
                 {stats.currentStreak}
               </Text>
               <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
-                day streak <FontAwesome5 name="fire" size={12} color={Colors.primary} />
+                {stats.unit === 'week' ? 'week streak ' : 'day streak '}<FontAwesome5 name="fire" size={12} color={Colors.primary} />
               </Text>
             </View>
             <View style={[styles.statDivider, { backgroundColor: colors.surfaceVariant }]} />
@@ -119,6 +123,29 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
               </Text>
             </View>
           </View>
+
+          {/* Weekly Progress Bar */}
+          {stats.unit === 'week' && stats.weeklyGoal && (
+            <View style={styles.progressContainer}>
+              <View style={styles.progressHeader}>
+                <Text style={[styles.progressLabel, { color: colors.textSecondary }]}>This Week</Text>
+                <Text style={[styles.progressText, { color: colors.textPrimary }]}>
+                  {stats.thisWeekCount} / {stats.weeklyGoal}
+                </Text>
+              </View>
+              <View style={[styles.progressBarBg, { backgroundColor: colors.surfaceVariant }]}>
+                <Animated.View 
+                  style={[
+                    styles.progressBarFill, 
+                    { 
+                      backgroundColor: stats.isThisWeekGoalMet ? Colors.success : Colors.primary, 
+                      width: `${Math.min(100, (stats.thisWeekCount / stats.weeklyGoal) * 100)}%` 
+                    }
+                  ]} 
+                />
+              </View>
+            </View>
+          )}
         </View>
 
         {/* Action overlay on long-press */}
@@ -237,5 +264,32 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
     shadowRadius: 3,
+  },
+  progressContainer: {
+    marginTop: Spacing.md,
+  },
+  progressHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  progressLabel: {
+    ...Typography.bodySmall,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
+  progressText: {
+    ...Typography.bodySmall,
+    fontWeight: '700',
+  },
+  progressBarBg: {
+    height: 6,
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 3,
   },
 });

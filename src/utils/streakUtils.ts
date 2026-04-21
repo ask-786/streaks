@@ -91,3 +91,123 @@ export const isStreakActive = (loggedDates: string[]): boolean => {
   const loggedSet = new Set(sanitizedDates);
   return loggedSet.has(todayStr()) || loggedSet.has(yesterdayStr());
 };
+
+// ─── Weekly Goal Streak Helpers ───────────────────────────────────────────────
+
+/**
+ * Gets the Monday (ISO week start) of the week containing the given date string.
+ * dayjs().day() returns 0=Sun,1=Mon,...,6=Sat.
+ * Shift: (day + 6) % 7 gives 0=Mon,...,6=Sun.
+ */
+const getWeekStart = (dateStr: string): string => {
+  const d = dayjs(dateStr);
+  return d.subtract((d.day() + 6) % 7, 'day').format('YYYY-MM-DD');
+};
+
+/**
+ * Returns a map of week-start (YYYY-MM-DD of Monday) → number of unique logs in that week.
+ */
+const groupLogsByWeek = (loggedDates: string[]): Map<string, number> => {
+  const map = new Map<string, number>();
+  // Deduplicate by calendar day first so double-logging a day doesn't inflate the count
+  const uniqueDays = Array.from(new Set(loggedDates.map(d => dayjs(d).format('YYYY-MM-DD'))));
+  for (const day of uniqueDays) {
+    const weekKey = getWeekStart(day);
+    map.set(weekKey, (map.get(weekKey) ?? 0) + 1);
+  }
+  return map;
+};
+
+/**
+ * Returns the number of unique days logged in the current calendar week (Mon–Sun).
+ * Used to drive progress bars in the UI.
+ */
+export const getThisWeekLogCount = (loggedDates: string[]): number => {
+  const thisWeekStart = getWeekStart(todayStr());
+  const weekMap = groupLogsByWeek(loggedDates);
+  return weekMap.get(thisWeekStart) ?? 0;
+};
+
+/**
+ * Returns true if the user has logged >= goal times in the current calendar week (Mon–Sun).
+ */
+export const isWeeklyGoalMetThisWeek = (loggedDates: string[], goal: number): boolean => {
+  const thisWeekStart = getWeekStart(todayStr());
+  const weekMap = groupLogsByWeek(loggedDates);
+  return (weekMap.get(thisWeekStart) ?? 0) >= goal;
+};
+
+/**
+ * Calculates the current weekly streak (consecutive weeks where logs >= goal).
+ *
+ * Algorithm:
+ * 1. Group all logged dates by calendar week start (Monday).
+ * 2. Determine if the current week has already met the goal:
+ *    - If yes, start counting from this week.
+ *    - If no, start counting from last week (so mid-week doesn't break the streak).
+ * 3. Walk backward one week at a time; count weeks where logs >= goal.
+ * 4. Stop on the first week that doesn't meet the goal.
+ */
+export const calculateCurrentWeeklyStreak = (loggedDates: string[], goal: number): number => {
+  if (loggedDates.length === 0) return 0;
+
+  const weekMap = groupLogsByWeek(loggedDates);
+  const thisWeekStart = getWeekStart(todayStr());
+  const lastWeekStart = dayjs(thisWeekStart).subtract(7, 'day').format('YYYY-MM-DD');
+
+  // Determine pivot: start from this week if goal already met, else try last week
+  const thisWeekMet = (weekMap.get(thisWeekStart) ?? 0) >= goal;
+  const lastWeekMet = (weekMap.get(lastWeekStart) ?? 0) >= goal;
+
+  let pivotWeek: string;
+  if (thisWeekMet) {
+    pivotWeek = thisWeekStart;
+  } else if (lastWeekMet) {
+    pivotWeek = lastWeekStart;
+  } else {
+    return 0; // streak has already broken
+  }
+
+  let streak = 0;
+  let cursor = dayjs(pivotWeek);
+
+  while (true) {
+    const key = cursor.format('YYYY-MM-DD');
+    const count = weekMap.get(key) ?? 0;
+    if (count >= goal) {
+      streak++;
+      cursor = cursor.subtract(7, 'day');
+    } else {
+      break;
+    }
+  }
+
+  return streak;
+};
+
+/**
+ * Calculates the longest weekly streak ever recorded where logs >= goal.
+ */
+export const calculateLongestWeeklyStreak = (loggedDates: string[], goal: number): number => {
+  if (loggedDates.length === 0) return 0;
+
+  const weekMap = groupLogsByWeek(loggedDates);
+
+  // Sort week keys ascending
+  const sortedWeeks = Array.from(weekMap.keys()).sort();
+  if (sortedWeeks.length === 0) return 0;
+
+  let longest = 0;
+  let current = 0;
+
+  for (const weekKey of sortedWeeks) {
+    if ((weekMap.get(weekKey) ?? 0) >= goal) {
+      current++;
+      if (current > longest) longest = current;
+    } else {
+      current = 0;
+    }
+  }
+
+  return longest;
+};

@@ -29,8 +29,9 @@ export const DashboardScreen: React.FC = () => {
   const selectedActivity = activities.find(a => a.id === selectedActivityId);
   const stats = selectedActivityId
     ? getActivityStats(selectedActivityId)
-    : { isTodayLogged: false, currentStreak: 0, longestStreak: 0 };
-  const { isTodayLogged, currentStreak, longestStreak } = stats;
+    : { isTodayLogged: false, currentStreak: 0, longestStreak: 0, unit: 'day' as const, isThisWeekGoalMet: false };
+  const { isTodayLogged, currentStreak, longestStreak, unit, isThisWeekGoalMet } = stats;
+  const isWeekly = unit === 'week';
 
   const [noteModalVisible, setNoteModalVisible] = React.useState(false);
   const confettiRef = React.useRef<any>(null);
@@ -88,6 +89,8 @@ export const DashboardScreen: React.FC = () => {
           <Text style={[styles.greeting, { color: colors.textPrimary }]}>
             {isTodayLogged ? (
                <>Great job! <FontAwesome5 name="glass-cheers" size={24} color={Colors.primary} /></>
+            ) : isWeekly && isThisWeekGoalMet ? (
+               <>Goal met! <FontAwesome5 name="glass-cheers" size={24} color={Colors.primary} /></>
             ) : (
                <>Ready to check in? <FontAwesome5 name="hand-paper" size={24} color={Colors.primary} /></>
             )}
@@ -108,20 +111,56 @@ export const DashboardScreen: React.FC = () => {
         </View>
         <View style={styles.statusText}>
           <Text style={[styles.statusTitle, { color: colors.textPrimary }]}>
-            {isTodayLogged ? 'Logged In Today' : 'Not Yet Logged'}
+            {isWeekly
+              ? isThisWeekGoalMet
+                ? 'Goal Met This Week'
+                : 'Goal In Progress'
+              : isTodayLogged
+              ? 'Logged In Today'
+              : 'Not Yet Logged'}
           </Text>
           <Text style={[styles.statusSubtitle, { color: colors.textSecondary }]}>
-            {isTodayLogged
+            {isWeekly
+              ? isThisWeekGoalMet
+                ? "You've hit your weekly goal — great work!"
+                : `Log ${stats.weeklyGoal ?? ''} times this week to grow your streak.`
+              : isTodayLogged
               ? 'Your attendance is recorded for today.'
               : 'Tap the button below to log your attendance.'}
           </Text>
         </View>
       </Animated.View>
 
+      {/* Weekly Progress Card */}
+      {isWeekly && stats.weeklyGoal && (
+        <Animated.View
+          entering={FadeInDown.delay(150).springify()}
+          style={[styles.progressCard, { backgroundColor: colors.surface }]}
+        >
+          <View style={styles.progressHeader}>
+            <Text style={[styles.progressLabel, { color: colors.textSecondary }]}>This Week's Progress</Text>
+            <Text style={[styles.progressText, { color: colors.textPrimary }]}>
+              {stats.thisWeekCount} / {stats.weeklyGoal}
+            </Text>
+          </View>
+          <View style={[styles.progressBarBg, { backgroundColor: colors.surfaceVariant }]}>
+            <Animated.View 
+              style={[
+                styles.progressBarFill, 
+                { 
+                  backgroundColor: stats.isThisWeekGoalMet ? Colors.success : Colors.primary, 
+                  width: `${Math.min(100, (stats.thisWeekCount / stats.weeklyGoal) * 100)}%` 
+                }
+              ]} 
+            />
+          </View>
+        </Animated.View>
+      )}
+
       {/* Streak Badges */}
       <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.badgeRow}>
         <StreakBadge
-          label="Current Streak"
+          label={isWeekly ? 'Week Streak' : 'Current Streak'}
           count={currentStreak}
           icon="fire"
           accent={Colors.primary}
@@ -129,7 +168,7 @@ export const DashboardScreen: React.FC = () => {
         />
         <View style={styles.badgeDivider} />
         <StreakBadge
-          label="Longest Streak"
+          label={isWeekly ? 'Best Week Streak' : 'Longest Streak'}
           count={longestStreak}
           icon="bolt"
           accent={Colors.warning}
@@ -149,21 +188,36 @@ export const DashboardScreen: React.FC = () => {
       {/* Motivational Footer */}
       <Animated.View entering={FadeInDown.delay(400).springify()}>
         <Text style={[styles.motivationText, { color: colors.textSecondary }]}>
-          {currentStreak === 0
-            ? (
-              <>Start your streak today! Every journey begins with a single step. <FontAwesome5 name="dumbbell" size={16} /></>
-            )
-            : currentStreak < 7
-            ? (
-              <>{currentStreak} day{currentStreak > 1 ? 's' : ''} strong! Keep it up! <FontAwesome5 name="dumbbell" size={16} /></>
-            )
-            : currentStreak < 30
-            ? (
-              <>{currentStreak} days! You're on fire! <FontAwesome5 name="fire" size={16} /></>
-            )
-            : (
-              <>{currentStreak} days! Absolutely legendary! <FontAwesome5 name="trophy" size={16} /></>
-            )}
+          {isWeekly ? (
+            currentStreak === 0
+              ? (
+                <>Start your weekly streak! Hit your goal this week. <FontAwesome5 name="dumbbell" size={16} /></>
+              ) : currentStreak < 4
+              ? (
+                <>{currentStreak} week{currentStreak > 1 ? 's' : ''} strong! Keep it up! <FontAwesome5 name="dumbbell" size={16} /></>
+              ) : currentStreak < 12
+              ? (
+                <>{currentStreak} weeks! You're on fire! <FontAwesome5 name="fire" size={16} /></>
+              ) : (
+                <>{currentStreak} weeks! Absolutely legendary! <FontAwesome5 name="trophy" size={16} /></>
+              )
+          ) : (
+            currentStreak === 0
+              ? (
+                <>Start your streak today! Every journey begins with a single step. <FontAwesome5 name="dumbbell" size={16} /></>
+              )
+              : currentStreak < 7
+              ? (
+                <>{currentStreak} day{currentStreak > 1 ? 's' : ''} strong! Keep it up! <FontAwesome5 name="dumbbell" size={16} /></>
+              )
+              : currentStreak < 30
+              ? (
+                <>{currentStreak} days! You're on fire! <FontAwesome5 name="fire" size={16} /></>
+              )
+              : (
+                <>{currentStreak} days! Absolutely legendary! <FontAwesome5 name="trophy" size={16} /></>
+              )
+          )}
         </Text>
       </Animated.View>
 
@@ -246,6 +300,41 @@ const styles = StyleSheet.create({
   statusSubtitle: {
     ...Typography.bodySmall,
     lineHeight: 18,
+  },
+  progressCard: {
+    width: '100%',
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.md,
+    marginBottom: Spacing.md,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  progressHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.sm,
+  },
+  progressLabel: {
+    ...Typography.bodySmall,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
+  progressText: {
+    ...Typography.bodyMedium,
+    fontWeight: '700',
+  },
+  progressBarBg: {
+    height: 8,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 4,
   },
   badgeRow: {
     flexDirection: 'row',

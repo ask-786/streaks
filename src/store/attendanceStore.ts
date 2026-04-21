@@ -1,13 +1,28 @@
 import { create } from 'zustand';
 import dayjs from 'dayjs';
 import { attendanceService, Activity, NotesMap, NoteEntry } from '../features/attendance/attendanceService';
-import { calculateCurrentStreak, calculateLongestStreak } from '../utils/streakUtils';
+import {
+  calculateCurrentStreak,
+  calculateLongestStreak,
+  calculateCurrentWeeklyStreak,
+  calculateLongestWeeklyStreak,
+  isWeeklyGoalMetThisWeek,
+  getThisWeekLogCount,
+} from '../utils/streakUtils';
 import { todayStr } from '../utils/dateUtils';
 
 interface ActivityStats {
   currentStreak: number;
   longestStreak: number;
   isTodayLogged: boolean;
+  /** 'day' for normal daily streaks, 'week' for weekly-goal activities */
+  unit: 'day' | 'week';
+  /** Only relevant in weekly mode: whether this week's goal is already met */
+  isThisWeekGoalMet: boolean;
+  /** Weekly goal value when in weekly mode, undefined otherwise */
+  weeklyGoal?: number;
+  /** Number of unique days logged in the current calendar week */
+  thisWeekCount: number;
 }
 
 interface AttendanceState {
@@ -20,8 +35,8 @@ interface AttendanceState {
 
   // Actions
   hydrate: () => Promise<void>;
-  createActivity: (name: string, requiresNote?: boolean) => Promise<void>;
-  editActivity: (id: string, name: string, requiresNote?: boolean) => Promise<void>;
+  createActivity: (name: string, requiresNote?: boolean, weeklyGoal?: number) => Promise<void>;
+  editActivity: (id: string, name: string, requiresNote?: boolean, weeklyGoal?: number) => Promise<void>;
   deleteActivity: (id: string) => Promise<void>;
   selectActivity: (id: string) => void;
   setConfettiEnabled: (enabled: boolean) => Promise<void>;
@@ -67,13 +82,14 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     }
   },
 
-  createActivity: async (name: string, requiresNote?: boolean) => {
+  createActivity: async (name: string, requiresNote?: boolean, weeklyGoal?: number) => {
     const { activities } = get();
     const newActivity: Activity = {
       id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
       name,
       createdAt: Date.now(),
       requiresNote: requiresNote ?? false,
+      ...(weeklyGoal !== undefined && weeklyGoal > 0 ? { weeklyGoal } : {}),
     };
 
     const updatedActivities = [...activities, newActivity];
@@ -81,13 +97,22 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     set({ activities: updatedActivities });
   },
 
-  editActivity: async (id: string, name: string, requiresNote?: boolean) => {
+  editActivity: async (id: string, name: string, requiresNote?: boolean, weeklyGoal?: number) => {
     const { activities } = get();
-    const updatedActivities = activities.map(a =>
-      a.id === id
-        ? { ...a, name, ...(requiresNote !== undefined ? { requiresNote } : {}) }
-        : a
-    );
+    const updatedActivities = activities.map(a => {
+      if (a.id !== id) return a;
+      const updated = { ...a, name };
+      if (requiresNote !== undefined) updated.requiresNote = requiresNote;
+      // weeklyGoal=0 means "remove weekly mode"; undefined means "don't change"
+      if (weeklyGoal !== undefined) {
+        if (weeklyGoal > 0) {
+          updated.weeklyGoal = weeklyGoal;
+        } else {
+          delete updated.weeklyGoal;
+        }
+      }
+      return updated;
+    });
     await attendanceService.saveActivities(updatedActivities);
     set({ activities: updatedActivities });
   },
@@ -216,10 +241,29 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
 
   getActivityStats: (activityId: string) => {
     const logs = get().logs[activityId] || [];
+    const activity = get().activities.find(a => a.id === activityId);
+    const isTodayLogged = logs.some(log => dayjs(log).format('YYYY-MM-DD') === todayStr());
+
+    if (activity?.weeklyGoal) {
+      const goal = activity.weeklyGoal;
+      return {
+        currentStreak: calculateCurrentWeeklyStreak(logs, goal),
+        longestStreak: calculateLongestWeeklyStreak(logs, goal),
+        isTodayLogged,
+        unit: 'week' as const,
+        isThisWeekGoalMet: isWeeklyGoalMetThisWeek(logs, goal),
+        weeklyGoal: goal,
+        thisWeekCount: getThisWeekLogCount(logs),
+      };
+    }
+
     return {
       currentStreak: calculateCurrentStreak(logs),
       longestStreak: calculateLongestStreak(logs),
-      isTodayLogged: logs.some(log => dayjs(log).format('YYYY-MM-DD') === todayStr()),
+      isTodayLogged,
+      unit: 'day' as const,
+      isThisWeekGoalMet: false,
+      thisWeekCount: 0,
     };
   },
 

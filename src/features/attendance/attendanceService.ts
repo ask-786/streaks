@@ -8,6 +8,12 @@ export interface Activity {
   name: string;
   createdAt: number;
   requiresNote?: boolean;
+  /**
+   * When set (1–7), this activity uses Weekly Goal mode.
+   * The streak counts consecutive calendar weeks where the user logged at least this many times.
+   * When undefined, the activity uses the original daily consecutive streak logic.
+   */
+  weeklyGoal?: number;
 }
 
 export interface NoteEntry {
