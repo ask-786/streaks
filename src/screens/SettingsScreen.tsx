@@ -30,9 +30,11 @@ interface SectionProps {
 }
 
 const Section: React.FC<SectionProps> = ({ title, children, delay = 0, colors }) => (
-  <Animated.View entering={FadeInDown.delay(delay).springify()} style={[styles.section, { backgroundColor: colors.surface }]}>
-    <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>{title}</Text>
-    {children}
+  <Animated.View entering={FadeInDown.delay(delay).springify()}>
+    <View style={[styles.section, { backgroundColor: colors.surface }]}>
+      <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>{title}</Text>
+      {children}
+    </View>
   </Animated.View>
 );
 
@@ -165,11 +167,13 @@ export const SettingsScreen: React.FC = () => {
         showsVerticalScrollIndicator={false}
       >
         {/* Page header */}
-        <Animated.View entering={FadeInDown.delay(0).springify()} style={styles.pageHeader}>
-          <Text style={[styles.pageTitle, { color: colors.textPrimary }]}>Settings</Text>
-          <Text style={[styles.pageSubtitle, { color: colors.textSecondary }]}>
-            Customize your experience
-          </Text>
+        <Animated.View entering={FadeInDown.delay(0).springify()}>
+          <View style={styles.pageHeader}>
+            <Text style={[styles.pageTitle, { color: colors.textPrimary }]}>Settings</Text>
+            <Text style={[styles.pageSubtitle, { color: colors.textSecondary }]}>
+              Customize your experience
+            </Text>
+          </View>
         </Animated.View>
 
         {/* Appearance */}
