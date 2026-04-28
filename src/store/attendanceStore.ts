@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import dayjs from 'dayjs';
-import { attendanceService, Activity, NotesMap, NoteEntry } from '../features/attendance/attendanceService';
+import { attendanceService, Activity, NotesMap, NoteEntry, getTaskForDate } from '../features/attendance/attendanceService';
 import {
   calculateCurrentStreak,
   calculateLongestStreak,
@@ -35,8 +35,23 @@ interface AttendanceState {
 
   // Actions
   hydrate: () => Promise<void>;
-  createActivity: (name: string, requiresNote?: boolean, weeklyGoal?: number) => Promise<void>;
-  editActivity: (id: string, name: string, requiresNote?: boolean, weeklyGoal?: number) => Promise<void>;
+  createActivity: (
+    name: string,
+    requiresNote?: boolean,
+    weeklyGoal?: number,
+    taskSequence?: string[],
+    sequenceStartDate?: string,
+    sequenceMode?: 'calendar' | 'log',
+  ) => Promise<void>;
+  editActivity: (
+    id: string,
+    name: string,
+    requiresNote?: boolean,
+    weeklyGoal?: number,
+    taskSequence?: string[],
+    sequenceStartDate?: string,
+    sequenceMode?: 'calendar' | 'log',
+  ) => Promise<void>;
   deleteActivity: (id: string) => Promise<void>;
   selectActivity: (id: string) => void;
   setConfettiEnabled: (enabled: boolean) => Promise<void>;
@@ -54,7 +69,7 @@ interface AttendanceState {
   getNoteEntries: (activityId: string, dateStr: string) => NoteEntry[] | undefined;
 }
 
-export { NoteEntry };
+export { NoteEntry, getTaskForDate };
 
 export const useAttendanceStore = create<AttendanceState>((set, get) => ({
   activities: [],
@@ -82,7 +97,14 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     }
   },
 
-  createActivity: async (name: string, requiresNote?: boolean, weeklyGoal?: number) => {
+  createActivity: async (
+    name: string,
+    requiresNote?: boolean,
+    weeklyGoal?: number,
+    taskSequence?: string[],
+    sequenceStartDate?: string,
+    sequenceMode?: 'calendar' | 'log',
+  ) => {
     const { activities } = get();
     const newActivity: Activity = {
       id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
@@ -90,6 +112,9 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       createdAt: Date.now(),
       requiresNote: requiresNote ?? false,
       ...(weeklyGoal !== undefined && weeklyGoal > 0 ? { weeklyGoal } : {}),
+      ...(taskSequence && taskSequence.length > 0 ? { taskSequence } : {}),
+      ...(sequenceStartDate ? { sequenceStartDate } : {}),
+      ...(sequenceMode ? { sequenceMode } : {}),
     };
 
     const updatedActivities = [...activities, newActivity];
@@ -97,7 +122,15 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     set({ activities: updatedActivities });
   },
 
-  editActivity: async (id: string, name: string, requiresNote?: boolean, weeklyGoal?: number) => {
+  editActivity: async (
+    id: string,
+    name: string,
+    requiresNote?: boolean,
+    weeklyGoal?: number,
+    taskSequence?: string[],
+    sequenceStartDate?: string,
+    sequenceMode?: 'calendar' | 'log',
+  ) => {
     const { activities } = get();
     const updatedActivities = activities.map(a => {
       if (a.id !== id) return a;
@@ -111,6 +144,18 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
           delete updated.weeklyGoal;
         }
       }
+      // taskSequence: empty array means "remove sequence"
+      if (taskSequence !== undefined) {
+        if (taskSequence.length > 0) {
+          updated.taskSequence = taskSequence;
+        } else {
+          delete updated.taskSequence;
+          delete updated.sequenceStartDate;
+          delete updated.sequenceMode;
+        }
+      }
+      if (sequenceStartDate !== undefined) updated.sequenceStartDate = sequenceStartDate;
+      if (sequenceMode !== undefined) updated.sequenceMode = sequenceMode;
       return updated;
     });
     await attendanceService.saveActivities(updatedActivities);

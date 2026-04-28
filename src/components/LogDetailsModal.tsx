@@ -36,6 +36,8 @@ export interface LogDetailsModalProps {
   isToday?: boolean;
   /** Whether this activity has notes enabled (requiresNote). */
   requiresNote?: boolean;
+  /** The task that was active on this logged day (computed by caller). */
+  taskForDay?: string | null;
   /** Appends a new note entry for today. */
   onNoteAppend?: (text: string) => Promise<void>;
   /** Edits an existing note entry by index. */
@@ -51,6 +53,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
   activityName,
   isToday = false,
   requiresNote = false,
+  taskForDay,
   onNoteAppend,
   onNoteEdit,
   onClose,
@@ -257,6 +260,33 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                       </View>
                     ) : null}
                   </View>
+
+                  {/* ── Task that day ── */}
+                  {taskForDay ? (
+                    <>
+                      <View style={[styles.divider, { backgroundColor: colors.surfaceVariant }]} />
+                      <View style={styles.infoRow}>
+                        <View
+                          style={[
+                            styles.infoIconWrap,
+                            {
+                              backgroundColor: isDark
+                                ? Colors.dark.primaryContainer
+                                : Colors.primaryContainer,
+                            },
+                          ]}
+                        >
+                          <FontAwesome5 name="list-ol" size={13} color={Colors.primary} />
+                        </View>
+                        <View style={styles.infoTextWrap}>
+                          <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Task that day</Text>
+                          <Text style={[styles.infoValue, { color: colors.textPrimary }]}>
+                            {taskForDay}
+                          </Text>
+                        </View>
+                      </View>
+                    </>
+                  ) : null}
 
                   {/* ── Notes section — only shown when requiresNote is true ── */}
                   {showNotesSection ? (

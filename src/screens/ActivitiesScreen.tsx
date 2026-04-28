@@ -32,12 +32,14 @@ export const ActivitiesScreen: React.FC = () => {
   const { activities, createActivity, editActivity, deleteActivity, selectActivity, getActivityStats } = useAttendanceStore();
   const [editingRequiresNote, setEditingRequiresNote] = useState<boolean>(false);
   const [editingWeeklyGoal, setEditingWeeklyGoal] = useState<number | undefined>(undefined);
+  const [editingTaskSequence, setEditingTaskSequence] = useState<string[]>([]);
+  const [editingSequenceMode, setEditingSequenceMode] = useState<'calendar' | 'log' | undefined>(undefined);
 
-  const handleSaveActivity = (name: string, requiresNote: boolean, weeklyGoal?: number) => {
+  const handleSaveActivity = (name: string, requiresNote: boolean, weeklyGoal?: number, taskSequence?: string[], sequenceMode?: 'calendar' | 'log') => {
     if (editingItemId) {
-      editActivity(editingItemId, name, requiresNote, weeklyGoal);
+      editActivity(editingItemId, name, requiresNote, weeklyGoal, taskSequence, undefined, sequenceMode);
     } else {
-      createActivity(name, requiresNote, weeklyGoal);
+      createActivity(name, requiresNote, weeklyGoal, taskSequence, undefined, sequenceMode);
     }
     closeModal();
   };
@@ -55,6 +57,8 @@ export const ActivitiesScreen: React.FC = () => {
     setEditingItemName(currentName);
     setEditingRequiresNote(activity?.requiresNote ?? false);
     setEditingWeeklyGoal(activity?.weeklyGoal);
+    setEditingTaskSequence(activity?.taskSequence ?? []);
+    setEditingSequenceMode(activity?.sequenceMode);
     setSelectedItemId(null);
     setIsModalVisible(true);
   };
@@ -65,6 +69,8 @@ export const ActivitiesScreen: React.FC = () => {
     setEditingItemName('');
     setEditingRequiresNote(false);
     setEditingWeeklyGoal(undefined);
+    setEditingTaskSequence([]);
+    setEditingSequenceMode(undefined);
   };
 
   const handleSelectActivity = (id: string) => {
@@ -190,6 +196,8 @@ export const ActivitiesScreen: React.FC = () => {
           initialName={editingItemName}
           initialRequiresNote={editingRequiresNote}
           initialWeeklyGoal={editingWeeklyGoal}
+          initialTaskSequence={editingTaskSequence}
+          initialSequenceMode={editingSequenceMode}
           onClose={closeModal}
           onSave={handleSaveActivity}
         />

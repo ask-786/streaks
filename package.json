@@ -32,6 +32,7 @@
     "react-native": "0.83.4",
     "react-native-calendars": "^1.1314.0",
     "react-native-confetti-cannon": "^1.5.2",
+    "react-native-draggable-flatlist": "^4.0.3",
     "react-native-gesture-handler": "^2.30.0",
     "react-native-paper": "^5.15.0",
     "react-native-reanimated": "4.2.1",

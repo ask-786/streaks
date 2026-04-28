@@ -14,7 +14,7 @@ import Animated, {
   FadeInDown,
 } from 'react-native-reanimated';
 import { FontAwesome5 } from '@expo/vector-icons';
-import { useAttendanceStore } from '../store/attendanceStore';
+import { useAttendanceStore, getTaskForDate } from '../store/attendanceStore';
 import { LogButton } from '../components/LogButton';
 import { StreakBadge } from '../components/StreakBadge';
 import { NoteInputModal } from '../components/NoteInputModal';
@@ -25,11 +25,11 @@ import ConfettiCannon from 'react-native-confetti-cannon';
 
 export const DashboardScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
-  const { selectedActivityId, activities, getActivityStats, logToday, isLoading, isConfettiEnabled } = useAttendanceStore();
+  const { selectedActivityId, activities, logs: allLogs, getActivityStats, logToday, isLoading, isConfettiEnabled } = useAttendanceStore();
   const selectedActivity = activities.find(a => a.id === selectedActivityId);
   const stats = selectedActivityId
     ? getActivityStats(selectedActivityId)
-    : { isTodayLogged: false, currentStreak: 0, longestStreak: 0, unit: 'day' as const, isThisWeekGoalMet: false };
+    : { isTodayLogged: false, currentStreak: 0, longestStreak: 0, unit: 'day' as const, isThisWeekGoalMet: false, thisWeekCount: 0, weeklyGoal: undefined };
   const { isTodayLogged, currentStreak, longestStreak, unit, isThisWeekGoalMet } = stats;
   const isWeekly = unit === 'week';
 
@@ -70,6 +70,20 @@ export const DashboardScreen: React.FC = () => {
   }, []);
 
   const today = todayStr();
+
+  // Compute today's task for the selected activity
+  const todayTask = selectedActivity && selectedActivityId
+    ? getTaskForDate(
+        selectedActivity,
+        today,
+        allLogs[selectedActivityId] ?? [],
+      )
+    : null;
+  const totalTasks = selectedActivity?.taskSequence?.length ?? 0;
+  // Which slot is today? (recompute index for display)
+  const todayTaskIndex = todayTask && selectedActivity?.taskSequence
+    ? (selectedActivity.taskSequence.indexOf(todayTask) + 1)
+    : 0;
 
   return (
     <View style={{ flex: 1 }}>
@@ -130,6 +144,29 @@ export const DashboardScreen: React.FC = () => {
           </Text>
         </View>
       </Animated.View>
+
+      {/* Today's Task Card */}
+      {todayTask ? (
+        <Animated.View
+          entering={FadeInDown.delay(150).springify()}
+          style={[styles.taskCard, { backgroundColor: colors.surface }]}
+        >
+          <View style={styles.taskCardHeader}>
+            <View style={[styles.taskCardIconWrap, { backgroundColor: isDark ? Colors.dark?.primaryContainer ?? '#1E1B4B' : Colors.primaryContainer }]}>
+              <FontAwesome5 name="list-ol" size={14} color={Colors.primary} />
+            </View>
+            <Text style={[styles.taskCardLabel, { color: colors.textSecondary }]}>Today's Task</Text>
+            <View style={[styles.taskIndexPill, { backgroundColor: colors.primaryContainer }]}>
+              <Text style={[styles.taskIndexText, { color: Colors.primary }]}>
+                {todayTaskIndex} / {totalTasks}
+              </Text>
+            </View>
+          </View>
+          <Text style={[styles.taskCardText, { color: colors.textPrimary }]}>
+            {todayTask}
+          </Text>
+        </Animated.View>
+      ) : null}
 
       {/* Weekly Progress Card */}
       {isWeekly && stats.weeklyGoal && (
@@ -353,6 +390,51 @@ const styles = StyleSheet.create({
     ...Typography.bodyMedium,
     textAlign: 'center',
     paddingHorizontal: Spacing.lg,
+    lineHeight: 22,
+  },
+  // ── Today's Task card ────────────────────────────────────────────────────────
+  taskCard: {
+    width: '100%',
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.md,
+    marginBottom: Spacing.md,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+    gap: Spacing.sm,
+  },
+  taskCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  taskCardIconWrap: {
+    width: 30,
+    height: 30,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  taskCardLabel: {
+    ...Typography.labelMedium,
+    fontWeight: '600',
+    flex: 1,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  taskIndexPill: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 3,
+    borderRadius: BorderRadius.full,
+  },
+  taskIndexText: {
+    ...Typography.labelMedium,
+    fontWeight: '700',
+  },
+  taskCardText: {
+    ...Typography.bodyMedium,
     lineHeight: 22,
   },
 });

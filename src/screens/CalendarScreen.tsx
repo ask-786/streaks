@@ -4,7 +4,7 @@ import { Text } from 'react-native-paper';
 import { Calendar } from 'react-native-calendars';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { buildMarkedDates } from '../utils/calendarUtils';
-import { useAttendanceStore } from '../store/attendanceStore';
+import { useAttendanceStore, getTaskForDate } from '../store/attendanceStore';
 import { CalendarLegend } from '../components/CalendarLegend';
 import { LogDetailsModal } from '../components/LogDetailsModal';
 import { Colors, Spacing, Typography, BorderRadius } from '../constants';
@@ -18,6 +18,7 @@ export const CalendarScreen: React.FC = () => {
   const [logModalDate, setLogModalDate] = React.useState('');
   const [logModalDateKey, setLogModalDateKey] = React.useState('');
   const [logModalTime, setLogModalTime] = React.useState<string | null>(null);
+  const [logModalTask, setLogModalTask] = React.useState<string | null>(null);
 
   const { logs, notes, selectedActivityId, activities, appendNote, editNote } = useAttendanceStore();
   const selectedActivity = activities.find(a => a.id === selectedActivityId);
@@ -75,6 +76,12 @@ export const CalendarScreen: React.FC = () => {
                 setLogModalTime(null);
               }
               setLogModalDateKey(dateKey);
+              // Compute which task was active on this day
+              const actLogs = selectedActivityId ? logs[selectedActivityId] || [] : [];
+              const task = selectedActivity
+                ? getTaskForDate(selectedActivity, day.dateString, actLogs)
+                : null;
+              setLogModalTask(task);
               setLogDetailsVisible(true);
             }
           }}
@@ -115,6 +122,7 @@ export const CalendarScreen: React.FC = () => {
         dateKey={logModalDateKey}
         isToday={logModalDateKey === today}
         requiresNote={selectedActivity?.requiresNote}
+        taskForDay={logModalTask}
         onNoteAppend={
           selectedActivityId
             ? async (text) => {

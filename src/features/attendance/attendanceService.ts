@@ -14,6 +14,20 @@ export interface Activity {
    * When undefined, the activity uses the original daily consecutive streak logic.
    */
   weeklyGoal?: number;
+
+  /** Ordered list of task strings that rotate one-per-day. */
+  taskSequence?: string[];
+  /**
+   * The YYYY-MM-DD date that maps to index 0 of taskSequence.
+   * Defaults to dayjs(createdAt).format('YYYY-MM-DD') when not set.
+   */
+  sequenceStartDate?: string;
+  /**
+   * How the sequence advances:
+   * - 'calendar' (default): one step per calendar day since sequenceStartDate
+   * - 'log': one step per logged day (advances only when user actually logs)
+   */
+  sequenceMode?: 'calendar' | 'log';
 }
 
 export interface NoteEntry {
@@ -189,3 +203,45 @@ export const attendanceService = {
     }
   },
 };
+
+/**
+ * Returns the task string that should be displayed for the given date.
+ * Works identically for daily and weekly-goal habits.
+ *
+ * calendar mode (default):
+ *   index = (days elapsed since sequenceStartDate) mod tasks.length
+ *   Always deterministic from the date — no logging required.
+ *
+ * log mode:
+ *   index = (number of logged days strictly before dateStr) mod tasks.length
+ *   Task advances only when the user actually logs.
+ */
+export function getTaskForDate(
+  activity: Activity,
+  dateStr: string,
+  logs: string[] = [],
+): string | null {
+  if (!activity.taskSequence || activity.taskSequence.length === 0) return null;
+
+  const n = activity.taskSequence.length;
+  let index: number;
+
+  if (activity.sequenceMode === 'log') {
+    // Count unique calendar days with a log strictly before dateStr
+    const uniqueLogDays = new Set(
+      logs
+        .map(l => dayjs(l).format('YYYY-MM-DD'))
+        .filter(d => d < dateStr),
+    );
+    index = uniqueLogDays.size % n;
+  } else {
+    // calendar (default)
+    const start =
+      activity.sequenceStartDate ??
+      dayjs(activity.createdAt).format('YYYY-MM-DD');
+    const offset = dayjs(dateStr).diff(dayjs(start), 'day');
+    index = ((offset % n) + n) % n; // handles negative offset correctly
+  }
+
+  return activity.taskSequence[index];
+}
