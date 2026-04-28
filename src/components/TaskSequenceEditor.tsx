@@ -51,15 +51,19 @@ export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
   // ── JSON import ──────────────────────────────────────────────────────────────
   const handleImport = async () => {
     try {
+      // Allow broader types because some Android file managers identify .json as plain text or octet-stream
       const result = await DocumentPicker.getDocumentAsync({
-        type: 'application/json',
+        type: ['application/json', 'text/plain', '*/*'],
         copyToCacheDirectory: true,
       });
       if (result.canceled) return;
 
       const uri = result.assets[0].uri;
       const raw = await FileSystem.readAsStringAsync(uri);
-      const parsed = JSON.parse(raw);
+      
+      // Strip potential BOM (Byte Order Mark) which crashes JSON.parse
+      const cleanRaw = raw.replace(/^\uFEFF/, '').trim();
+      const parsed = JSON.parse(cleanRaw);
 
       let imported: string[] = [];
 
@@ -86,8 +90,11 @@ export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
 
       // Merge: append imported tasks to existing list
       onChange([...tasks, ...imported.map(s => s.trim())]);
-    } catch {
-      Alert.alert('Import failed', 'Could not read or parse the selected file.');
+    } catch (error: any) {
+      Alert.alert(
+        'Import failed', 
+        `Could not read or parse the selected file. \n\n${error?.message || error}`
+      );
     }
   };
 
