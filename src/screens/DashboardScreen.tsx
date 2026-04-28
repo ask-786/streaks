@@ -156,11 +156,6 @@ export const DashboardScreen: React.FC = () => {
               <FontAwesome5 name="list-ol" size={14} color={Colors.primary} />
             </View>
             <Text style={[styles.taskCardLabel, { color: colors.textSecondary }]}>Today's Task</Text>
-            <View style={[styles.taskIndexPill, { backgroundColor: colors.primaryContainer }]}>
-              <Text style={[styles.taskIndexText, { color: Colors.primary }]}>
-                {todayTaskIndex} / {totalTasks}
-              </Text>
-            </View>
           </View>
           <Text style={[styles.taskCardText, { color: colors.textPrimary }]}>
             {todayTask}
