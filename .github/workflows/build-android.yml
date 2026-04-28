@@ -31,7 +31,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 10
           run_install: false
 
       - name: Setup pnpm cache
@@ -41,7 +41,7 @@ jobs:
           cache: 'pnpm'
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
       - name: Expo Prebuild
         run: npx expo prebuild --platform android --clean
