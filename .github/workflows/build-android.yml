@@ -58,17 +58,24 @@ jobs:
       - name: Build Android Release APK
         run: cd android && ./gradlew assembleRelease
 
+      - name: Get app version
+        id: get_version
+        run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_ENV
+
+      - name: Rename APK
+        run: mv android/app/build/outputs/apk/release/app-release.apk android/app/build/outputs/apk/release/app-release-${{ env.VERSION }}.apk
+
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-release
-          path: android/app/build/outputs/apk/release/app-release.apk
+          name: app-release-${{ env.VERSION }}
+          path: android/app/build/outputs/apk/release/app-release-${{ env.VERSION }}.apk
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: android/app/build/outputs/apk/release/app-release.apk
+          files: android/app/build/outputs/apk/release/app-release-${{ env.VERSION }}.apk
           name: Release ${{ github.ref_name }}
           generate_release_notes: true
 
