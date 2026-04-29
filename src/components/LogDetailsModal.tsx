@@ -156,13 +156,9 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
               {/* Handle bar */}
               <View style={[styles.handleBar, { backgroundColor: colors.surfaceVariant }]} />
 
-              {/* Scrollable content wrapper */}
-              <ScrollView 
-                style={styles.sheetScroll}
-                contentContainerStyle={styles.sheetContent}
-                showsVerticalScrollIndicator={false}
-              >
-                {/* Header */}
+              {/* Main container */}
+              <View style={styles.sheetContainer}>
+                {/* Header (Sticky Top) */}
                 <View style={styles.headerRow}>
                   <View
                     style={[
@@ -174,7 +170,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                       },
                     ]}
                   >
-                    <FontAwesome5 name="calendar-check" size={22} color={Colors.primary} />
+                    <FontAwesome5 name="calendar-check" size={18} color={Colors.primary} />
                   </View>
                   <View style={styles.headerText}>
                     <Text style={[styles.title, { color: colors.textPrimary }]}>Log Details</Text>
@@ -184,9 +180,30 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                       </Text>
                     ) : null}
                   </View>
+                  {/* Close ×  button */}
+                  <Pressable
+                    onPress={onClose}
+                    hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                    style={({ pressed }) => [
+                      styles.closeIconBtn,
+                      {
+                        backgroundColor: isDark ? colors.surfaceVariant : colors.background,
+                        opacity: pressed ? 0.6 : 1,
+                      },
+                    ]}
+                    android_ripple={{ color: colors.textSecondary + '33', radius: 20, borderless: true }}
+                  >
+                    <Ionicons name="close" size={18} color={colors.textSecondary} />
+                  </Pressable>
                 </View>
 
-                {/* Info card */}
+                {/* Scrollable middle */}
+                <ScrollView 
+                  style={styles.sheetScroll}
+                  contentContainerStyle={styles.scrollContent}
+                  showsVerticalScrollIndicator={false}
+                >
+                  {/* Info card */}
                 <View
                   style={[
                     styles.infoCard,
@@ -332,15 +349,9 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                       ) : null}
                     </View>
 
-                    {/* ── Scrollable timeline — only this part scrolls ── */}
+                    {/* ── Notes timeline ── */}
                     {hasNotes ? (
-                      <ScrollView
-                        style={styles.notesScroll}
-                        showsVerticalScrollIndicator={false}
-                        nestedScrollEnabled
-                        bounces={false}
-                        keyboardShouldPersistTaps="handled"
-                      >
+                      <View>
                         {notes!.map((entry, i) => (
                           <Animated.View
                             key={i}
@@ -432,7 +443,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                             </View>
                           </Animated.View>
                         ))}
-                      </ScrollView>
+                      </View>
                     ) : (
                       <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
                         No notes yet
@@ -464,19 +475,8 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                     </>
                   ) : null}
                 </View>
-
-                {/* Done button */}
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.btnDone,
-                    { backgroundColor: Colors.primary, opacity: pressed ? 0.85 : 1 },
-                  ]}
-                  onPress={onClose}
-                  android_ripple={{ color: '#ffffff33' }}
-                >
-                  <Text style={styles.btnDoneText}>Done</Text>
-                </Pressable>
-              </ScrollView>
+                </ScrollView>
+              </View>
             </Animated.View>
           </View>
         </View>
@@ -668,34 +668,47 @@ const styles = StyleSheet.create({
     elevation: 20,
     maxHeight: '90%',
   },
+  sheetContainer: {
+    flexShrink: 1,
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.lg,
+  },
   sheetScroll: {
     flexShrink: 1,
   },
-  sheetContent: {
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.xxl,
+  scrollContent: {
+    paddingBottom: Spacing.md,
   },
   handleBar: {
-    width: 44,
+    width: 40,
     height: 4,
     borderRadius: 2,
     alignSelf: 'center',
-    marginBottom: Spacing.xl,
+    marginBottom: Spacing.md,
     marginTop: Spacing.xs,
   },
   // Header
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.md,
+    flexShrink: 0,
   },
   iconContainer: {
-    width: 52,
-    height: 52,
-    borderRadius: BorderRadius.lg,
+    width: 40,
+    height: 40,
+    borderRadius: BorderRadius.md,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: Spacing.md,
+    marginRight: Spacing.sm,
+  },
+  closeIconBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: BorderRadius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: Spacing.xs,
   },
   headerText: {
     flex: 1,
@@ -714,13 +727,13 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.xl,
     borderWidth: 1,
     overflow: 'hidden',
-    marginBottom: Spacing.xl,
+    marginBottom: Spacing.md,
   },
   infoRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.md,
+    paddingVertical: Spacing.sm,
   },
   infoIconWrap: {
     width: 32,
@@ -790,10 +803,7 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     paddingVertical: Spacing.xs,
   },
-  // Only the notes list scrolls; capped so the sheet doesn't overflow the screen
-  notesScroll: {
-    maxHeight: 220,
-  },
+
   // Timeline
   timelineRow: {
     flexDirection: 'row',
@@ -866,32 +876,19 @@ const styles = StyleSheet.create({
     ...Typography.labelMedium,
     fontWeight: '700',
   },
-  // Done button
-  btnDone: {
-    width: '100%',
-    paddingVertical: Spacing.md + 2,
-    borderRadius: BorderRadius.xl,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  btnDoneText: {
-    ...Typography.labelLarge,
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 16,
-  },
+
   // ── Add / Edit note modal sheet ────────────────────────────────────────────
   addNoteSheet: {
     borderTopLeftRadius: BorderRadius.xl,
     borderTopRightRadius: BorderRadius.xl,
     paddingTop: Spacing.sm,
     paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.xxl,
+    paddingBottom: Spacing.lg,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -6 },
-    shadowOpacity: 0.22,
-    shadowRadius: 28,
-    elevation: 24,
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
+    elevation: 20,
   },
   addNoteHeader: {
     flexDirection: 'row',

@@ -253,12 +253,6 @@ export const DashboardScreen: React.FC = () => {
         </Text>
       </Animated.View>
 
-      <NoteInputModal
-        visible={noteModalVisible}
-        activityName={selectedActivity?.name}
-        onClose={() => setNoteModalVisible(false)}
-        onSubmit={handleNoteSubmit}
-      />
     </ScrollView>
     <ConfettiCannon
       count={150}
@@ -266,6 +260,12 @@ export const DashboardScreen: React.FC = () => {
       autoStart={false}
       ref={confettiRef}
       fadeOut={true}
+    />
+    <NoteInputModal
+      visible={noteModalVisible}
+      activityName={selectedActivity?.name}
+      onClose={() => setNoteModalVisible(false)}
+      onSubmit={handleNoteSubmit}
     />
     </View>
   );
