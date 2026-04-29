@@ -156,8 +156,12 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
               {/* Handle bar */}
               <View style={[styles.handleBar, { backgroundColor: colors.surfaceVariant }]} />
 
-              {/* Static content — no scroll wrapper */}
-              <View style={styles.sheetContent}>
+              {/* Scrollable content wrapper */}
+              <ScrollView 
+                style={styles.sheetScroll}
+                contentContainerStyle={styles.sheetContent}
+                showsVerticalScrollIndicator={false}
+              >
                 {/* Header */}
                 <View style={styles.headerRow}>
                   <View
@@ -472,7 +476,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                 >
                   <Text style={styles.btnDoneText}>Done</Text>
                 </Pressable>
-              </View>
+              </ScrollView>
             </Animated.View>
           </View>
         </View>
@@ -652,7 +656,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     flex: 1,
   },
-  // Main sheet — no scroll wrapper; only notes section scrolls
+  // Main sheet
   sheet: {
     borderTopLeftRadius: BorderRadius.xl,
     borderTopRightRadius: BorderRadius.xl,
@@ -662,6 +666,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.18,
     shadowRadius: 24,
     elevation: 20,
+    maxHeight: '90%',
+  },
+  sheetScroll: {
+    flexShrink: 1,
   },
   sheetContent: {
     paddingHorizontal: Spacing.lg,
