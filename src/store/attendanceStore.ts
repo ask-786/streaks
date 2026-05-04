@@ -158,8 +158,8 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       if (sequenceMode !== undefined) updated.sequenceMode = sequenceMode;
       return updated;
     });
-    await attendanceService.saveActivities(updatedActivities);
     set({ activities: updatedActivities });
+    await attendanceService.saveActivities(updatedActivities);
   },
 
   deleteActivity: async (id: string) => {

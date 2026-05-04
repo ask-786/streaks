@@ -22,6 +22,8 @@ export interface TaskSequenceEditorProps {
   onChange: (tasks: string[]) => void;
 }
 
+type TaskItem = { id: string; text: string };
+
 export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
   tasks,
   onChange,
@@ -29,6 +31,49 @@ export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
   const { colors, isDark } = useTheme();
   const [addingText, setAddingText] = useState('');
   const [isAdding, setIsAdding] = useState(false);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editingText, setEditingText] = useState('');
+
+  const [items, setItems] = useState<TaskItem[]>(() => 
+    tasks.map((t, i) => ({ id: `init-${i}-${Math.random()}`, text: t }))
+  );
+
+  React.useEffect(() => {
+    setItems(prev => {
+      if (tasks.length === prev.length && tasks.every((t, i) => t === prev[i].text)) {
+        return prev;
+      }
+      
+      const prevItems = [...prev];
+      return tasks.map((t, i) => {
+        const matchIdx = prevItems.findIndex(p => p.text === t);
+        if (matchIdx !== -1) {
+          const matched = prevItems[matchIdx];
+          prevItems.splice(matchIdx, 1);
+          return matched;
+        }
+        return { id: `sync-${Date.now()}-${i}-${Math.random()}`, text: t };
+      });
+    });
+  }, [tasks]);
+
+  // ── Edit ────────────────────────────────────────────────────────────────────
+  const startEdit = (index: number, text: string) => {
+    setEditingIndex(index);
+    setEditingText(text);
+  };
+
+  const commitEdit = (index: number) => {
+    const t = editingText.trim();
+    if (!t) {
+      setEditingIndex(null);
+      return;
+    }
+    const next = [...tasks];
+    next[index] = t;
+    onChange(next);
+    setEditingIndex(null);
+  };
 
   // ── Add ─────────────────────────────────────────────────────────────────────
   const commitAdd = () => {
@@ -99,10 +144,11 @@ export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
   };
 
   // ── Render ───────────────────────────────────────────────────────────────────
-  const renderItem = ({ item, getIndex, drag, isActive }: RenderItemParams<string>) => {
+  const renderItem = React.useCallback(({ item, getIndex, drag, isActive }: RenderItemParams<TaskItem>) => {
     const index = getIndex() ?? 0;
+    const text = item.text;
     return (
-      <ScaleDecorator>
+      <ScaleDecorator activeScale={1}>
         <View
           style={[
             styles.taskRow,
@@ -119,41 +165,76 @@ export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
             <Text style={[styles.indexText, { color: Colors.primary }]}>{index + 1}</Text>
           </View>
 
-          {/* Task text */}
-          <Text
-            style={[styles.taskText, { color: colors.textPrimary }]}
-            numberOfLines={2}
-          >
-            {item}
-          </Text>
+          {editingIndex === index ? (
+            <>
+              <TextInput
+                style={[styles.addInput, { flex: 1, color: colors.textPrimary }]}
+                value={editingText}
+                onChangeText={setEditingText}
+                autoFocus
+                maxLength={200}
+                onSubmitEditing={() => commitEdit(index)}
+                returnKeyType="done"
+                multiline
+              />
+              <TouchableOpacity onPress={() => setEditingIndex(null)} hitSlop={10} style={styles.actionIconBtn}>
+                <Ionicons name="close" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => commitEdit(index)} hitSlop={10} style={styles.actionIconBtn}>
+                <Ionicons name="checkmark" size={20} color={Colors.primary} />
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              {/* Task text */}
+              <Text
+                style={[styles.taskText, { color: colors.textPrimary }]}
+                numberOfLines={2}
+              >
+                {text}
+              </Text>
 
-          {/* Delete */}
-          <TouchableOpacity
-            onPress={() => deleteTask(index)}
-            hitSlop={10}
-            style={styles.deleteBtn}
-          >
-            <Ionicons name="close-circle" size={20} color={Colors.error} />
-          </TouchableOpacity>
+              {/* Edit */}
+              <TouchableOpacity
+                onPress={() => startEdit(index, text)}
+                hitSlop={10}
+                style={styles.actionIconBtn}
+              >
+                <FontAwesome5 name="pencil-alt" size={14} color={colors.textSecondary} />
+              </TouchableOpacity>
 
-          {/* Drag handle */}
-          <TouchableOpacity onLongPress={drag} onPressIn={drag} hitSlop={6} style={styles.dragHandle}>
-            <FontAwesome5 name="grip-lines" size={14} color={colors.textSecondary} />
-          </TouchableOpacity>
+              {/* Delete */}
+              <TouchableOpacity
+                onPress={() => deleteTask(index)}
+                hitSlop={10}
+                style={styles.actionIconBtn}
+              >
+                <Ionicons name="close-circle" size={20} color={Colors.error} />
+              </TouchableOpacity>
+
+              {/* Drag handle */}
+              <TouchableOpacity onLongPress={drag} onPressIn={drag} hitSlop={6} style={styles.dragHandle}>
+                <FontAwesome5 name="grip-lines" size={14} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       </ScaleDecorator>
     );
-  };
+  }, [editingIndex, editingText, colors, isDark, tasks, onChange]);
 
   return (
     <View style={styles.root}>
       {/* Task list */}
-      {tasks.length > 0 && (
+      {items.length > 0 && (
         <DraggableFlatList
-          data={tasks}
-          keyExtractor={(_, i) => String(i)}
+          data={items}
+          keyExtractor={(item) => item.id}
           renderItem={renderItem}
-          onDragEnd={({ data }) => onChange(data)}
+          onDragEnd={({ data }) => {
+            setItems(data);
+            onChange(data.map(d => d.text));
+          }}
           scrollEnabled={false}
           activationDistance={5}
         />
@@ -252,8 +333,8 @@ const styles = StyleSheet.create({
     flex: 1,
     lineHeight: 18,
   },
-  deleteBtn: {
-    paddingHorizontal: 2,
+  actionIconBtn: {
+    paddingHorizontal: 4,
   },
   dragHandle: {
     paddingHorizontal: 4,

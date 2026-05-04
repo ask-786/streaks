@@ -10,11 +10,12 @@ import { MonthlyProgress } from '../components/MonthlyProgress';
 import { Colors, Spacing, Typography, BorderRadius } from '../constants';
 import { useTheme } from '../hooks/useTheme';
 import { loggedDaysThisMonth, totalDaysPassedThisMonth, todayStr } from '../utils/dateUtils';
-
+import { TaskSequenceEditor } from '../components/TaskSequenceEditor';
 
 export const StatsScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
-  const { logs, selectedActivityId, activities, getActivityStats, resetActivityData } = useAttendanceStore();
+  const { logs, selectedActivityId, activities, getActivityStats, resetActivityData, editActivity } = useAttendanceStore();
+  const selectedActivity = activities.find(a => a.id === selectedActivityId);
   const loggedDates = selectedActivityId ? logs[selectedActivityId] || [] : [];
   const stats = selectedActivityId
     ? getActivityStats(selectedActivityId)
@@ -46,6 +47,20 @@ export const StatsScreen: React.FC = () => {
         },
       ]
     );
+  };
+
+  const handleTaskSequenceChange = (newTasks: string[]) => {
+    if (selectedActivityId && selectedActivity) {
+      editActivity(
+        selectedActivityId,
+        selectedActivity.name,
+        selectedActivity.requiresNote,
+        selectedActivity.weeklyGoal,
+        newTasks,
+        selectedActivity.sequenceStartDate,
+        selectedActivity.sequenceMode || 'calendar'
+      );
+    }
   };
 
   return (
@@ -145,6 +160,22 @@ export const StatsScreen: React.FC = () => {
         </Animated.View>
       )}
 
+      {/* Task Sequence Editor */}
+      {selectedActivity && (
+        <Animated.View entering={FadeInDown.delay(450).springify()} style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Task Sequence</Text>
+          <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
+            Edit, reorder, or add tasks for this activity.
+          </Text>
+          <View style={[styles.editorCard, { backgroundColor: colors.surface }]}>
+            <TaskSequenceEditor
+              tasks={selectedActivity.taskSequence || []}
+              onChange={handleTaskSequenceChange}
+            />
+          </View>
+        </Animated.View>
+      )}
+
       {/* Reset button */}
       <Animated.View entering={FadeInDown.delay(500).springify()} style={styles.resetWrapper}>
         <Text style={styles.resetButton} onPress={handleReset}>
@@ -183,6 +214,23 @@ const styles = StyleSheet.create({
   },
   section: {
     marginBottom: Spacing.lg,
+  },
+  sectionTitle: {
+    ...Typography.titleLarge,
+    marginBottom: 4,
+  },
+  sectionSubtitle: {
+    ...Typography.bodySmall,
+    marginBottom: Spacing.md,
+  },
+  editorCard: {
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.md,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
   },
   summaryGrid: {
     flexDirection: 'row',
