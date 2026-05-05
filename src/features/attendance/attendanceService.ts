@@ -39,6 +39,9 @@ export interface NoteEntry {
 // Notes: { [activityId]: { [dateStr YYYY-MM-DD]: NoteEntry[] } }
 export type NotesMap = Record<string, Record<string, NoteEntry[]>>;
 
+// TaskHistory: { [activityId]: { [dateStr YYYY-MM-DD]: string } }
+export type TaskHistoryMap = Record<string, Record<string, string>>;
+
 /**
  * Attendance Service
  * Handles persistence of activities, logged dates, and notes via AsyncStorage.
@@ -107,6 +110,20 @@ export const attendanceService = {
     await AsyncStorage.setItem(StorageKeys.NOTES, JSON.stringify(notes));
   },
 
+  getTaskHistory: async (): Promise<TaskHistoryMap> => {
+    try {
+      const raw = await AsyncStorage.getItem(StorageKeys.TASK_HISTORY);
+      if (!raw) return {};
+      return JSON.parse(raw) as TaskHistoryMap;
+    } catch {
+      return {};
+    }
+  },
+
+  saveTaskHistory: async (history: TaskHistoryMap): Promise<void> => {
+    await AsyncStorage.setItem(StorageKeys.TASK_HISTORY, JSON.stringify(history));
+  },
+
   logToday: async (activityId: string, note?: string): Promise<boolean> => {
     const logs = await attendanceService.getLogs();
     const today = todayStr();
@@ -168,13 +185,15 @@ export const attendanceService = {
     await AsyncStorage.removeItem(StorageKeys.ACTIVITIES);
     await AsyncStorage.removeItem(StorageKeys.LOGS);
     await AsyncStorage.removeItem(StorageKeys.NOTES);
+    await AsyncStorage.removeItem(StorageKeys.TASK_HISTORY);
   },
 
   exportData: async (): Promise<string> => {
     const activities = await attendanceService.getActivities();
     const logs = await attendanceService.getLogs();
     const notes = await attendanceService.getNotes();
-    return JSON.stringify({ activities, logs, notes });
+    const taskHistory = await attendanceService.getTaskHistory();
+    return JSON.stringify({ activities, logs, notes, taskHistory });
   },
 
   importData: async (jsonData: string): Promise<boolean> => {
@@ -195,6 +214,11 @@ export const attendanceService = {
       // Notes are optional (older exports won't have them)
       if (parsed.notes && typeof parsed.notes === 'object') {
         await attendanceService.saveNotes(parsed.notes);
+      }
+
+      // Task history is optional
+      if (parsed.taskHistory && typeof parsed.taskHistory === 'object') {
+        await attendanceService.saveTaskHistory(parsed.taskHistory);
       }
 
       return true;

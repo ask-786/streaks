@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import dayjs from 'dayjs';
-import { attendanceService, Activity, NotesMap, NoteEntry, getTaskForDate } from '../features/attendance/attendanceService';
+import { attendanceService, Activity, NotesMap, NoteEntry, getTaskForDate, TaskHistoryMap } from '../features/attendance/attendanceService';
 import {
   calculateCurrentStreak,
   calculateLongestStreak,
@@ -29,6 +29,7 @@ interface AttendanceState {
   activities: Activity[];
   logs: Record<string, string[]>;
   notes: NotesMap;
+  taskHistory: TaskHistoryMap;
   selectedActivityId: string | null;
   isLoading: boolean;
   isConfettiEnabled: boolean;
@@ -75,6 +76,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
   activities: [],
   logs: {},
   notes: {},
+  taskHistory: {},
   selectedActivityId: null,
   isLoading: false,
   isConfettiEnabled: true,
@@ -84,6 +86,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     const activities = await attendanceService.getActivities();
     const logs = await attendanceService.getLogs();
     const notes = await attendanceService.getNotes();
+    const taskHistory = await attendanceService.getTaskHistory();
 
     // Load confetti setting (default to true)
     try {
@@ -91,9 +94,9 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       const { StorageKeys } = await import('../constants/storage');
       const confettiStr = await AsyncStorage.getItem(StorageKeys.CONFETTI);
       const isConfettiEnabled = confettiStr ? JSON.parse(confettiStr) : true;
-      set({ activities, logs, notes, isConfettiEnabled, isLoading: false });
+      set({ activities, logs, notes, taskHistory, isConfettiEnabled, isLoading: false });
     } catch {
-      set({ activities, logs, notes, isConfettiEnabled: true, isLoading: false });
+      set({ activities, logs, notes, taskHistory, isConfettiEnabled: true, isLoading: false });
     }
   },
 
@@ -163,7 +166,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
   },
 
   deleteActivity: async (id: string) => {
-    const { activities, logs, notes, selectedActivityId } = get();
+    const { activities, logs, notes, taskHistory, selectedActivityId } = get();
 
     const updatedActivities = activities.filter(a => a.id !== id);
     await attendanceService.saveActivities(updatedActivities);
@@ -176,10 +179,15 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     delete updatedNotes[id];
     await attendanceService.saveNotes(updatedNotes);
 
+    const updatedTaskHistory = { ...taskHistory };
+    delete updatedTaskHistory[id];
+    await attendanceService.saveTaskHistory(updatedTaskHistory);
+
     set({
       activities: updatedActivities,
       logs: updatedLogs,
       notes: updatedNotes,
+      taskHistory: updatedTaskHistory,
       selectedActivityId: selectedActivityId === id ? null : selectedActivityId,
     });
   },
@@ -198,7 +206,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
   },
 
   logToday: async (activityId: string, note?: string) => {
-    const { logs, notes } = get();
+    const { logs, notes, taskHistory, activities } = get();
     const today = todayStr();
     const activityLogs = logs[activityId] || [];
     if (activityLogs.some(log => dayjs(log).format('YYYY-MM-DD') === today)) return;
@@ -208,6 +216,21 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
 
     const updatedLogs = { ...logs };
     updatedLogs[activityId] = [...activityLogs, dayjs().toISOString()];
+
+    // Compute and lock in the task history for this specific day
+    const updatedTaskHistory = { ...taskHistory };
+    const activity = activities.find(a => a.id === activityId);
+    if (activity && activity.taskSequence && activity.taskSequence.length > 0) {
+      const task = getTaskForDate(activity, today, updatedLogs[activityId]);
+      if (task) {
+        if (!updatedTaskHistory[activityId]) updatedTaskHistory[activityId] = {};
+        updatedTaskHistory[activityId] = {
+          ...updatedTaskHistory[activityId],
+          [today]: task,
+        };
+        await attendanceService.saveTaskHistory(updatedTaskHistory);
+      }
+    }
 
     // Update local notes map if a note was provided
     let updatedNotes = notes;
@@ -220,7 +243,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       };
     }
 
-    set({ logs: updatedLogs, notes: updatedNotes, isLoading: false });
+    set({ logs: updatedLogs, notes: updatedNotes, taskHistory: updatedTaskHistory, isLoading: false });
   },
 
   appendNote: async (activityId: string, dateStr: string, text: string) => {
@@ -257,7 +280,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
   },
 
   resetActivityData: async (id: string) => {
-    const { logs, notes } = get();
+    const { logs, notes, taskHistory } = get();
     const updatedLogs = { ...logs };
     delete updatedLogs[id];
     await attendanceService.saveLogs(updatedLogs);
@@ -266,7 +289,11 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     delete updatedNotes[id];
     await attendanceService.saveNotes(updatedNotes);
 
-    set({ logs: updatedLogs, notes: updatedNotes });
+    const updatedTaskHistory = { ...taskHistory };
+    delete updatedTaskHistory[id];
+    await attendanceService.saveTaskHistory(updatedTaskHistory);
+
+    set({ logs: updatedLogs, notes: updatedNotes, taskHistory: updatedTaskHistory });
   },
 
   exportData: async () => {
@@ -279,7 +306,8 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       const activities = await attendanceService.getActivities();
       const logs = await attendanceService.getLogs();
       const notes = await attendanceService.getNotes();
-      set({ activities, logs, notes });
+      const taskHistory = await attendanceService.getTaskHistory();
+      set({ activities, logs, notes, taskHistory });
     }
     return success;
   },

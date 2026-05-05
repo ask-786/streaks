@@ -20,7 +20,7 @@ export const CalendarScreen: React.FC = () => {
   const [logModalTime, setLogModalTime] = React.useState<string | null>(null);
   const [logModalTask, setLogModalTask] = React.useState<string | null>(null);
 
-  const { logs, notes, selectedActivityId, activities, appendNote, editNote } = useAttendanceStore();
+  const { logs, notes, taskHistory, selectedActivityId, activities, appendNote, editNote } = useAttendanceStore();
   const selectedActivity = activities.find(a => a.id === selectedActivityId);
   const loggedDates = selectedActivityId ? logs[selectedActivityId] || [] : [];
   const today = todayStr();
@@ -77,10 +77,14 @@ export const CalendarScreen: React.FC = () => {
               }
               setLogModalDateKey(dateKey);
               // Compute which task was active on this day
-              const actLogs = selectedActivityId ? logs[selectedActivityId] || [] : [];
-              const task = selectedActivity
-                ? getTaskForDate(selectedActivity, day.dateString, actLogs)
-                : null;
+              let task: string | null = null;
+              if (selectedActivityId) {
+                task = taskHistory[selectedActivityId]?.[day.dateString] || null;
+                if (!task && selectedActivity) {
+                  const actLogs = logs[selectedActivityId] || [];
+                  task = getTaskForDate(selectedActivity, day.dateString, actLogs);
+                }
+              }
               setLogModalTask(task);
               setLogDetailsVisible(true);
             }
