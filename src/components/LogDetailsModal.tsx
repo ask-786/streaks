@@ -11,8 +11,8 @@ import {
   ScrollView,
   Keyboard,
   BackHandler,
-  Clipboard,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { Text } from 'react-native-paper';
 import Animated, {
   FadeIn,
@@ -135,8 +135,8 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
     setDraftNote('');
   };
 
-  const handleCopy = (text: string, index: number) => {
-    Clipboard.setString(text);
+  const handleCopy = async (text: string, index: number) => {
+    await Clipboard.setStringAsync(text);
     setCopiedIndex(index);
     if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
     copyTimerRef.current = setTimeout(() => setCopiedIndex(null), 1500);
