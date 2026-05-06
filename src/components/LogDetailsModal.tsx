@@ -11,6 +11,7 @@ import {
   ScrollView,
   Keyboard,
   BackHandler,
+  Clipboard,
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import Animated, {
@@ -65,7 +66,9 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
   const [editingIndex, setEditingIndex] = React.useState<number | null>(null);
   const [draftNote, setDraftNote] = React.useState('');
   const [isSaving, setIsSaving] = React.useState(false);
+  const [copiedIndex, setCopiedIndex] = React.useState<number | null>(null);
   const inputRef = React.useRef<TextInput>(null);
+  const copyTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isEditMode = editingIndex !== null;
 
@@ -130,6 +133,13 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
     setNoteModalVisible(false);
     setEditingIndex(null);
     setDraftNote('');
+  };
+
+  const handleCopy = (text: string, index: number) => {
+    Clipboard.setString(text);
+    setCopiedIndex(index);
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = setTimeout(() => setCopiedIndex(null), 1500);
   };
 
   const canAddNote = isToday && !!onNoteAppend && requiresNote;
@@ -389,7 +399,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                                 },
                               ]}
                             >
-                              {/* Time pill + edit icon row */}
+                              {/* Time pill + action icons row */}
                               <View style={styles.noteCardTop}>
                                 {entry.time ? (
                                   <View
@@ -412,29 +422,54 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                                   <View style={{ flex: 1 }} />
                                 )}
 
-                                {/* Edit icon — shown whenever onNoteEdit is provided and isToday is true */}
-                                {!!onNoteEdit && isToday ? (
+                                {/* Action buttons — grouped on the right */}
+                                <View style={styles.noteCardActions}>
+                                  {/* Copy icon — always visible */}
                                   <Pressable
                                     style={({ pressed }) => [
-                                      styles.editIconBtn,
+                                      styles.copyIconBtn,
                                       {
-                                        backgroundColor: isDark
-                                          ? colors.surfaceVariant
-                                          : colors.background,
+                                        backgroundColor: copiedIndex === i
+                                          ? (isDark ? '#1B3A35' : Colors.successLight)
+                                          : (isDark ? colors.surfaceVariant : colors.background),
                                         opacity: pressed ? 0.55 : 1,
                                       },
                                     ]}
-                                    onPress={() => openEdit(i)}
+                                    onPress={() => handleCopy(entry.text, i)}
                                     hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                                     android_ripple={{ color: Colors.primary + '33', radius: 16, borderless: true }}
                                   >
-                                    <MaterialIcons
-                                      name="edit"
+                                    <Ionicons
+                                      name={copiedIndex === i ? 'checkmark' : 'copy-outline'}
                                       size={13}
-                                      color={colors.textSecondary}
+                                      color={copiedIndex === i ? Colors.success : colors.textSecondary}
                                     />
                                   </Pressable>
-                                ) : null}
+
+                                  {/* Edit icon — shown whenever onNoteEdit is provided and isToday is true */}
+                                  {!!onNoteEdit && isToday ? (
+                                    <Pressable
+                                      style={({ pressed }) => [
+                                        styles.editIconBtn,
+                                        {
+                                          backgroundColor: isDark
+                                            ? colors.surfaceVariant
+                                            : colors.background,
+                                          opacity: pressed ? 0.55 : 1,
+                                        },
+                                      ]}
+                                      onPress={() => openEdit(i)}
+                                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                                      android_ripple={{ color: Colors.primary + '33', radius: 16, borderless: true }}
+                                    >
+                                      <MaterialIcons
+                                        name="edit"
+                                        size={13}
+                                        color={colors.textSecondary}
+                                      />
+                                    </Pressable>
+                                  ) : null}
+                                </View>
                               </View>
 
                               <Text style={[styles.noteCardText, { color: colors.textPrimary }]}>
@@ -850,6 +885,18 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0.2,
+  },
+  noteCardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  copyIconBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: BorderRadius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   editIconBtn: {
     width: 24,
