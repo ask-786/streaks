@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, View, ScrollView, Alert } from 'react-native';
+import { StyleSheet, View, ScrollView } from 'react-native';
 import { Text } from 'react-native-paper';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import dayjs from 'dayjs';
@@ -10,12 +10,10 @@ import { MonthlyProgress } from '../components/MonthlyProgress';
 import { Colors, Spacing, Typography, BorderRadius } from '../constants';
 import { useTheme } from '../hooks/useTheme';
 import { loggedDaysThisMonth, totalDaysPassedThisMonth, todayStr } from '../utils/dateUtils';
-import { TaskSequenceEditor } from '../components/TaskSequenceEditor';
 
 export const StatsScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
-  const { logs, selectedActivityId, activities, getActivityStats, resetActivityData, editActivity } = useAttendanceStore();
-  const selectedActivity = activities.find(a => a.id === selectedActivityId);
+  const { logs, selectedActivityId, getActivityStats } = useAttendanceStore();
   const loggedDates = selectedActivityId ? logs[selectedActivityId] || [] : [];
   const stats = selectedActivityId
     ? getActivityStats(selectedActivityId)
@@ -31,37 +29,6 @@ export const StatsScreen: React.FC = () => {
     loggedDates.length > 0
       ? dayjs([...loggedDates].sort()[0]).format('MMMM D, YYYY')
       : null;
-
-  const handleReset = () => {
-    Alert.alert(
-      'Reset Activity Data',
-      'This will permanently delete all your logged days and streak history for this activity. Are you sure?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reset',
-          style: 'destructive',
-          onPress: () => {
-            if (selectedActivityId) resetActivityData(selectedActivityId);
-          },
-        },
-      ]
-    );
-  };
-
-  const handleTaskSequenceChange = (newTasks: string[]) => {
-    if (selectedActivityId && selectedActivity) {
-      editActivity(
-        selectedActivityId,
-        selectedActivity.name,
-        selectedActivity.requiresNote,
-        selectedActivity.weeklyGoal,
-        newTasks,
-        selectedActivity.sequenceStartDate,
-        selectedActivity.sequenceMode || 'calendar'
-      );
-    }
-  };
 
   return (
     <ScrollView
@@ -160,28 +127,7 @@ export const StatsScreen: React.FC = () => {
         </Animated.View>
       )}
 
-      {/* Task Sequence Editor */}
-      {selectedActivity && (
-        <Animated.View entering={FadeInDown.delay(450).springify()} style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Task Sequence</Text>
-          <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-            Edit, reorder, or add tasks for this activity.
-          </Text>
-          <View style={[styles.editorCard, { backgroundColor: colors.surface }]}>
-            <TaskSequenceEditor
-              tasks={selectedActivity.taskSequence || []}
-              onChange={handleTaskSequenceChange}
-            />
-          </View>
-        </Animated.View>
-      )}
 
-      {/* Reset button */}
-      <Animated.View entering={FadeInDown.delay(500).springify()} style={styles.resetWrapper}>
-        <Text style={styles.resetButton} onPress={handleReset}>
-          <FontAwesome5 name="trash-alt" size={16} />  Reset Activity Data
-        </Text>
-      </Animated.View>
     </ScrollView>
   );
 };
@@ -212,26 +158,7 @@ const styles = StyleSheet.create({
   badgeDivider: {
     width: Spacing.sm,
   },
-  section: {
-    marginBottom: Spacing.lg,
-  },
-  sectionTitle: {
-    ...Typography.titleLarge,
-    marginBottom: 4,
-  },
-  sectionSubtitle: {
-    ...Typography.bodySmall,
-    marginBottom: Spacing.md,
-  },
-  editorCard: {
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.md,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
-  },
+
   summaryGrid: {
     flexDirection: 'row',
     gap: Spacing.sm,
@@ -298,15 +225,5 @@ const styles = StyleSheet.create({
   infoValue: {
     ...Typography.titleMedium,
     marginTop: 2,
-  },
-  resetWrapper: {
-    alignItems: 'center',
-    marginTop: Spacing.xl,
-  },
-  resetButton: {
-    ...Typography.bodyMedium,
-    color: Colors.error,
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.lg,
   },
 });

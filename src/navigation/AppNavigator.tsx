@@ -2,11 +2,13 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { TouchableOpacity } from 'react-native';
 import { DashboardScreen } from '../screens/DashboardScreen';
 import { CalendarScreen } from '../screens/CalendarScreen';
 import { StatsScreen } from '../screens/StatsScreen';
 import { ActivitiesScreen } from '../screens/ActivitiesScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
+import { ActivitySettingsScreen } from '../screens/ActivitySettingsScreen';
 import { Colors, Typography } from '../constants';
 import { Text } from 'react-native';
 import { useAttendanceStore } from '../store/attendanceStore';
@@ -17,6 +19,7 @@ export type RootStackParamList = {
   Activities: undefined;
   ActivityDetail: undefined;
   Settings: undefined;
+  ActivitySettings: undefined;
 };
 
 export type TabParamList = {
@@ -40,7 +43,7 @@ const ActivityTabNavigator = () => {
 
   return (
     <Tab.Navigator
-      screenOptions={{
+      screenOptions={({ navigation }) => ({
         headerStyle: {
           backgroundColor: colors.background,
           elevation: 0,
@@ -52,6 +55,15 @@ const ActivityTabNavigator = () => {
           color: colors.textPrimary,
         },
         headerTintColor: Colors.primary,
+        headerRight: () => (
+          <TouchableOpacity
+            onPress={() => navigation.navigate('ActivitySettings' as never)}
+            style={{ marginRight: 16, padding: 4 }}
+            hitSlop={8}
+          >
+            <FontAwesome5 name="cog" size={19} color={colors.textSecondary} />
+          </TouchableOpacity>
+        ),
         tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopWidth: 0,
@@ -70,7 +82,7 @@ const ActivityTabNavigator = () => {
           ...Typography.labelMedium,
           marginTop: 2,
         },
-      }}
+      })}
     >
       <Tab.Screen
         name="Dashboard"
@@ -135,6 +147,11 @@ export const AppNavigator: React.FC = () => {
           name="Settings"
           component={SettingsScreen}
           options={{ title: 'Settings' }}
+        />
+        <Stack.Screen
+          name="ActivitySettings"
+          component={ActivitySettingsScreen}
+          options={{ title: 'Activity Settings' }}
         />
       </Stack.Navigator>
     </NavigationContainer>
