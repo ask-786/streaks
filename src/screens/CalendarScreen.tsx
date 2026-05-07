@@ -20,7 +20,7 @@ export const CalendarScreen: React.FC = () => {
   const [logModalTime, setLogModalTime] = React.useState<string | null>(null);
   const [logModalTask, setLogModalTask] = React.useState<string | null>(null);
 
-  const { logs, notes, taskHistory, selectedActivityId, activities, appendNote, editNote } = useAttendanceStore();
+  const { logs, notes, taskHistory, selectedActivityId, activities, appendNote, editNote, isHideExtraDaysEnabled } = useAttendanceStore();
   const selectedActivity = activities.find(a => a.id === selectedActivityId);
   const loggedDates = selectedActivityId ? logs[selectedActivityId] || [] : [];
   const today = todayStr();
@@ -58,6 +58,7 @@ export const CalendarScreen: React.FC = () => {
           markingType={'custom'}
           maxDate={today}
           enableSwipeMonths={true}
+          hideExtraDays={isHideExtraDaysEnabled}
           onDayPress={(day) => {
             // Use dayjs to convert each log to a local-timezone date string before comparing.
             // This handles UTC ISO strings (e.g. "2026-03-27T18:45:00.639Z") which may fall

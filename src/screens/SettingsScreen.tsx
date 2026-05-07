@@ -88,7 +88,7 @@ const Row: React.FC<RowProps> = ({
 
 export const SettingsScreen: React.FC = () => {
   const { colors, isDark, toggleTheme } = useTheme();
-  const { exportData, importData, activities, isConfettiEnabled, setConfettiEnabled } = useAttendanceStore();
+  const { exportData, importData, activities, isConfettiEnabled, setConfettiEnabled, isHideExtraDaysEnabled, setHideExtraDaysEnabled } = useAttendanceStore();
   const [isProcessing, setIsProcessing] = useState(false);
 
   const handleExport = async () => {
@@ -200,13 +200,29 @@ export const SettingsScreen: React.FC = () => {
             label="Confetti Effect"
             sublabel="Show confetti when logging a habit"
             colors={colors}
-            isLast
             right={
               <Switch
                 value={isConfettiEnabled}
                 onValueChange={setConfettiEnabled}
                 trackColor={{ false: colors.surfaceVariant, true: Colors.primary + 'AA' }}
                 thumbColor={isConfettiEnabled ? Colors.primary : colors.textSecondary}
+                ios_backgroundColor={colors.surfaceVariant}
+              />
+            }
+          />
+          <Row
+            icon="calendar-outline"
+            iconLib="ionicons"
+            label="Hide Extra Days"
+            sublabel="Only show dates of the current month in calendar"
+            colors={colors}
+            isLast
+            right={
+              <Switch
+                value={isHideExtraDaysEnabled}
+                onValueChange={setHideExtraDaysEnabled}
+                trackColor={{ false: colors.surfaceVariant, true: Colors.primary + 'AA' }}
+                thumbColor={isHideExtraDaysEnabled ? Colors.primary : colors.textSecondary}
                 ios_backgroundColor={colors.surfaceVariant}
               />
             }

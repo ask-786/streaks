@@ -33,6 +33,7 @@ interface AttendanceState {
   selectedActivityId: string | null;
   isLoading: boolean;
   isConfettiEnabled: boolean;
+  isHideExtraDaysEnabled: boolean;
 
   // Actions
   hydrate: () => Promise<void>;
@@ -56,6 +57,7 @@ interface AttendanceState {
   deleteActivity: (id: string) => Promise<void>;
   selectActivity: (id: string) => void;
   setConfettiEnabled: (enabled: boolean) => Promise<void>;
+  setHideExtraDaysEnabled: (enabled: boolean) => Promise<void>;
   logToday: (activityId: string, note?: string) => Promise<void>;
   resetActivityData: (id: string) => Promise<void>;
   /** Appends a new note entry to the activity's journal for the given date. */
@@ -80,6 +82,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
   selectedActivityId: null,
   isLoading: false,
   isConfettiEnabled: true,
+  isHideExtraDaysEnabled: true,
 
   hydrate: async () => {
     set({ isLoading: true });
@@ -94,9 +97,13 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       const { StorageKeys } = await import('../constants/storage');
       const confettiStr = await AsyncStorage.getItem(StorageKeys.CONFETTI);
       const isConfettiEnabled = confettiStr ? JSON.parse(confettiStr) : true;
-      set({ activities, logs, notes, taskHistory, isConfettiEnabled, isLoading: false });
+      
+      const hideExtraDaysStr = await AsyncStorage.getItem(StorageKeys.HIDE_EXTRA_DAYS);
+      const isHideExtraDaysEnabled = hideExtraDaysStr ? JSON.parse(hideExtraDaysStr) : true;
+      
+      set({ activities, logs, notes, taskHistory, isConfettiEnabled, isHideExtraDaysEnabled, isLoading: false });
     } catch {
-      set({ activities, logs, notes, taskHistory, isConfettiEnabled: true, isLoading: false });
+      set({ activities, logs, notes, taskHistory, isConfettiEnabled: true, isHideExtraDaysEnabled: true, isLoading: false });
     }
   },
 
@@ -203,6 +210,15 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       await AsyncStorage.setItem(StorageKeys.CONFETTI, JSON.stringify(enabled));
     } catch {}
     set({ isConfettiEnabled: enabled });
+  },
+
+  setHideExtraDaysEnabled: async (enabled: boolean) => {
+    try {
+      const { default: AsyncStorage } = await import('@react-native-async-storage/async-storage');
+      const { StorageKeys } = await import('../constants/storage');
+      await AsyncStorage.setItem(StorageKeys.HIDE_EXTRA_DAYS, JSON.stringify(enabled));
+    } catch {}
+    set({ isHideExtraDaysEnabled: enabled });
   },
 
   logToday: async (activityId: string, note?: string) => {
