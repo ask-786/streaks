@@ -158,6 +158,9 @@ const styles = StyleSheet.create({
   badgeDivider: {
     width: Spacing.sm,
   },
+  section: {
+    marginBottom: Spacing.lg,
+  },
 
   summaryGrid: {
     flexDirection: 'row',
@@ -188,7 +191,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: BorderRadius.lg,
     padding: Spacing.md,
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.lg,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
