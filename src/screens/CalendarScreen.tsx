@@ -19,6 +19,7 @@ export const CalendarScreen: React.FC = () => {
   const [logModalDateKey, setLogModalDateKey] = React.useState('');
   const [logModalTime, setLogModalTime] = React.useState<string | null>(null);
   const [logModalTask, setLogModalTask] = React.useState<string | null>(null);
+  const [logModalIsLogged, setLogModalIsLogged] = React.useState(false);
 
   const { logs, notes, taskHistory, selectedActivityId, activities, appendNote, editNote, isHideExtraDaysEnabled } = useAttendanceStore();
   const selectedActivity = activities.find(a => a.id === selectedActivityId);
@@ -66,17 +67,13 @@ export const CalendarScreen: React.FC = () => {
             const rawLog = loggedDates.find(
               log => dayjs(log).format('YYYY-MM-DD') === day.dateString
             );
+            const dateKey = day.dateString;
+            setLogModalDate(dayjs(day.dateString).format('MMMM D, YYYY'));
+            setLogModalDateKey(dateKey);
+            setLogModalIsLogged(!!rawLog);
             if (rawLog) {
               const containsTime = rawLog.includes('T');
-              const dateKey = day.dateString;
-              if (containsTime) {
-                setLogModalDate(dayjs(day.dateString).format('MMMM D, YYYY'));
-                setLogModalTime(dayjs(rawLog).format('h:mm A'));
-              } else {
-                setLogModalDate(dayjs(day.dateString).format('MMMM D, YYYY'));
-                setLogModalTime(null);
-              }
-              setLogModalDateKey(dateKey);
+              setLogModalTime(containsTime ? dayjs(rawLog).format('h:mm A') : null);
               // Compute which task was active on this day
               let task: string | null = null;
               if (selectedActivityId) {
@@ -87,8 +84,11 @@ export const CalendarScreen: React.FC = () => {
                 }
               }
               setLogModalTask(task);
-              setLogDetailsVisible(true);
+            } else {
+              setLogModalTime(null);
+              setLogModalTask(null);
             }
+            setLogDetailsVisible(true);
           }}
           theme={{
             backgroundColor: colors.surface,
@@ -126,6 +126,7 @@ export const CalendarScreen: React.FC = () => {
         activityName={selectedActivity?.name}
         dateKey={logModalDateKey}
         isToday={logModalDateKey === today}
+        isLogged={logModalIsLogged}
         requiresNote={selectedActivity?.requiresNote}
         taskForDay={logModalTask}
         onNoteAppend={
@@ -136,7 +137,7 @@ export const CalendarScreen: React.FC = () => {
             : undefined
         }
         onNoteEdit={
-          selectedActivityId
+          selectedActivityId && logModalIsLogged
             ? async (index, text) => {
                 await editNote(selectedActivityId, logModalDateKey, index, text);
               }

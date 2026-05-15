@@ -35,6 +35,8 @@ export interface LogDetailsModalProps {
   activityName?: string;
   dateKey?: string;
   isToday?: boolean;
+  /** Whether this day has an actual log entry. False = tapped on an un-logged day. */
+  isLogged?: boolean;
   /** Whether this activity has notes enabled (requiresNote). */
   requiresNote?: boolean;
   /** The task that was active on this logged day (computed by caller). */
@@ -53,6 +55,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
   notes,
   activityName,
   isToday = false,
+  isLogged = true,
   requiresNote = false,
   taskForDay,
   onNoteAppend,
@@ -142,10 +145,11 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
     copyTimerRef.current = setTimeout(() => setCopiedIndex(null), 1500);
   };
 
-  const canAddNote = isToday && !!onNoteAppend && requiresNote;
+  // Only allow adding notes on today — past days are read-only
+  const canAddNote = isToday && !!onNoteAppend;
   const hasNotes = notes && notes.length > 0;
-  // Show notes section only if the habit has notes enabled
-  const showNotesSection = requiresNote;
+  // Always show the notes section so users can annotate any logged day
+  const showNotesSection = true;
 
   return (
     <>
@@ -244,7 +248,8 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
 
                   <View style={[styles.divider, { backgroundColor: colors.surfaceVariant }]} />
 
-                  {/* Time row */}
+                  {/* Time row — hidden for un-logged days */}
+                  {isLogged ? (
                   <View style={styles.infoRow}>
                     <View
                       style={[
@@ -291,6 +296,62 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                       </View>
                     ) : null}
                   </View>
+                  ) : (
+                  /* Un-logged day banner */
+                  <View style={styles.infoRow}>
+                    <View
+                      style={[
+                        styles.infoIconWrap,
+                        {
+                          backgroundColor: isToday
+                            ? isDark ? '#2D2510' : '#FFF8E7'
+                            : colors.surfaceVariant,
+                        },
+                      ]}
+                    >
+                      <FontAwesome5
+                        name={isToday ? 'clock' : 'calendar-times'}
+                        size={13}
+                        color={isToday ? Colors.warning : colors.textSecondary}
+                      />
+                    </View>
+                    <View style={styles.infoTextWrap}>
+                      <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Status</Text>
+                      <Text
+                        style={[
+                          styles.infoValue,
+                          { color: isToday ? Colors.warning : colors.textSecondary },
+                        ]}
+                      >
+                        {isToday ? 'Not yet logged' : 'Not logged'}
+                      </Text>
+                    </View>
+                    <View
+                      style={[
+                        styles.statusBadge,
+                        {
+                          backgroundColor: isToday
+                            ? isDark ? '#2D2510' : '#FFF8E7'
+                            : colors.surfaceVariant,
+                        },
+                      ]}
+                    >
+                      <Ionicons
+                        name={isToday ? 'time-outline' : 'close-circle'}
+                        size={14}
+                        color={isToday ? Colors.warning : colors.textSecondary}
+                      />
+                      <Text
+                        style={[
+                          styles.statusBadgeText,
+                          { color: isToday ? Colors.warning : colors.textSecondary },
+                        ]}
+                      >
+                        {isToday ? 'Pending' : 'Missed'}
+                      </Text>
+                    </View>
+                  </View>
+                  )}
 
                   {/* ── Task that day ── */}
                   {taskForDay ? (
@@ -446,7 +507,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                                     />
                                   </Pressable>
 
-                                  {/* Edit icon — shown whenever onNoteEdit is provided and isToday is true */}
+                                  {/* Edit icon — only shown on today */}
                                   {!!onNoteEdit && isToday ? (
                                     <Pressable
                                       style={({ pressed }) => [
@@ -585,7 +646,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
               <Text style={[styles.addNoteHint, { color: colors.textSecondary }]}>
                 {isEditMode
                   ? 'Update the note text below.'
-                  : 'What did you do this session? e.g. "Surah Al-Baqarah, verse 55–80"'}
+                  : 'Add a note for this day — e.g. reason for missing, what you covered, etc.'}
               </Text>
 
               {/* Input */}
