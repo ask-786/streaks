@@ -204,28 +204,42 @@ export const DashboardScreen: React.FC = () => {
               ? 'Your attendance is recorded for today.'
               : 'Tap the button below to log your attendance.'}
           </Text>
-          {!isTodayLogged && !isCompleted && selectedActivity?.timeBoundType && (
-            <View style={[
-              styles.timeBoundChip,
-              isTimeBoundDisabled
-                ? { backgroundColor: colors.surfaceVariant, borderColor: Colors.textDisabled }
-                : { backgroundColor: isDark ? '#1A2F1A' : '#F0FDF4', borderColor: Colors.success },
-            ]}>
-              <FontAwesome5
-                name="clock"
-                size={11}
-                color={isTimeBoundDisabled ? Colors.textDisabled : Colors.success}
-              />
-              <Text style={[styles.timeBoundChipText, { color: isTimeBoundDisabled ? Colors.textDisabled : Colors.success }]}>
-                {selectedActivity.timeBoundType === 'between'
-                  ? `${formatTime12h(selectedActivity.timeBoundStartTime ?? '')} – ${formatTime12h(selectedActivity.timeBoundEndTime ?? '')}`
-                  : `${selectedActivity.timeBoundType} ${formatTime12h(selectedActivity.timeBoundStartTime ?? '')}`}
-              </Text>
-              {isTimeBoundDisabled && (
-                <Text style={[styles.timeBoundChipBadge, { color: Colors.textDisabled }]}>Locked</Text>
-              )}
-            </View>
-          )}
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+            {!isTodayLogged && !isCompleted && selectedActivity?.timeBoundType && (
+              <View style={[
+                styles.timeBoundChip,
+                isTimeBoundDisabled
+                  ? { backgroundColor: colors.surfaceVariant, borderColor: Colors.textDisabled }
+                  : { backgroundColor: isDark ? '#1A2F1A' : '#F0FDF4', borderColor: Colors.success },
+              ]}>
+                <FontAwesome5
+                  name="clock"
+                  size={11}
+                  color={isTimeBoundDisabled ? Colors.textDisabled : Colors.success}
+                />
+                <Text style={[styles.timeBoundChipText, { color: isTimeBoundDisabled ? Colors.textDisabled : Colors.success }]}>
+                  {selectedActivity.timeBoundType === 'between'
+                    ? `${formatTime12h(selectedActivity.timeBoundStartTime ?? '')} – ${formatTime12h(selectedActivity.timeBoundEndTime ?? '')}`
+                    : `${selectedActivity.timeBoundType} ${formatTime12h(selectedActivity.timeBoundStartTime ?? '')}`}
+                </Text>
+                {isTimeBoundDisabled && (
+                  <Text style={[styles.timeBoundChipBadge, { color: Colors.textDisabled }]}>Locked</Text>
+                )}
+              </View>
+            )}
+
+            {selectedActivity?.activityType === 'goal' && selectedActivity?.streakGoal && !isCompleted && (
+              <View style={[
+                styles.timeBoundChip,
+                { backgroundColor: colors.primaryContainer, borderColor: Colors.primary }
+              ]}>
+                <FontAwesome5 name="bullseye" size={11} color={Colors.primary} />
+                <Text style={[styles.timeBoundChipText, { color: Colors.primary }]}>
+                  Target: {selectedActivity.streakGoal} {isWeekly ? (selectedActivity.streakGoal === 1 ? 'Week' : 'Weeks') : (selectedActivity.streakGoal === 1 ? 'Day' : 'Days')}
+                </Text>
+              </View>
+            )}
+          </View>
         </View>
       </Animated.View>
 
