@@ -47,6 +47,8 @@ interface AttendanceState {
     timeBoundType?: 'before' | 'after' | 'between' | null,
     timeBoundStartTime?: string | null,
     timeBoundEndTime?: string | null,
+    activityType?: 'goal' | 'endless',
+    streakGoal?: number,
   ) => Promise<void>;
   editActivity: (
     id: string,
@@ -62,6 +64,7 @@ interface AttendanceState {
   ) => Promise<void>;
   deleteActivity: (id: string) => Promise<void>;
   selectActivity: (id: string) => void;
+  completeActivity: (id: string) => Promise<void>;
   setConfettiEnabled: (enabled: boolean) => Promise<void>;
   setHideExtraDaysEnabled: (enabled: boolean) => Promise<void>;
   logToday: (activityId: string, note?: string) => Promise<void>;
@@ -123,6 +126,8 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     timeBoundType?: 'before' | 'after' | 'between' | null,
     timeBoundStartTime?: string | null,
     timeBoundEndTime?: string | null,
+    activityType?: 'goal' | 'endless',
+    streakGoal?: number,
   ) => {
     const { activities } = get();
     const newActivity: Activity = {
@@ -130,6 +135,8 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       name,
       createdAt: Date.now(),
       requiresNote: requiresNote ?? false,
+      activityType: activityType ?? 'endless',
+      ...(activityType === 'goal' && streakGoal && streakGoal > 0 ? { streakGoal } : {}),
       ...(weeklyGoal !== undefined && weeklyGoal > 0 ? { weeklyGoal } : {}),
       ...(taskSequence && taskSequence.length > 0 ? { taskSequence } : {}),
       ...(sequenceStartDate ? { sequenceStartDate } : {}),
@@ -243,6 +250,15 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     set({ selectedActivityId: id });
   },
 
+  completeActivity: async (id: string) => {
+    const { activities } = get();
+    const updatedActivities = activities.map(a =>
+      a.id === id ? { ...a, completedAt: Date.now() } : a
+    );
+    await attendanceService.saveActivities(updatedActivities);
+    set({ activities: updatedActivities });
+  },
+
   setConfettiEnabled: async (enabled: boolean) => {
     try {
       const { default: AsyncStorage } = await import('@react-native-async-storage/async-storage');
@@ -299,7 +315,28 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       };
     }
 
-    set({ logs: updatedLogs, notes: updatedNotes, taskHistory: updatedTaskHistory, isLoading: false });
+    // Auto-complete goal-based activities when streakGoal is reached
+    let updatedActivities = activities;
+    const freshActivity = activities.find(a => a.id === activityId);
+    if (
+      freshActivity &&
+      freshActivity.activityType === 'goal' &&
+      freshActivity.streakGoal &&
+      !freshActivity.completedAt
+    ) {
+      const { calculateCurrentStreak, calculateCurrentWeeklyStreak } = await import('../utils/streakUtils');
+      const newStreak = freshActivity.weeklyGoal
+        ? calculateCurrentWeeklyStreak(updatedLogs[activityId], freshActivity.weeklyGoal)
+        : calculateCurrentStreak(updatedLogs[activityId]);
+      if (newStreak >= freshActivity.streakGoal) {
+        updatedActivities = activities.map(a =>
+          a.id === activityId ? { ...a, completedAt: Date.now() } : a
+        );
+        await attendanceService.saveActivities(updatedActivities);
+      }
+    }
+
+    set({ logs: updatedLogs, notes: updatedNotes, taskHistory: updatedTaskHistory, activities: updatedActivities, isLoading: false });
   },
 
   appendNote: async (activityId: string, dateStr: string, text: string) => {

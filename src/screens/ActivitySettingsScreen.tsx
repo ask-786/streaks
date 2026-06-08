@@ -15,18 +15,21 @@ import { TaskSequenceEditor } from '../components/TaskSequenceEditor';
 import { Colors, Spacing, Typography, BorderRadius } from '../constants';
 import { useTheme } from '../hooks/useTheme';
 import { to12h, to24h, isValidTime12h, todayStr, formatTime12h } from '../utils/dateUtils';
+import dayjs from 'dayjs';
 
 export const ActivitySettingsScreen: React.FC = () => {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const {
     selectedActivityId,
     activities,
     editActivity,
     resetActivityData,
     appendNote,
+    completeActivity,
   } = useAttendanceStore();
 
   const selectedActivity = activities.find(a => a.id === selectedActivityId);
+  const isCompleted = !!selectedActivity?.completedAt;
 
   const [timeBoundStartTime, setTimeBoundStartTime] = useState(() => to12h(selectedActivity?.timeBoundStartTime || '').time);
   const [startAmPm, setStartAmPm] = useState<'AM' | 'PM'>(() => to12h(selectedActivity?.timeBoundStartTime || '').ampm);
@@ -46,8 +49,8 @@ export const ActivitySettingsScreen: React.FC = () => {
       : isValidTime12h(timeBoundStartTime)
   );
 
-  const timeOrderInvalid = timeBoundType === 'between' && 
-    isValidTime12h(timeBoundStartTime) && isValidTime12h(timeBoundEndTime) && 
+  const timeOrderInvalid = timeBoundType === 'between' &&
+    isValidTime12h(timeBoundStartTime) && isValidTime12h(timeBoundEndTime) &&
     to24h(timeBoundStartTime, startAmPm) >= to24h(timeBoundEndTime, endAmPm);
 
   const startInvalid = (timeBoundStartTime.length > 0 && !isValidTime12h(timeBoundStartTime)) || timeOrderInvalid;
@@ -129,6 +132,24 @@ export const ActivitySettingsScreen: React.FC = () => {
     );
   };
 
+  const handleMarkComplete = () => {
+    if (!selectedActivityId || !selectedActivity) return;
+    Alert.alert(
+      'Mark as Completed',
+      `Are you sure you want to mark "${selectedActivity.name}" as completed? You won't be able to log new check-ins, but all history will be preserved.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Complete',
+          style: 'default',
+          onPress: () => {
+            completeActivity(selectedActivityId);
+          },
+        },
+      ]
+    );
+  };
+
   if (!selectedActivity) {
     return (
       <View style={[styles.emptyState, { backgroundColor: colors.background }]}>
@@ -146,34 +167,79 @@ export const ActivitySettingsScreen: React.FC = () => {
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
-      {/* Task Sequence Section */}
-      <Animated.View entering={FadeInDown.delay(80).springify()} style={styles.section}>
-        {/* Section header */}
-        <View style={styles.sectionHeader}>
-          <View style={[styles.sectionIconWrap, { backgroundColor: colors.primaryContainer }]}>
-            <FontAwesome5 name="list-ol" size={14} color={Colors.primary} />
+      {/* Completed Banner */}
+      {isCompleted && (
+        <Animated.View entering={FadeInDown.delay(0).springify()} style={[styles.completedBanner, {
+          backgroundColor: isDark ? '#162216' : '#F0FDF4',
+          borderColor: Colors.success,
+        }]}>
+          <View style={[styles.completedBannerIcon, { backgroundColor: isDark ? '#1E3A1E' : Colors.successLight }]}>
+            <FontAwesome5 name="trophy" size={20} color={Colors.success} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-              Task Sequence
+            <Text style={[styles.completedBannerTitle, { color: Colors.success }]}>
+              Activity Completed 🎉
             </Text>
-            <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-              Add, reorder, or edit tasks for this activity
+            <Text style={[styles.completedBannerSub, { color: colors.textSecondary }]}>
+              Completed on {dayjs(selectedActivity.completedAt).format('MMMM D, YYYY')}
+            </Text>
+            <Text style={[styles.completedBannerNote, { color: colors.textSecondary }]}>
+              This activity is now read-only. All history is preserved.
             </Text>
           </View>
-        </View>
+        </Animated.View>
+      )}
 
-        {/* Editor card */}
-        <View style={[styles.editorCard, { backgroundColor: colors.surface }]}>
-          <TaskSequenceEditor
-            tasks={selectedActivity.taskSequence || []}
-            onChange={handleTaskSequenceChange}
-          />
-        </View>
-      </Animated.View>
+      {/* Goal Progress Banner — for active goal-based activities */}
+      {!isCompleted && selectedActivity.activityType === 'goal' && selectedActivity.streakGoal && (
+        <Animated.View entering={FadeInDown.delay(0).springify()} style={[styles.goalBanner, {
+          backgroundColor: isDark ? Colors.dark?.primaryContainer ?? '#1E1B4B' : '#EEF2FF',
+          borderColor: Colors.primary,
+        }]}>
+          <View style={[styles.goalBannerIcon, { backgroundColor: isDark ? '#2C2750' : Colors.primaryContainer }]}>
+            <FontAwesome5 name="bullseye" size={16} color={Colors.primary} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.goalBannerTitle, { color: Colors.primary }]}>
+              Goal-Based Activity
+            </Text>
+            <Text style={[styles.goalBannerSub, { color: colors.textSecondary }]}>
+              Target: {selectedActivity.streakGoal} day streak — auto-completes when reached
+            </Text>
+          </View>
+        </Animated.View>
+      )}
+
+      {/* Task Sequence Section */}
+      {!isCompleted && (
+        <Animated.View entering={FadeInDown.delay(80).springify()} style={styles.section}>
+          {/* Section header */}
+          <View style={styles.sectionHeader}>
+            <View style={[styles.sectionIconWrap, { backgroundColor: colors.primaryContainer }]}>
+              <FontAwesome5 name="list-ol" size={14} color={Colors.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+                Task Sequence
+              </Text>
+              <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
+                Add, reorder, or edit tasks for this activity
+              </Text>
+            </View>
+          </View>
+
+          {/* Editor card */}
+          <View style={[styles.editorCard, { backgroundColor: colors.surface }]}>
+            <TaskSequenceEditor
+              tasks={selectedActivity.taskSequence || []}
+              onChange={handleTaskSequenceChange}
+            />
+          </View>
+        </Animated.View>
+      )}
 
       {/* Time Bound Section */}
-      {selectedActivity.timeBoundType && (
+      {!isCompleted && selectedActivity.timeBoundType && (
         <Animated.View entering={FadeInDown.delay(120).springify()} style={styles.section}>
           <View style={styles.sectionHeader}>
             <View style={[styles.sectionIconWrap, { backgroundColor: colors.primaryContainer }]}>
@@ -282,41 +348,81 @@ export const ActivitySettingsScreen: React.FC = () => {
         </Animated.View>
       )}
 
-      {/* Danger Zone */}
-      <Animated.View entering={FadeInDown.delay(160).springify()} style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <View style={[styles.sectionIconWrap, { backgroundColor: Colors.errorLight }]}>
-            <FontAwesome5 name="exclamation-triangle" size={13} color={Colors.error} />
+      {/* Complete Activity — only for active endless activities */}
+      {!isCompleted && selectedActivity.activityType !== 'goal' && (
+        <Animated.View entering={FadeInDown.delay(140).springify()} style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <View style={[styles.sectionIconWrap, { backgroundColor: isDark ? '#1A2A1A' : Colors.successLight }]}>
+              <FontAwesome5 name="check-circle" size={14} color={Colors.success} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+                Complete Activity
+              </Text>
+              <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
+                Archive this activity — history is preserved
+              </Text>
+            </View>
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-              Danger Zone
-            </Text>
-            <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-              Destructive actions — cannot be undone
-            </Text>
-          </View>
-        </View>
 
-        <TouchableOpacity
-          style={[styles.dangerCard, { backgroundColor: colors.surface }]}
-          onPress={handleReset}
-          activeOpacity={0.75}
-        >
-          <View style={[styles.dangerIconWrap, { backgroundColor: Colors.errorLight }]}>
-            <FontAwesome5 name="trash-alt" size={16} color={Colors.error} />
+          <TouchableOpacity
+            style={[styles.completeCard, { backgroundColor: colors.surface }]}
+            onPress={handleMarkComplete}
+            activeOpacity={0.75}
+          >
+            <View style={[styles.completeIconWrap, { backgroundColor: isDark ? '#1A2A1A' : Colors.successLight }]}>
+              <FontAwesome5 name="trophy" size={16} color={Colors.success} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.completeLabel, { color: Colors.success }]}>
+                Mark as Completed
+              </Text>
+              <Text style={[styles.completeSublabel, { color: colors.textSecondary }]}>
+                Move to your completed activities list
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={Colors.success} style={{ opacity: 0.6 }} />
+          </TouchableOpacity>
+        </Animated.View>
+      )}
+
+      {/* Danger Zone */}
+      {!isCompleted && (
+        <Animated.View entering={FadeInDown.delay(160).springify()} style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <View style={[styles.sectionIconWrap, { backgroundColor: Colors.errorLight }]}>
+              <FontAwesome5 name="exclamation-triangle" size={13} color={Colors.error} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+                Danger Zone
+              </Text>
+              <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
+                Destructive actions — cannot be undone
+              </Text>
+            </View>
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.dangerLabel, { color: Colors.error }]}>
-              Reset Activity Data
-            </Text>
-            <Text style={[styles.dangerSublabel, { color: colors.textSecondary }]}>
-              Delete all logged days and streak history
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={16} color={Colors.error} style={{ opacity: 0.6 }} />
-        </TouchableOpacity>
-      </Animated.View>
+
+          <TouchableOpacity
+            style={[styles.dangerCard, { backgroundColor: colors.surface }]}
+            onPress={handleReset}
+            activeOpacity={0.75}
+          >
+            <View style={[styles.dangerIconWrap, { backgroundColor: Colors.errorLight }]}>
+              <FontAwesome5 name="trash-alt" size={16} color={Colors.error} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.dangerLabel, { color: Colors.error }]}>
+                Reset Activity Data
+              </Text>
+              <Text style={[styles.dangerSublabel, { color: colors.textSecondary }]}>
+                Delete all logged days and streak history
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={Colors.error} style={{ opacity: 0.6 }} />
+          </TouchableOpacity>
+        </Animated.View>
+      )}
     </ScrollView>
   );
 };
@@ -338,6 +444,61 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     ...Typography.bodyMedium,
+  },
+  // Completed banner
+  completedBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1.5,
+    padding: Spacing.md,
+    gap: Spacing.md,
+    marginBottom: Spacing.xl,
+  },
+  completedBannerIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  completedBannerTitle: {
+    ...Typography.titleMedium,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  completedBannerSub: {
+    ...Typography.bodySmall,
+    marginBottom: 2,
+  },
+  completedBannerNote: {
+    ...Typography.bodySmall,
+    fontStyle: 'italic',
+  },
+  // Goal banner
+  goalBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1.5,
+    padding: Spacing.md,
+    gap: Spacing.md,
+    marginBottom: Spacing.xl,
+  },
+  goalBannerIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  goalBannerTitle: {
+    ...Typography.bodyMedium,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  goalBannerSub: {
+    ...Typography.bodySmall,
   },
   section: {
     marginBottom: Spacing.xl,
@@ -373,6 +534,35 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
   },
+  // Complete card
+  completeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.md,
+    gap: Spacing.md,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  completeIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  completeLabel: {
+    ...Typography.bodyLarge,
+    fontWeight: '700',
+  },
+  completeSublabel: {
+    ...Typography.bodySmall,
+    marginTop: 2,
+  },
+  // Danger card
   dangerCard: {
     flexDirection: 'row',
     alignItems: 'center',

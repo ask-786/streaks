@@ -18,6 +18,7 @@ interface LogButtonProps {
   disabled?: boolean;
   disabledReason?: string;
   disabledKind?: 'too_early' | 'too_late';
+  isCompleted?: boolean;
 }
 
 /**
@@ -32,19 +33,20 @@ export const LogButton: React.FC<LogButtonProps> = ({
   disabled = false,
   disabledReason,
   disabledKind,
+  isCompleted = false,
 }) => {
   const scale = useSharedValue(1);
   const opacity = useSharedValue(1);
 
   // Transition animation when isLogged changes to true
   useEffect(() => {
-    if (isLogged) {
+    if (isLogged || isCompleted) {
       scale.value = withSequence(
         withSpring(1.15, { damping: 4, stiffness: 200 }),
         withSpring(1, { damping: 8, stiffness: 150 })
       );
     }
-  }, [isLogged]);
+  }, [isLogged, isCompleted]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -52,7 +54,7 @@ export const LogButton: React.FC<LogButtonProps> = ({
   }));
 
   const handlePress = () => {
-    if (isLogged || isLoading || disabled) return;
+    if (isCompleted || isLogged || isLoading || disabled) return;
 
     // Quick bounce on press
     scale.value = withSequence(
@@ -67,14 +69,16 @@ export const LogButton: React.FC<LogButtonProps> = ({
     onPress();
   };
 
-  const isDisabled = isLogged || disabled;
+  const isDisabled = isCompleted || isLogged || disabled;
 
   return (
     <Animated.View style={animatedStyle}>
       <Pressable
         style={[
           styles.button,
-          isLogged
+          isCompleted
+            ? styles.buttonCompleted
+            : isLogged
             ? styles.buttonLogged
             : disabled
             ? styles.buttonDisabled
@@ -86,11 +90,14 @@ export const LogButton: React.FC<LogButtonProps> = ({
         <Text
           style={[
             styles.buttonText,
-            isLogged && styles.buttonTextLogged,
-            disabled && !isLogged && styles.buttonTextDisabled,
+            isCompleted && styles.buttonTextCompleted,
+            isLogged && !isCompleted && styles.buttonTextLogged,
+            disabled && !isLogged && !isCompleted && styles.buttonTextDisabled,
           ]}
         >
-          {isLogged ? (
+          {isCompleted ? (
+            <><FontAwesome5 name="trophy" size={20} />{'  '}Goal Achieved</>
+          ) : isLogged ? (
             <><FontAwesome5 name="check-circle" size={20} />{'  '}Logged Today!</>
           ) : isLoading ? (
             'Logging...'
@@ -132,6 +139,11 @@ const styles = StyleSheet.create({
     shadowColor: Colors.success,
     elevation: 2,
   },
+  buttonCompleted: {
+    backgroundColor: Colors.warningLight,
+    shadowColor: Colors.warning,
+    elevation: 2,
+  },
   buttonDisabled: {
     backgroundColor: 'transparent',
     borderWidth: 2,
@@ -147,6 +159,9 @@ const styles = StyleSheet.create({
   },
   buttonTextLogged: {
     color: Colors.success,
+  },
+  buttonTextCompleted: {
+    color: Colors.warning,
   },
   buttonTextDisabled: {
     color: Colors.textDisabled,

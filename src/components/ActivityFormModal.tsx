@@ -38,6 +38,8 @@ export interface ActivityFormModalProps {
   initialTimeBoundType?: 'before' | 'after' | 'between';
   initialTimeBoundStartTime?: string;
   initialTimeBoundEndTime?: string;
+  initialActivityType?: 'goal' | 'endless';
+  initialStreakGoal?: number;
   onClose: () => void;
   onSave: (
     name: string,
@@ -48,6 +50,8 @@ export interface ActivityFormModalProps {
     timeBoundType?: 'before' | 'after' | 'between' | null,
     timeBoundStartTime?: string | null,
     timeBoundEndTime?: string | null,
+    activityType?: 'goal' | 'endless',
+    streakGoal?: number,
   ) => void;
 }
 
@@ -64,6 +68,8 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
   initialTimeBoundType,
   initialTimeBoundStartTime,
   initialTimeBoundEndTime,
+  initialActivityType,
+  initialStreakGoal,
   onClose,
   onSave,
 }) => {
@@ -75,6 +81,9 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
   const [taskSeqEnabled, setTaskSeqEnabled] = useState(false);
   const [tasks, setTasks] = useState<string[]>([]);
   const [sequenceMode, setSequenceMode] = useState<'calendar' | 'log'>('calendar');
+  const [activityType, setActivityType] = useState<'goal' | 'endless'>('endless');
+  const [streakGoal, setStreakGoal] = useState(30);
+  const [streakGoalText, setStreakGoalText] = useState('30');
   
   const [timeBoundEnabled, setTimeBoundEnabled] = useState(false);
   const [timeBoundType, setTimeBoundType] = useState<'before' | 'after' | 'between'>('before');
@@ -122,6 +131,11 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
       setTaskSeqEnabled(hasTasks);
       setTasks(initialTaskSequence ?? []);
       setSequenceMode(initialSequenceMode ?? 'calendar');
+      // Activity type & streak goal
+      setActivityType(initialActivityType ?? 'endless');
+      const sg = initialStreakGoal && initialStreakGoal > 0 ? initialStreakGoal : 30;
+      setStreakGoal(sg);
+      setStreakGoalText(sg.toString());
       
       const hasTimeBound = !!initialTimeBoundType;
       setTimeBoundEnabled(hasTimeBound);
@@ -143,7 +157,7 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
       timeBoundHeight.value = hasTimeBound ? 320 : 0;
       timeBoundOpacity.value = hasTimeBound ? 1 : 0;
     }
-  }, [visible, initialName, initialRequiresNote, initialWeeklyGoal, initialTaskSequence, initialSequenceMode, initialTimeBoundType, initialTimeBoundStartTime, initialTimeBoundEndTime]);
+  }, [visible, initialName, initialRequiresNote, initialWeeklyGoal, initialTaskSequence, initialSequenceMode, initialTimeBoundType, initialTimeBoundStartTime, initialTimeBoundEndTime, initialActivityType, initialStreakGoal]);
 
   const handleWeeklyToggle = (val: boolean) => {
     setWeeklyModeEnabled(val);
@@ -166,6 +180,7 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
 
   const handleSave = () => {
     if (!name.trim()) return;
+    if (activityType === 'goal' && (!streakGoal || streakGoal < 1)) return;
     onSave(
       name.trim(),
       requiresNote,
@@ -175,6 +190,8 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
       timeBoundEnabled ? timeBoundType : null,
       timeBoundEnabled ? to24h(timeBoundStartTime, startAmPm) : null,
       timeBoundEnabled && timeBoundType === 'between' ? to24h(timeBoundEndTime, endAmPm) : null,
+      activityType,
+      activityType === 'goal' ? streakGoal : undefined,
     );
   };
 
@@ -191,7 +208,8 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
       : isValidTime12h(timeBoundStartTime)
   );
   
-  const canSave = name.trim().length > 0 && isTimeValid;
+  const isStreakGoalValid = activityType !== 'goal' || (streakGoal >= 1);
+  const canSave = name.trim().length > 0 && isTimeValid && isStreakGoalValid;
 
   const timeOrderInvalid = timeBoundEnabled && timeBoundType === 'between' && 
     isValidTime12h(timeBoundStartTime) && isValidTime12h(timeBoundEndTime) && 
@@ -269,6 +287,129 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
           <Text style={[styles.charCount, { color: colors.textSecondary }]}>
             {name.length}/40
           </Text>
+
+          {/* ── Activity Type Selector ─────────────────────────────── */}
+          {!isEditing && (
+            <>
+              <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>
+                Activity Type
+              </Text>
+              <View style={styles.typeRow}>
+                {/* Goal-Based card */}
+                <TouchableOpacity
+                  style={[
+                    styles.typeCard,
+                    {
+                      backgroundColor: activityType === 'goal'
+                        ? (isDark ? '#1E2A1E' : '#F0FDF4')
+                        : colors.background,
+                      borderColor: activityType === 'goal' ? Colors.success : colors.surfaceVariant,
+                    },
+                  ]}
+                  onPress={() => setActivityType('goal')}
+                  activeOpacity={0.75}
+                >
+                  <View style={[styles.typeIconWrap, {
+                    backgroundColor: activityType === 'goal'
+                      ? (isDark ? '#1A3A1A' : Colors.successLight)
+                      : colors.surfaceVariant,
+                  }]}>
+                    <FontAwesome5
+                      name="bullseye"
+                      size={16}
+                      color={activityType === 'goal' ? Colors.success : colors.textSecondary}
+                    />
+                  </View>
+                  <Text style={[styles.typeCardTitle, {
+                    color: activityType === 'goal' ? Colors.success : colors.textPrimary,
+                  }]}>
+                    Goal-Based
+                  </Text>
+                  <Text style={[styles.typeCardSub, { color: colors.textSecondary }]}>
+                    Completes when streak goal is hit
+                  </Text>
+                  {activityType === 'goal' && (
+                    <View style={[styles.typeCheckDot, { backgroundColor: Colors.success }]}>
+                      <FontAwesome5 name="check" size={9} color="#fff" />
+                    </View>
+                  )}
+                </TouchableOpacity>
+
+                {/* Endless card */}
+                <TouchableOpacity
+                  style={[
+                    styles.typeCard,
+                    {
+                      backgroundColor: activityType === 'endless'
+                        ? (isDark ? Colors.dark?.primaryContainer ?? '#1E1B4B' : '#EEF2FF')
+                        : colors.background,
+                      borderColor: activityType === 'endless' ? Colors.primary : colors.surfaceVariant,
+                    },
+                  ]}
+                  onPress={() => setActivityType('endless')}
+                  activeOpacity={0.75}
+                >
+                  <View style={[styles.typeIconWrap, {
+                    backgroundColor: activityType === 'endless'
+                      ? (isDark ? Colors.dark?.primaryContainer ?? '#1E1B4B' : Colors.primaryContainer)
+                      : colors.surfaceVariant,
+                  }]}>
+                    <FontAwesome5
+                      name="infinity"
+                      size={14}
+                      color={activityType === 'endless' ? Colors.primary : colors.textSecondary}
+                    />
+                  </View>
+                  <Text style={[styles.typeCardTitle, {
+                    color: activityType === 'endless' ? Colors.primary : colors.textPrimary,
+                  }]}>
+                    Endless
+                  </Text>
+                  <Text style={[styles.typeCardSub, { color: colors.textSecondary }]}>
+                    No target — track forever
+                  </Text>
+                  {activityType === 'endless' && (
+                    <View style={[styles.typeCheckDot, { backgroundColor: Colors.primary }]}>
+                      <FontAwesome5 name="check" size={9} color="#fff" />
+                    </View>
+                  )}
+                </TouchableOpacity>
+              </View>
+
+              {/* Streak Goal input — only for goal-based */}
+              {activityType === 'goal' && (
+                <View style={[styles.streakGoalRow, {
+                  backgroundColor: isDark ? '#1E2A1E' : '#F0FDF4',
+                  borderColor: Colors.success,
+                }]}>
+                  <FontAwesome5 name="trophy" size={14} color={Colors.success} />
+                  <Text style={[styles.streakGoalLabel, { color: colors.textPrimary }]}>
+                    Streak Goal
+                  </Text>
+                  <View style={[styles.streakGoalInputWrap, {
+                    backgroundColor: colors.background,
+                    borderColor: colors.surfaceVariant,
+                  }]}>
+                    <TextInput
+                      style={[styles.streakGoalInput, { color: colors.textPrimary }]}
+                      value={streakGoalText}
+                      onChangeText={(val) => {
+                        setStreakGoalText(val);
+                        const n = parseInt(val, 10);
+                        if (!isNaN(n) && n > 0) setStreakGoal(n);
+                      }}
+                      keyboardType="number-pad"
+                      maxLength={4}
+                      selectTextOnFocus
+                    />
+                  </View>
+                  <Text style={[styles.streakGoalUnit, { color: colors.textSecondary }]}>
+                    days
+                  </Text>
+                </View>
+              )}
+            </>
+          )}
 
           {/* ── Weekly Goal Mode toggle ────────────────────────── */}
           <View style={[styles.toggleRow, {
@@ -819,5 +960,86 @@ const styles = StyleSheet.create({
     ...Typography.bodySmall,
     marginTop: Spacing.sm,
     fontStyle: 'italic',
+  },
+  // ── Activity type selector ──────────────────────────────────────────────────
+  sectionLabel: {
+    ...Typography.labelMedium,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: Spacing.sm,
+    marginTop: Spacing.xs,
+  },
+  typeRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
+  typeCard: {
+    flex: 1,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1.5,
+    padding: Spacing.md,
+    gap: 6,
+    position: 'relative',
+  },
+  typeIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 2,
+  },
+  typeCardTitle: {
+    ...Typography.bodyMedium,
+    fontWeight: '700',
+  },
+  typeCardSub: {
+    ...Typography.bodySmall,
+    lineHeight: 16,
+  },
+  typeCheckDot: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  streakGoalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1.5,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    marginBottom: Spacing.md,
+    gap: Spacing.sm,
+  },
+  streakGoalLabel: {
+    ...Typography.bodyMedium,
+    fontWeight: '600',
+    flex: 1,
+  },
+  streakGoalInputWrap: {
+    borderWidth: 1.5,
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+    minWidth: 60,
+    alignItems: 'center',
+  },
+  streakGoalInput: {
+    ...Typography.bodyMedium,
+    fontWeight: '700',
+    textAlign: 'center',
+    minWidth: 44,
+  },
+  streakGoalUnit: {
+    ...Typography.bodySmall,
+    fontWeight: '500',
   },
 });

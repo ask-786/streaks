@@ -28,6 +28,7 @@ export const DashboardScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
   const { selectedActivityId, activities, logs: allLogs, getActivityStats, logToday, isLoading, isConfettiEnabled } = useAttendanceStore();
   const selectedActivity = activities.find(a => a.id === selectedActivityId);
+  const isCompleted = !!selectedActivity?.completedAt;
   const stats = selectedActivityId
     ? getActivityStats(selectedActivityId)
     : { isTodayLogged: false, currentStreak: 0, longestStreak: 0, unit: 'day' as const, isThisWeekGoalMet: false, thisWeekCount: 0, weeklyGoal: undefined };
@@ -93,7 +94,7 @@ export const DashboardScreen: React.FC = () => {
 
   const handleLogToday = () => {
     if (!selectedActivityId || !selectedActivity) return;
-    if (isTimeBoundDisabled) return;
+    if (isTimeBoundDisabled || isCompleted) return;
 
     if (selectedActivity.requiresNote) {
       setNoteModalVisible(true);
@@ -152,7 +153,9 @@ export const DashboardScreen: React.FC = () => {
       <Animated.View entering={FadeInDown.delay(0).springify()} style={styles.header}>
         <View style={styles.headerLeft}>
           <Text style={[styles.greeting, { color: colors.textPrimary }]}>
-            {isTodayLogged ? (
+            {isCompleted ? (
+               <>Goal Achieved! <FontAwesome5 name="trophy" size={24} color={Colors.success} /></>
+            ) : isTodayLogged ? (
                <>Great job! <FontAwesome5 name="glass-cheers" size={24} color={Colors.primary} /></>
             ) : isWeekly && isThisWeekGoalMet ? (
                <>Goal met! <FontAwesome5 name="glass-cheers" size={24} color={Colors.primary} /></>
@@ -172,11 +175,17 @@ export const DashboardScreen: React.FC = () => {
         style={[styles.statusCard, { backgroundColor: colors.surface }]}
       >
         <View style={[styles.statusIconWrap, { backgroundColor: colors.surfaceVariant }]}>
-          <FontAwesome5 name={isTodayLogged ? 'check-circle' : 'hourglass-half'} size={24} color={isTodayLogged ? Colors.success : Colors.warning} />
+          <FontAwesome5
+            name={isCompleted ? 'trophy' : isTodayLogged ? 'check-circle' : 'hourglass-half'}
+            size={24}
+            color={isCompleted ? Colors.success : isTodayLogged ? Colors.success : Colors.warning}
+          />
         </View>
         <View style={styles.statusText}>
           <Text style={[styles.statusTitle, { color: colors.textPrimary }]}>
-            {isWeekly
+            {isCompleted
+              ? 'Activity Conquered'
+              : isWeekly
               ? isThisWeekGoalMet
                 ? 'Goal Met This Week'
                 : 'Goal In Progress'
@@ -185,7 +194,9 @@ export const DashboardScreen: React.FC = () => {
               : 'Not Yet Logged'}
           </Text>
           <Text style={[styles.statusSubtitle, { color: colors.textSecondary }]}>
-            {isWeekly
+            {isCompleted
+              ? `You completed this on ${dayjs(selectedActivity?.completedAt).format('MMMM D, YYYY')}. Outstanding work!`
+              : isWeekly
               ? isThisWeekGoalMet
                 ? "You've hit your weekly goal — great work!"
                 : `Log ${stats.weeklyGoal ?? ''} times this week to grow your streak.`
@@ -193,7 +204,7 @@ export const DashboardScreen: React.FC = () => {
               ? 'Your attendance is recorded for today.'
               : 'Tap the button below to log your attendance.'}
           </Text>
-          {!isTodayLogged && selectedActivity?.timeBoundType && (
+          {!isTodayLogged && !isCompleted && selectedActivity?.timeBoundType && (
             <View style={[
               styles.timeBoundChip,
               isTimeBoundDisabled
@@ -286,17 +297,20 @@ export const DashboardScreen: React.FC = () => {
         <LogButton
           onPress={handleLogToday}
           isLogged={isTodayLogged}
+          isCompleted={isCompleted}
           isLoading={isLoading}
-          disabled={isTimeBoundDisabled}
-          disabledReason={timeBoundDisabledReason}
-          disabledKind={timeBoundKind}
+          disabled={isTimeBoundDisabled || isCompleted}
+          disabledReason={isCompleted ? "You've conquered this activity!" : timeBoundDisabledReason}
+          disabledKind={isCompleted ? undefined : timeBoundKind}
         />
       </Animated.View>
 
       {/* Motivational Footer */}
       <Animated.View entering={FadeInDown.delay(400).springify()}>
         <Text style={[styles.motivationText, { color: colors.textSecondary }]}>
-          {isWeekly ? (
+          {isCompleted ? (
+            <>Incredible dedication! Take a moment to celebrate your success. <FontAwesome5 name="star" size={16} color={Colors.warning} /></>
+          ) : isWeekly ? (
             currentStreak === 0
               ? (
                 <>Start your weekly streak! Hit your goal this week. <FontAwesome5 name="dumbbell" size={16} /></>

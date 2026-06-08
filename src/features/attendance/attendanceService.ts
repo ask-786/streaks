@@ -35,6 +35,26 @@ export interface Activity {
   timeBoundType?: 'before' | 'after' | 'between';
   timeBoundStartTime?: string; // e.g. "HH:mm"
   timeBoundEndTime?: string; // e.g. "HH:mm", used only for 'between'
+
+  /**
+   * Activity completion type:
+   * - 'goal': completes automatically when streakGoal is reached
+   * - 'endless': no predefined target; can be manually completed
+   * Defaults to 'endless' for activities created before this feature.
+   */
+  activityType?: 'goal' | 'endless';
+
+  /**
+   * The streak count target for goal-based activities.
+   * When currentStreak reaches this value, the activity is marked completed.
+   */
+  streakGoal?: number;
+
+  /**
+   * Timestamp (ms) when the activity was completed.
+   * Presence of this field means the activity is in the Completed state.
+   */
+  completedAt?: number;
 }
 
 export interface NoteEntry {
