@@ -25,6 +25,7 @@ import { Colors, Typography, Spacing, BorderRadius } from '../constants';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 import { TaskSequenceEditor } from './TaskSequenceEditor';
+import { to12h, to24h, isValidTime12h } from '../utils/dateUtils';
 
 export interface ActivityFormModalProps {
   visible: boolean;
@@ -34,6 +35,9 @@ export interface ActivityFormModalProps {
   initialWeeklyGoal?: number;
   initialTaskSequence?: string[];
   initialSequenceMode?: 'calendar' | 'log';
+  initialTimeBoundType?: 'before' | 'after' | 'between';
+  initialTimeBoundStartTime?: string;
+  initialTimeBoundEndTime?: string;
   onClose: () => void;
   onSave: (
     name: string,
@@ -41,6 +45,9 @@ export interface ActivityFormModalProps {
     weeklyGoal?: number,
     taskSequence?: string[],
     sequenceMode?: 'calendar' | 'log',
+    timeBoundType?: 'before' | 'after' | 'between' | null,
+    timeBoundStartTime?: string | null,
+    timeBoundEndTime?: string | null,
   ) => void;
 }
 
@@ -54,6 +61,9 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
   initialWeeklyGoal,
   initialTaskSequence,
   initialSequenceMode,
+  initialTimeBoundType,
+  initialTimeBoundStartTime,
+  initialTimeBoundEndTime,
   onClose,
   onSave,
 }) => {
@@ -65,12 +75,22 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
   const [taskSeqEnabled, setTaskSeqEnabled] = useState(false);
   const [tasks, setTasks] = useState<string[]>([]);
   const [sequenceMode, setSequenceMode] = useState<'calendar' | 'log'>('calendar');
+  
+  const [timeBoundEnabled, setTimeBoundEnabled] = useState(false);
+  const [timeBoundType, setTimeBoundType] = useState<'before' | 'after' | 'between'>('before');
+  const [timeBoundStartTime, setTimeBoundStartTime] = useState('');
+  const [startAmPm, setStartAmPm] = useState<'AM' | 'PM'>('AM');
+  const [timeBoundEndTime, setTimeBoundEndTime] = useState('');
+  const [endAmPm, setEndAmPm] = useState<'AM' | 'PM'>('AM');
+
   const inputRef = useRef<TextInput>(null);
 
   const pickerHeight = useSharedValue(0);
   const pickerOpacity = useSharedValue(0);
   const taskSeqHeight = useSharedValue(0);
   const taskSeqOpacity = useSharedValue(0);
+  const timeBoundHeight = useSharedValue(0);
+  const timeBoundOpacity = useSharedValue(0);
 
   const pickerStyle = useAnimatedStyle(() => ({
     height: pickerHeight.value,
@@ -81,6 +101,12 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
   const taskSeqStyle = useAnimatedStyle(() => ({
     maxHeight: taskSeqHeight.value,
     opacity: taskSeqOpacity.value,
+    overflow: 'hidden',
+  }));
+
+  const timeBoundStyle = useAnimatedStyle(() => ({
+    maxHeight: timeBoundHeight.value,
+    opacity: timeBoundOpacity.value,
     overflow: 'hidden',
   }));
 
@@ -96,13 +122,28 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
       setTaskSeqEnabled(hasTasks);
       setTasks(initialTaskSequence ?? []);
       setSequenceMode(initialSequenceMode ?? 'calendar');
+      
+      const hasTimeBound = !!initialTimeBoundType;
+      setTimeBoundEnabled(hasTimeBound);
+      setTimeBoundType(initialTimeBoundType ?? 'before');
+      
+      const start12 = to12h(initialTimeBoundStartTime ?? '');
+      setTimeBoundStartTime(start12.time);
+      setStartAmPm(start12.ampm);
+      
+      const end12 = to12h(initialTimeBoundEndTime ?? '');
+      setTimeBoundEndTime(end12.time);
+      setEndAmPm(end12.ampm);
+
       // Animate pickers to correct state immediately (no animation on open)
       pickerHeight.value = hasGoal ? 60 : 0;
       pickerOpacity.value = hasGoal ? 1 : 0;
       taskSeqHeight.value = hasTasks ? 1200 : 0;
       taskSeqOpacity.value = hasTasks ? 1 : 0;
+      timeBoundHeight.value = hasTimeBound ? 320 : 0;
+      timeBoundOpacity.value = hasTimeBound ? 1 : 0;
     }
-  }, [visible, initialName, initialRequiresNote, initialWeeklyGoal, initialTaskSequence, initialSequenceMode]);
+  }, [visible, initialName, initialRequiresNote, initialWeeklyGoal, initialTaskSequence, initialSequenceMode, initialTimeBoundType, initialTimeBoundStartTime, initialTimeBoundEndTime]);
 
   const handleWeeklyToggle = (val: boolean) => {
     setWeeklyModeEnabled(val);
@@ -117,6 +158,12 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
     if (!val) setTasks([]);
   };
 
+  const handleTimeBoundToggle = (val: boolean) => {
+    setTimeBoundEnabled(val);
+    timeBoundHeight.value = withTiming(val ? 320 : 0, { duration: 300 });
+    timeBoundOpacity.value = withTiming(val ? 1 : 0, { duration: 250 });
+  };
+
   const handleSave = () => {
     if (!name.trim()) return;
     onSave(
@@ -125,11 +172,33 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
       weeklyModeEnabled ? weeklyGoal : undefined,
       taskSeqEnabled && tasks.length > 0 ? tasks : [],
       taskSeqEnabled && tasks.length > 0 ? sequenceMode : undefined,
+      timeBoundEnabled ? timeBoundType : null,
+      timeBoundEnabled ? to24h(timeBoundStartTime, startAmPm) : null,
+      timeBoundEnabled && timeBoundType === 'between' ? to24h(timeBoundEndTime, endAmPm) : null,
     );
   };
 
   const isEditing = !!editingItemId;
-  const canSave = name.trim().length > 0;
+  
+  const isTimeOrderValid = !timeBoundEnabled || timeBoundType !== 'between' || (
+    isValidTime12h(timeBoundStartTime) && isValidTime12h(timeBoundEndTime) &&
+    to24h(timeBoundStartTime, startAmPm) < to24h(timeBoundEndTime, endAmPm)
+  );
+
+  const isTimeValid = !timeBoundEnabled || (
+    timeBoundType === 'between'
+      ? isValidTime12h(timeBoundStartTime) && isValidTime12h(timeBoundEndTime) && isTimeOrderValid
+      : isValidTime12h(timeBoundStartTime)
+  );
+  
+  const canSave = name.trim().length > 0 && isTimeValid;
+
+  const timeOrderInvalid = timeBoundEnabled && timeBoundType === 'between' && 
+    isValidTime12h(timeBoundStartTime) && isValidTime12h(timeBoundEndTime) && 
+    to24h(timeBoundStartTime, startAmPm) >= to24h(timeBoundEndTime, endAmPm);
+
+  const startInvalid = (timeBoundEnabled && timeBoundStartTime.length > 0 && !isValidTime12h(timeBoundStartTime)) || timeOrderInvalid;
+  const endInvalid = (timeBoundEnabled && timeBoundType === 'between' && timeBoundEndTime.length > 0 && !isValidTime12h(timeBoundEndTime)) || timeOrderInvalid;
 
   return (
     <Modal
@@ -374,6 +443,142 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
             <View style={{ height: Spacing.md }} />
           </Animated.View>
 
+          {/* ── Time Bound toggle ───────────────────────────────────────── */}
+          <View style={[styles.toggleRow, {
+            backgroundColor: timeBoundEnabled
+              ? (isDark ? Colors.dark?.primaryContainer ?? '#1E1B4B' : '#EEF2FF')
+              : colors.background,
+            borderColor: timeBoundEnabled ? Colors.primary : colors.surfaceVariant,
+            marginBottom: Spacing.sm,
+          }]}>
+            <View style={[styles.toggleIconWrap, {
+              backgroundColor: timeBoundEnabled
+                ? (isDark ? Colors.dark?.primaryContainer ?? '#1E1B4B' : Colors.primaryContainer)
+                : colors.surfaceVariant,
+            }]}>
+              <FontAwesome5
+                name="clock"
+                size={13}
+                color={timeBoundEnabled ? Colors.primary : colors.textSecondary}
+              />
+            </View>
+            <View style={styles.toggleTextWrap}>
+              <Text style={[styles.toggleLabel, { color: colors.textPrimary }]}>
+                Time Bound
+              </Text>
+              <Text style={[styles.toggleSub, { color: colors.textSecondary }]}>
+                {timeBoundEnabled
+                  ? `Log ${timeBoundType} specific time`
+                  : 'Log at any time'}
+              </Text>
+            </View>
+            <Switch
+              value={timeBoundEnabled}
+              onValueChange={handleTimeBoundToggle}
+              trackColor={{ false: colors.surfaceVariant, true: Colors.primaryContainer }}
+              thumbColor={timeBoundEnabled ? Colors.primary : colors.textSecondary}
+            />
+          </View>
+
+          {/* Time Bound picker — animates open */}
+          <Animated.View style={timeBoundStyle}>
+            <View style={[styles.modePickerRow, { backgroundColor: colors.background, borderColor: colors.surfaceVariant }]}>
+              <Text style={[styles.modePickerLabel, { color: colors.textSecondary }]}>Type</Text>
+              <View style={styles.modePills}>
+                {(['before', 'after', 'between'] as const).map(type => (
+                  <TouchableOpacity
+                    key={type}
+                    style={[
+                      styles.modePill,
+                      { backgroundColor: timeBoundType === type ? Colors.primary : colors.surfaceVariant },
+                    ]}
+                    onPress={() => setTimeBoundType(type)}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={[
+                      styles.modePillText,
+                      { color: timeBoundType === type ? '#fff' : colors.textSecondary },
+                    ]}>
+                      {type.charAt(0).toUpperCase() + type.slice(1)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* Start time */}
+            <View style={styles.timeFieldGroup}>
+              <Text style={[styles.timeFieldLabel, { color: colors.textSecondary }]}>
+                {timeBoundType === 'between' ? 'Start Time' : 'Time'}
+              </Text>
+              <View style={[styles.inputWrapper, {
+                backgroundColor: colors.background,
+                borderColor: startInvalid ? Colors.error : colors.surfaceVariant,
+                marginBottom: 0,
+              }]}>
+                <TextInput
+                  style={[styles.input, { flex: 1, color: startInvalid ? Colors.error : colors.textPrimary }]}
+                  placeholder="HH:MM"
+                  placeholderTextColor={Colors.textDisabled}
+                  value={timeBoundStartTime}
+                  onChangeText={setTimeBoundStartTime}
+                  keyboardType="numbers-and-punctuation"
+                  maxLength={5}
+                />
+                <TouchableOpacity
+                  style={[styles.amPmToggle, {
+                    backgroundColor: startAmPm === 'AM' ? colors.surfaceVariant : colors.primaryContainer,
+                  }]}
+                  onPress={() => setStartAmPm(startAmPm === 'AM' ? 'PM' : 'AM')}
+                >
+                  <Text style={[styles.amPmText, { color: startAmPm === 'PM' ? Colors.primary : colors.textPrimary }]}>
+                    {startAmPm}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* End time — only for 'between' */}
+            {timeBoundType === 'between' && (
+              <View style={[styles.timeFieldGroup, { marginTop: Spacing.sm }]}>
+                <Text style={[styles.timeFieldLabel, { color: colors.textSecondary }]}>End Time</Text>
+                <View style={[styles.inputWrapper, {
+                  backgroundColor: colors.background,
+                  borderColor: endInvalid ? Colors.error : colors.surfaceVariant,
+                  marginBottom: 0,
+                }]}>
+                  <TextInput
+                    style={[styles.input, { flex: 1, color: endInvalid ? Colors.error : colors.textPrimary }]}
+                    placeholder="HH:MM"
+                    placeholderTextColor={Colors.textDisabled}
+                    value={timeBoundEndTime}
+                    onChangeText={setTimeBoundEndTime}
+                    keyboardType="numbers-and-punctuation"
+                    maxLength={5}
+                  />
+                  <TouchableOpacity
+                    style={[styles.amPmToggle, {
+                      backgroundColor: endAmPm === 'AM' ? colors.surfaceVariant : colors.primaryContainer,
+                    }]}
+                    onPress={() => setEndAmPm(endAmPm === 'AM' ? 'PM' : 'AM')}
+                  >
+                    <Text style={[styles.amPmText, { color: endAmPm === 'PM' ? Colors.primary : colors.textPrimary }]}>
+                      {endAmPm}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
+            {/* Validation error hint */}
+            {timeOrderInvalid && (
+              <Text style={[styles.timeErrorHint, { color: Colors.error }]}>
+                End time must be after start time
+              </Text>
+            )}
+            <View style={{ height: Spacing.md }} />
+          </Animated.View>
+
           </ScrollView>
 
           {/* Actions */}
@@ -579,7 +784,7 @@ const styles = StyleSheet.create({
     gap: 5,
     paddingHorizontal: Spacing.sm,
     paddingVertical: 6,
-    borderRadius: BorderRadius.md,
+    borderRadius: BorderRadius.sm,
   },
   modePillText: {
     ...Typography.labelMedium,
@@ -588,6 +793,31 @@ const styles = StyleSheet.create({
   modeHint: {
     ...Typography.bodySmall,
     marginBottom: Spacing.sm,
+    fontStyle: 'italic',
+  },
+  amPmToggle: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 6,
+    borderRadius: BorderRadius.sm,
+    marginLeft: Spacing.xs,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  amPmText: {
+    ...Typography.labelMedium,
+    fontWeight: '700',
+  },
+  timeFieldGroup: {
+    gap: Spacing.xs,
+  },
+  timeFieldLabel: {
+    ...Typography.labelMedium,
+    fontWeight: '600',
+    marginLeft: 2,
+  },
+  timeErrorHint: {
+    ...Typography.bodySmall,
+    marginTop: Spacing.sm,
     fontStyle: 'italic',
   },
 });

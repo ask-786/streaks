@@ -6,6 +6,7 @@ import {
   StatusBar,
   TouchableOpacity,
 } from 'react-native';
+import dayjs from 'dayjs';
 import { Text } from 'react-native-paper';
 import Animated, {
   useSharedValue,
@@ -19,7 +20,7 @@ import { LogButton } from '../components/LogButton';
 import { StreakBadge } from '../components/StreakBadge';
 import { NoteInputModal } from '../components/NoteInputModal';
 import { Colors, Spacing, Typography, BorderRadius } from '../constants';
-import { formatDisplayDate, todayStr } from '../utils/dateUtils';
+import { formatDisplayDate, todayStr, formatTime12h } from '../utils/dateUtils';
 import { useTheme } from '../hooks/useTheme';
 import ConfettiCannon from 'react-native-confetti-cannon';
 
@@ -42,9 +43,59 @@ export const DashboardScreen: React.FC = () => {
     }
   };
 
+  // Compute time-bound disabled state
+  const computeTimeBoundState = (): {
+    isDisabled: boolean;
+    reason: string | undefined;
+    kind: 'too_early' | 'too_late' | undefined;
+  } => {
+    if (!selectedActivity?.timeBoundType || isTodayLogged)
+      return { isDisabled: false, reason: undefined, kind: undefined };
+    const now = dayjs();
+    const currentTime = now.format('HH:mm');
+    const { timeBoundType, timeBoundStartTime, timeBoundEndTime } = selectedActivity;
+    if (timeBoundType === 'before' && timeBoundStartTime) {
+      if (currentTime >= timeBoundStartTime) {
+        return {
+          isDisabled: true,
+          reason: `Deadline was ${formatTime12h(timeBoundStartTime)}`,
+          kind: 'too_late',
+        };
+      }
+    } else if (timeBoundType === 'after' && timeBoundStartTime) {
+      if (currentTime < timeBoundStartTime) {
+        return {
+          isDisabled: true,
+          reason: `Available after ${formatTime12h(timeBoundStartTime)}`,
+          kind: 'too_early',
+        };
+      }
+    } else if (timeBoundType === 'between' && timeBoundStartTime && timeBoundEndTime) {
+      if (currentTime < timeBoundStartTime) {
+        return {
+          isDisabled: true,
+          reason: `Opens at ${formatTime12h(timeBoundStartTime)}`,
+          kind: 'too_early',
+        };
+      }
+      if (currentTime >= timeBoundEndTime) {
+        return {
+          isDisabled: true,
+          reason: `Closed at ${formatTime12h(timeBoundEndTime)}`,
+          kind: 'too_late',
+        };
+      }
+    }
+    return { isDisabled: false, reason: undefined, kind: undefined };
+  };
+
+  const { isDisabled: isTimeBoundDisabled, reason: timeBoundDisabledReason, kind: timeBoundKind } = computeTimeBoundState();
+
   const handleLogToday = () => {
-    if (!selectedActivityId) return;
-    if (selectedActivity?.requiresNote) {
+    if (!selectedActivityId || !selectedActivity) return;
+    if (isTimeBoundDisabled) return;
+
+    if (selectedActivity.requiresNote) {
       setNoteModalVisible(true);
     } else {
       logToday(selectedActivityId);
@@ -142,6 +193,28 @@ export const DashboardScreen: React.FC = () => {
               ? 'Your attendance is recorded for today.'
               : 'Tap the button below to log your attendance.'}
           </Text>
+          {!isTodayLogged && selectedActivity?.timeBoundType && (
+            <View style={[
+              styles.timeBoundChip,
+              isTimeBoundDisabled
+                ? { backgroundColor: colors.surfaceVariant, borderColor: Colors.textDisabled }
+                : { backgroundColor: isDark ? '#1A2F1A' : '#F0FDF4', borderColor: Colors.success },
+            ]}>
+              <FontAwesome5
+                name="clock"
+                size={11}
+                color={isTimeBoundDisabled ? Colors.textDisabled : Colors.success}
+              />
+              <Text style={[styles.timeBoundChipText, { color: isTimeBoundDisabled ? Colors.textDisabled : Colors.success }]}>
+                {selectedActivity.timeBoundType === 'between'
+                  ? `${formatTime12h(selectedActivity.timeBoundStartTime ?? '')} – ${formatTime12h(selectedActivity.timeBoundEndTime ?? '')}`
+                  : `${selectedActivity.timeBoundType} ${formatTime12h(selectedActivity.timeBoundStartTime ?? '')}`}
+              </Text>
+              {isTimeBoundDisabled && (
+                <Text style={[styles.timeBoundChipBadge, { color: Colors.textDisabled }]}>Locked</Text>
+              )}
+            </View>
+          )}
         </View>
       </Animated.View>
 
@@ -214,6 +287,9 @@ export const DashboardScreen: React.FC = () => {
           onPress={handleLogToday}
           isLogged={isTodayLogged}
           isLoading={isLoading}
+          disabled={isTimeBoundDisabled}
+          disabledReason={timeBoundDisabledReason}
+          disabledKind={timeBoundKind}
         />
       </Animated.View>
 
@@ -380,6 +456,27 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
     marginBottom: Spacing.xl,
+  },
+  timeBoundChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 8,
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  timeBoundChipText: {
+    ...Typography.labelMedium,
+    fontWeight: '600',
+  },
+  timeBoundChipBadge: {
+    ...Typography.labelMedium,
+    fontWeight: '700',
+    opacity: 0.6,
+    marginLeft: 2,
   },
   motivationText: {
     ...Typography.bodyMedium,

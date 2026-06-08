@@ -28,6 +28,13 @@ export interface Activity {
    * - 'log': one step per logged day (advances only when user actually logs)
    */
   sequenceMode?: 'calendar' | 'log';
+
+  /**
+   * Time bound constraints for logging.
+   */
+  timeBoundType?: 'before' | 'after' | 'between';
+  timeBoundStartTime?: string; // e.g. "HH:mm"
+  timeBoundEndTime?: string; // e.g. "HH:mm", used only for 'between'
 }
 
 export interface NoteEntry {

@@ -15,17 +15,23 @@ interface LogButtonProps {
   onPress: () => void;
   isLogged: boolean;
   isLoading?: boolean;
+  disabled?: boolean;
+  disabledReason?: string;
+  disabledKind?: 'too_early' | 'too_late';
 }
 
 /**
  * LogButton — The primary CTA button.
  * Animates with a "pop" spring on press and transitions to a "Done" state
- * once the user has logged today. Uses react-native-reanimated for smooth animation.
+ * once the user has logged today. Supports a disabled state for time-bound habits.
  */
 export const LogButton: React.FC<LogButtonProps> = ({
   onPress,
   isLogged,
   isLoading = false,
+  disabled = false,
+  disabledReason,
+  disabledKind,
 }) => {
   const scale = useSharedValue(1);
   const opacity = useSharedValue(1);
@@ -46,7 +52,7 @@ export const LogButton: React.FC<LogButtonProps> = ({
   }));
 
   const handlePress = () => {
-    if (isLogged || isLoading) return;
+    if (isLogged || isLoading || disabled) return;
 
     // Quick bounce on press
     scale.value = withSequence(
@@ -61,26 +67,44 @@ export const LogButton: React.FC<LogButtonProps> = ({
     onPress();
   };
 
+  const isDisabled = isLogged || disabled;
+
   return (
     <Animated.View style={animatedStyle}>
       <Pressable
         style={[
           styles.button,
-          isLogged ? styles.buttonLogged : styles.buttonActive,
+          isLogged
+            ? styles.buttonLogged
+            : disabled
+            ? styles.buttonDisabled
+            : styles.buttonActive,
         ]}
         onPress={handlePress}
+        disabled={isDisabled}
       >
         <Text
-          style={[styles.buttonText, isLogged && styles.buttonTextLogged]}
+          style={[
+            styles.buttonText,
+            isLogged && styles.buttonTextLogged,
+            disabled && !isLogged && styles.buttonTextDisabled,
+          ]}
         >
           {isLogged ? (
-            <><FontAwesome5 name="check-circle" size={20} />  Logged Today!</>
+            <><FontAwesome5 name="check-circle" size={20} />{'  '}Logged Today!</>
           ) : isLoading ? (
             'Logging...'
+          ) : disabled ? (
+            disabledKind === 'too_late'
+              ? <><FontAwesome5 name="clock" size={18} />{'  '}Window Passed</>
+              : <><FontAwesome5 name="clock" size={18} />{'  '}Not Yet Time</>
           ) : (
-            <><FontAwesome5 name="fire" size={20} />  Log Today</>
+            <><FontAwesome5 name="fire" size={20} />{'  '}Log Today</>
           )}
         </Text>
+        {disabled && disabledReason ? (
+          <Text style={styles.disabledHint}>{disabledReason}</Text>
+        ) : null}
       </Pressable>
     </Animated.View>
   );
@@ -108,6 +132,13 @@ const styles = StyleSheet.create({
     shadowColor: Colors.success,
     elevation: 2,
   },
+  buttonDisabled: {
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: Colors.textDisabled,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
   buttonText: {
     ...Typography.titleLarge,
     color: Colors.textOnPrimary,
@@ -116,5 +147,15 @@ const styles = StyleSheet.create({
   },
   buttonTextLogged: {
     color: Colors.success,
+  },
+  buttonTextDisabled: {
+    color: Colors.textDisabled,
+  },
+  disabledHint: {
+    ...Typography.bodySmall,
+    color: Colors.textDisabled,
+    textAlign: 'center',
+    marginTop: 2,
+    paddingBottom: 2,
   },
 });

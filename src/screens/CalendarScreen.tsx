@@ -20,6 +20,7 @@ export const CalendarScreen: React.FC = () => {
   const [logModalTime, setLogModalTime] = React.useState<string | null>(null);
   const [logModalTask, setLogModalTask] = React.useState<string | null>(null);
   const [logModalIsLogged, setLogModalIsLogged] = React.useState(false);
+  const [logModalTimeBoundKind, setLogModalTimeBoundKind] = React.useState<'too_early' | 'too_late' | undefined>(undefined);
 
   const { logs, notes, taskHistory, selectedActivityId, activities, appendNote, editNote, isHideExtraDaysEnabled } = useAttendanceStore();
   const selectedActivity = activities.find(a => a.id === selectedActivityId);
@@ -84,9 +85,27 @@ export const CalendarScreen: React.FC = () => {
                 }
               }
               setLogModalTask(task);
+              setLogModalTimeBoundKind(undefined);
             } else {
               setLogModalTime(null);
               setLogModalTask(null);
+              // Compute time-bound kind for unlogged today
+              if (day.dateString === today && selectedActivity?.timeBoundType) {
+                const currentTime = dayjs().format('HH:mm');
+                const { timeBoundType, timeBoundStartTime, timeBoundEndTime } = selectedActivity;
+                let kind: 'too_early' | 'too_late' | undefined;
+                if (timeBoundType === 'before' && timeBoundStartTime && currentTime >= timeBoundStartTime) {
+                  kind = 'too_late';
+                } else if (timeBoundType === 'after' && timeBoundStartTime && currentTime < timeBoundStartTime) {
+                  kind = 'too_early';
+                } else if (timeBoundType === 'between' && timeBoundStartTime && timeBoundEndTime) {
+                  if (currentTime < timeBoundStartTime) kind = 'too_early';
+                  else if (currentTime >= timeBoundEndTime) kind = 'too_late';
+                }
+                setLogModalTimeBoundKind(kind);
+              } else {
+                setLogModalTimeBoundKind(undefined);
+              }
             }
             setLogDetailsVisible(true);
           }}
@@ -129,6 +148,7 @@ export const CalendarScreen: React.FC = () => {
         isLogged={logModalIsLogged}
         requiresNote={selectedActivity?.requiresNote}
         taskForDay={logModalTask}
+        timeBoundKind={logModalTimeBoundKind}
         onNoteAppend={
           selectedActivityId
             ? async (text) => {

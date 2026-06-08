@@ -41,6 +41,8 @@ export interface LogDetailsModalProps {
   requiresNote?: boolean;
   /** The task that was active on this logged day (computed by caller). */
   taskForDay?: string | null;
+  /** If today is unlogged and time-bound, whether the window is already passed or not yet open. */
+  timeBoundKind?: 'too_early' | 'too_late';
   /** Appends a new note entry for today. */
   onNoteAppend?: (text: string) => Promise<void>;
   /** Edits an existing note entry by index. */
@@ -58,6 +60,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
   isLogged = true,
   requiresNote = false,
   taskForDay,
+  timeBoundKind,
   onNoteAppend,
   onNoteEdit,
   onClose,
@@ -304,15 +307,23 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                         styles.infoIconWrap,
                         {
                           backgroundColor: isToday
-                            ? isDark ? '#2D2510' : '#FFF8E7'
+                            ? timeBoundKind === 'too_late'
+                              ? isDark ? '#3A1A1A' : '#FFF0F0'
+                              : isDark ? '#2D2510' : '#FFF8E7'
                             : colors.surfaceVariant,
                         },
                       ]}
                     >
                       <FontAwesome5
-                        name={isToday ? 'clock' : 'calendar-times'}
+                        name={isToday
+                          ? timeBoundKind === 'too_late' ? 'calendar-times' : 'clock'
+                          : 'calendar-times'}
                         size={13}
-                        color={isToday ? Colors.warning : colors.textSecondary}
+                        color={
+                          isToday
+                            ? timeBoundKind === 'too_late' ? Colors.error : Colors.warning
+                            : colors.textSecondary
+                        }
                       />
                     </View>
                     <View style={styles.infoTextWrap}>
@@ -320,10 +331,18 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                       <Text
                         style={[
                           styles.infoValue,
-                          { color: isToday ? Colors.warning : colors.textSecondary },
+                          {
+                            color: isToday
+                              ? timeBoundKind === 'too_late' ? Colors.error : Colors.warning
+                              : colors.textSecondary,
+                          },
                         ]}
                       >
-                        {isToday ? 'Not yet logged' : 'Not logged'}
+                        {isToday
+                          ? timeBoundKind === 'too_late'
+                            ? 'Window passed'
+                            : 'Not yet logged'
+                          : 'Not logged'}
                       </Text>
                     </View>
                     <View
@@ -331,23 +350,39 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                         styles.statusBadge,
                         {
                           backgroundColor: isToday
-                            ? isDark ? '#2D2510' : '#FFF8E7'
+                            ? timeBoundKind === 'too_late'
+                              ? isDark ? '#3A1A1A' : '#FFF0F0'
+                              : isDark ? '#2D2510' : '#FFF8E7'
                             : colors.surfaceVariant,
                         },
                       ]}
                     >
                       <Ionicons
-                        name={isToday ? 'time-outline' : 'close-circle'}
+                        name={
+                          isToday
+                            ? timeBoundKind === 'too_late' ? 'close-circle' : 'time-outline'
+                            : 'close-circle'
+                        }
                         size={14}
-                        color={isToday ? Colors.warning : colors.textSecondary}
+                        color={
+                          isToday
+                            ? timeBoundKind === 'too_late' ? Colors.error : Colors.warning
+                            : colors.textSecondary
+                        }
                       />
                       <Text
                         style={[
                           styles.statusBadgeText,
-                          { color: isToday ? Colors.warning : colors.textSecondary },
+                          {
+                            color: isToday
+                              ? timeBoundKind === 'too_late' ? Colors.error : Colors.warning
+                              : colors.textSecondary,
+                          },
                         ]}
                       >
-                        {isToday ? 'Pending' : 'Missed'}
+                        {isToday
+                          ? timeBoundKind === 'too_late' ? 'Missed' : 'Pending'
+                          : 'Missed'}
                       </Text>
                     </View>
                   </View>

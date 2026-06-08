@@ -69,3 +69,45 @@ export const formatDisplayDate = (dateStr: string): string =>
  */
 export const formatMonthYear = (year: number, month: number): string =>
   dayjs().year(year).month(month).format('MMMM YYYY');
+
+/**
+ * Formats a 24-hour time string (HH:mm) to a 12-hour string with AM/PM.
+ */
+export const formatTime12h = (time24: string): string => {
+  if (!time24) return '';
+  const parts = time24.split(':');
+  if (parts.length !== 2) return '';
+  let hour = parseInt(parts[0], 10);
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  hour = hour % 12;
+  if (hour === 0) hour = 12;
+  return `${hour.toString().padStart(2, '0')}:${parts[1]} ${ampm}`;
+};
+
+export const to12h = (time24: string): { time: string, ampm: 'AM' | 'PM' } => {
+  if (!time24) return { time: '', ampm: 'AM' as 'AM' | 'PM' };
+  const parts = time24.split(':');
+  if (parts.length !== 2) return { time: '', ampm: 'AM' as 'AM' | 'PM' };
+  let hour = parseInt(parts[0], 10);
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  hour = hour % 12;
+  if (hour === 0) hour = 12;
+  const hourStr = hour.toString().padStart(2, '0');
+  return { time: `${hourStr}:${parts[1]}`, ampm };
+};
+
+export const to24h = (time12: string, ampm: 'AM' | 'PM'): string => {
+  if (!time12) return '';
+  const parts = time12.split(':');
+  if (parts.length !== 2) return '';
+  let hour = parseInt(parts[0], 10);
+  if (isNaN(hour)) return '';
+  if (ampm === 'PM' && hour < 12) hour += 12;
+  if (ampm === 'AM' && hour === 12) hour = 0;
+  return `${hour.toString().padStart(2, '0')}:${parts[1]}`;
+};
+
+export const isValidTime12h = (time: string): boolean => {
+  if (!time) return false;
+  return /^(0?[1-9]|1[0-2]):[0-5][0-9]$/.test(time.trim());
+};

@@ -44,6 +44,9 @@ interface AttendanceState {
     taskSequence?: string[],
     sequenceStartDate?: string,
     sequenceMode?: 'calendar' | 'log',
+    timeBoundType?: 'before' | 'after' | 'between' | null,
+    timeBoundStartTime?: string | null,
+    timeBoundEndTime?: string | null,
   ) => Promise<void>;
   editActivity: (
     id: string,
@@ -53,6 +56,9 @@ interface AttendanceState {
     taskSequence?: string[],
     sequenceStartDate?: string,
     sequenceMode?: 'calendar' | 'log',
+    timeBoundType?: 'before' | 'after' | 'between' | null,
+    timeBoundStartTime?: string | null,
+    timeBoundEndTime?: string | null,
   ) => Promise<void>;
   deleteActivity: (id: string) => Promise<void>;
   selectActivity: (id: string) => void;
@@ -114,6 +120,9 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     taskSequence?: string[],
     sequenceStartDate?: string,
     sequenceMode?: 'calendar' | 'log',
+    timeBoundType?: 'before' | 'after' | 'between' | null,
+    timeBoundStartTime?: string | null,
+    timeBoundEndTime?: string | null,
   ) => {
     const { activities } = get();
     const newActivity: Activity = {
@@ -125,6 +134,9 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       ...(taskSequence && taskSequence.length > 0 ? { taskSequence } : {}),
       ...(sequenceStartDate ? { sequenceStartDate } : {}),
       ...(sequenceMode ? { sequenceMode } : {}),
+      ...(timeBoundType ? { timeBoundType } : {}),
+      ...(timeBoundStartTime ? { timeBoundStartTime } : {}),
+      ...(timeBoundEndTime ? { timeBoundEndTime } : {}),
     };
 
     const updatedActivities = [...activities, newActivity];
@@ -140,6 +152,9 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     taskSequence?: string[],
     sequenceStartDate?: string,
     sequenceMode?: 'calendar' | 'log',
+    timeBoundType?: 'before' | 'after' | 'between' | null,
+    timeBoundStartTime?: string | null,
+    timeBoundEndTime?: string | null,
   ) => {
     const { activities } = get();
     const updatedActivities = activities.map(a => {
@@ -166,6 +181,31 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       }
       if (sequenceStartDate !== undefined) updated.sequenceStartDate = sequenceStartDate;
       if (sequenceMode !== undefined) updated.sequenceMode = sequenceMode;
+      
+      if (timeBoundType !== undefined) {
+        if (timeBoundType !== null) {
+          updated.timeBoundType = timeBoundType;
+        } else {
+          delete updated.timeBoundType;
+          delete updated.timeBoundStartTime;
+          delete updated.timeBoundEndTime;
+        }
+      }
+      if (timeBoundStartTime !== undefined) {
+        if (timeBoundStartTime !== null) {
+          updated.timeBoundStartTime = timeBoundStartTime;
+        } else {
+          delete updated.timeBoundStartTime;
+        }
+      }
+      if (timeBoundEndTime !== undefined) {
+        if (timeBoundEndTime !== null) {
+          updated.timeBoundEndTime = timeBoundEndTime;
+        } else {
+          delete updated.timeBoundEndTime;
+        }
+      }
+
       return updated;
     });
     set({ activities: updatedActivities });

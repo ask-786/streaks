@@ -34,12 +34,24 @@ export const ActivitiesScreen: React.FC = () => {
   const [editingWeeklyGoal, setEditingWeeklyGoal] = useState<number | undefined>(undefined);
   const [editingTaskSequence, setEditingTaskSequence] = useState<string[]>([]);
   const [editingSequenceMode, setEditingSequenceMode] = useState<'calendar' | 'log' | undefined>(undefined);
+  const [editingTimeBoundType, setEditingTimeBoundType] = useState<'before' | 'after' | 'between' | undefined>(undefined);
+  const [editingTimeBoundStartTime, setEditingTimeBoundStartTime] = useState<string | undefined>(undefined);
+  const [editingTimeBoundEndTime, setEditingTimeBoundEndTime] = useState<string | undefined>(undefined);
 
-  const handleSaveActivity = (name: string, requiresNote: boolean, weeklyGoal?: number, taskSequence?: string[], sequenceMode?: 'calendar' | 'log') => {
+  const handleSaveActivity = (
+    name: string,
+    requiresNote: boolean,
+    weeklyGoal?: number,
+    taskSequence?: string[],
+    sequenceMode?: 'calendar' | 'log',
+    timeBoundType?: 'before' | 'after' | 'between' | null,
+    timeBoundStartTime?: string | null,
+    timeBoundEndTime?: string | null
+  ) => {
     if (editingItemId) {
-      editActivity(editingItemId, name, requiresNote, weeklyGoal, taskSequence, undefined, sequenceMode);
+      editActivity(editingItemId, name, requiresNote, weeklyGoal, taskSequence, undefined, sequenceMode, timeBoundType, timeBoundStartTime, timeBoundEndTime);
     } else {
-      createActivity(name, requiresNote, weeklyGoal, taskSequence, undefined, sequenceMode);
+      createActivity(name, requiresNote, weeklyGoal, taskSequence, undefined, sequenceMode, timeBoundType, timeBoundStartTime, timeBoundEndTime);
     }
     closeModal();
   };
@@ -59,6 +71,9 @@ export const ActivitiesScreen: React.FC = () => {
     setEditingWeeklyGoal(activity?.weeklyGoal);
     setEditingTaskSequence(activity?.taskSequence ?? []);
     setEditingSequenceMode(activity?.sequenceMode);
+    setEditingTimeBoundType(activity?.timeBoundType);
+    setEditingTimeBoundStartTime(activity?.timeBoundStartTime);
+    setEditingTimeBoundEndTime(activity?.timeBoundEndTime);
     setSelectedItemId(null);
     setIsModalVisible(true);
   };
@@ -71,6 +86,9 @@ export const ActivitiesScreen: React.FC = () => {
     setEditingWeeklyGoal(undefined);
     setEditingTaskSequence([]);
     setEditingSequenceMode(undefined);
+    setEditingTimeBoundType(undefined);
+    setEditingTimeBoundStartTime(undefined);
+    setEditingTimeBoundEndTime(undefined);
   };
 
   const handleSelectActivity = (id: string) => {
@@ -198,6 +216,9 @@ export const ActivitiesScreen: React.FC = () => {
           initialWeeklyGoal={editingWeeklyGoal}
           initialTaskSequence={editingTaskSequence}
           initialSequenceMode={editingSequenceMode}
+          initialTimeBoundType={editingTimeBoundType}
+          initialTimeBoundStartTime={editingTimeBoundStartTime}
+          initialTimeBoundEndTime={editingTimeBoundEndTime}
           onClose={closeModal}
           onSave={handleSaveActivity}
         />
