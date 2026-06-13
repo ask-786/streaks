@@ -415,9 +415,23 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                               />
                             </View>
                             <View style={styles.infoTextWrap}>
-                              <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>
-                                {isSequenceSkipped ? 'Sequence Task' : 'Task that day'}
-                              </Text>
+                              {/* Label row: text left, skipped pill right */}
+                              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>
+                                  {isSequenceSkipped ? 'Sequence Task' : 'Task that day'}
+                                </Text>
+                                {isSequenceSkipped && (
+                                  <View style={[
+                                    styles.skippedInlinePill,
+                                    { backgroundColor: isDark ? '#3A2500' : '#FFF7E6', borderColor: Colors.warning },
+                                  ]}>
+                                    <FontAwesome5 name="forward" size={9} color={Colors.warning} />
+                                    <Text style={[styles.skippedInlinePillText, { color: Colors.warning }]}>
+                                      Skipped
+                                    </Text>
+                                  </View>
+                                )}
+                              </View>
                               <Text style={[
                                 styles.infoValue,
                                 { color: isSequenceSkipped ? colors.textSecondary : colors.textPrimary },
@@ -425,17 +439,6 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                                 {taskForDay}
                               </Text>
                             </View>
-                            {isSequenceSkipped && (
-                              <View style={[
-                                styles.statusBadge,
-                                { backgroundColor: isDark ? '#3A2500' : '#FFF7E6' },
-                              ]}>
-                                <FontAwesome5 name="forward" size={12} color={Colors.warning} />
-                                <Text style={[styles.statusBadgeText, { color: Colors.warning }]}>
-                                  Skipped
-                                </Text>
-                              </View>
-                            )}
                           </View>
                         </>
                       ) : null}
@@ -1137,5 +1140,19 @@ const styles = StyleSheet.create({
     ...Typography.labelLarge,
     color: '#FFFFFF',
     fontWeight: '700',
+  },
+  skippedInlinePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    borderWidth: 1,
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  skippedInlinePillText: {
+    ...Typography.bodySmall,
+    fontWeight: '700',
+    fontSize: 10,
   },
 });
