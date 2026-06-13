@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import dayjs from 'dayjs';
-import { attendanceService, Activity, NotesMap, NoteEntry, getTaskForDate, TaskHistoryMap } from '../features/attendance/attendanceService';
+import { attendanceService, Activity, NotesMap, NoteEntry, getTaskForDate, TaskHistoryMap, SequenceSkipsMap } from '../features/attendance/attendanceService';
 import {
   calculateCurrentStreak,
   calculateLongestStreak,
@@ -30,6 +30,7 @@ interface AttendanceState {
   logs: Record<string, string[]>;
   notes: NotesMap;
   taskHistory: TaskHistoryMap;
+  sequenceSkips: SequenceSkipsMap;
   selectedActivityId: string | null;
   isLoading: boolean;
   isConfettiEnabled: boolean;
@@ -68,6 +69,8 @@ interface AttendanceState {
   setConfettiEnabled: (enabled: boolean) => Promise<void>;
   setHideExtraDaysEnabled: (enabled: boolean) => Promise<void>;
   logToday: (activityId: string, note?: string) => Promise<void>;
+  /** Logs today AND marks the sequence task as skipped. Streak is maintained but sequence does not advance. */
+  logTodayWithSequenceSkip: (activityId: string, note?: string) => Promise<void>;
   resetActivityData: (id: string) => Promise<void>;
   /** Appends a new note entry to the activity's journal for the given date. */
   appendNote: (activityId: string, dateStr: string, text: string) => Promise<void>;
@@ -82,12 +85,14 @@ interface AttendanceState {
 }
 
 export { NoteEntry, getTaskForDate };
+export type { SequenceSkipsMap };
 
 export const useAttendanceStore = create<AttendanceState>((set, get) => ({
   activities: [],
   logs: {},
   notes: {},
   taskHistory: {},
+  sequenceSkips: {},
   selectedActivityId: null,
   isLoading: false,
   isConfettiEnabled: true,
@@ -99,6 +104,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     const logs = await attendanceService.getLogs();
     const notes = await attendanceService.getNotes();
     const taskHistory = await attendanceService.getTaskHistory();
+    const sequenceSkips = await attendanceService.getSequenceSkips();
 
     // Load confetti setting (default to true)
     try {
@@ -110,9 +116,9 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       const hideExtraDaysStr = await AsyncStorage.getItem(StorageKeys.HIDE_EXTRA_DAYS);
       const isHideExtraDaysEnabled = hideExtraDaysStr ? JSON.parse(hideExtraDaysStr) : true;
       
-      set({ activities, logs, notes, taskHistory, isConfettiEnabled, isHideExtraDaysEnabled, isLoading: false });
+      set({ activities, logs, notes, taskHistory, sequenceSkips, isConfettiEnabled, isHideExtraDaysEnabled, isLoading: false });
     } catch {
-      set({ activities, logs, notes, taskHistory, isConfettiEnabled: true, isHideExtraDaysEnabled: true, isLoading: false });
+      set({ activities, logs, notes, taskHistory, sequenceSkips, isConfettiEnabled: true, isHideExtraDaysEnabled: true, isLoading: false });
     }
   },
 
@@ -220,7 +226,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
   },
 
   deleteActivity: async (id: string) => {
-    const { activities, logs, notes, taskHistory, selectedActivityId } = get();
+    const { activities, logs, notes, taskHistory, sequenceSkips, selectedActivityId } = get();
 
     const updatedActivities = activities.filter(a => a.id !== id);
     await attendanceService.saveActivities(updatedActivities);
@@ -237,11 +243,16 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     delete updatedTaskHistory[id];
     await attendanceService.saveTaskHistory(updatedTaskHistory);
 
+    const updatedSequenceSkips = { ...sequenceSkips };
+    delete updatedSequenceSkips[id];
+    await attendanceService.saveSequenceSkips(updatedSequenceSkips);
+
     set({
       activities: updatedActivities,
       logs: updatedLogs,
       notes: updatedNotes,
       taskHistory: updatedTaskHistory,
+      sequenceSkips: updatedSequenceSkips,
       selectedActivityId: selectedActivityId === id ? null : selectedActivityId,
     });
   },
@@ -339,6 +350,43 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     set({ logs: updatedLogs, notes: updatedNotes, taskHistory: updatedTaskHistory, activities: updatedActivities, isLoading: false });
   },
 
+  logTodayWithSequenceSkip: async (activityId: string, note?: string) => {
+    const { logs, notes, sequenceSkips } = get();
+    const today = todayStr();
+    const activityLogs = logs[activityId] || [];
+    if (activityLogs.some(log => dayjs(log).format('YYYY-MM-DD') === today)) return;
+
+    set({ isLoading: true });
+
+    // Perform the normal log (saves to AsyncStorage)
+    await attendanceService.logToday(activityId, note);
+
+    const updatedLogs = { ...logs };
+    updatedLogs[activityId] = [...activityLogs, dayjs().toISOString()];
+
+    // Record the sequence skip
+    const updatedSkips = { ...sequenceSkips };
+    const activitySkips = updatedSkips[activityId] ? [...updatedSkips[activityId]] : [];
+    if (!activitySkips.includes(today)) {
+      activitySkips.push(today);
+    }
+    updatedSkips[activityId] = activitySkips;
+    await attendanceService.saveSequenceSkips(updatedSkips);
+
+    // Update local notes map if a note was provided
+    let updatedNotes = notes;
+    if (note && note.trim()) {
+      updatedNotes = { ...notes };
+      if (!updatedNotes[activityId]) updatedNotes[activityId] = {};
+      updatedNotes[activityId] = {
+        ...updatedNotes[activityId],
+        [today]: [{ text: note.trim(), time: dayjs().toISOString() }],
+      };
+    }
+
+    set({ logs: updatedLogs, notes: updatedNotes, sequenceSkips: updatedSkips, isLoading: false });
+  },
+
   appendNote: async (activityId: string, dateStr: string, text: string) => {
     const { notes } = get();
     const trimmed = text.trim();
@@ -373,7 +421,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
   },
 
   resetActivityData: async (id: string) => {
-    const { logs, notes, taskHistory } = get();
+    const { logs, notes, taskHistory, sequenceSkips } = get();
     const updatedLogs = { ...logs };
     delete updatedLogs[id];
     await attendanceService.saveLogs(updatedLogs);
@@ -386,7 +434,11 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     delete updatedTaskHistory[id];
     await attendanceService.saveTaskHistory(updatedTaskHistory);
 
-    set({ logs: updatedLogs, notes: updatedNotes, taskHistory: updatedTaskHistory });
+    const updatedSequenceSkips = { ...sequenceSkips };
+    delete updatedSequenceSkips[id];
+    await attendanceService.saveSequenceSkips(updatedSequenceSkips);
+
+    set({ logs: updatedLogs, notes: updatedNotes, taskHistory: updatedTaskHistory, sequenceSkips: updatedSequenceSkips });
   },
 
   exportData: async () => {
@@ -400,7 +452,8 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       const logs = await attendanceService.getLogs();
       const notes = await attendanceService.getNotes();
       const taskHistory = await attendanceService.getTaskHistory();
-      set({ activities, logs, notes, taskHistory });
+      const sequenceSkips = await attendanceService.getSequenceSkips();
+      set({ activities, logs, notes, taskHistory, sequenceSkips });
     }
     return success;
   },

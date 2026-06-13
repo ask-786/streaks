@@ -41,6 +41,8 @@ export interface LogDetailsModalProps {
   requiresNote?: boolean;
   /** The task that was active on this logged day (computed by caller). */
   taskForDay?: string | null;
+  /** Whether the sequence was skipped on this logged day. */
+  isSequenceSkipped?: boolean;
   /** If today is unlogged and time-bound, whether the window is already passed or not yet open. */
   timeBoundKind?: 'too_early' | 'too_late';
   /** Appends a new note entry for today. */
@@ -60,6 +62,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
   isLogged = true,
   requiresNote = false,
   taskForDay,
+  isSequenceSkipped = false,
   timeBoundKind,
   onNoteAppend,
   onNoteEdit,
@@ -163,75 +166,23 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
             <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
           </Animated.View>
 
-        <View style={[styles.kvWrapper, { zIndex: 1 }]} pointerEvents="box-none">
-          <View style={styles.wrapper} pointerEvents="box-none">
-            <Animated.View
-              entering={SlideInDown.duration(220).easing(Easing.out(Easing.cubic))}
-              exiting={SlideOutDown.duration(160).easing(Easing.in(Easing.cubic))}
-              style={[styles.sheet, { backgroundColor: colors.surface }]}
-            >
-              {/* Handle bar */}
-              <View style={[styles.handleBar, { backgroundColor: colors.surfaceVariant }]} />
+          <View style={[styles.kvWrapper, { zIndex: 1 }]} pointerEvents="box-none">
+            <View style={styles.wrapper} pointerEvents="box-none">
+              <Animated.View
+                entering={SlideInDown.duration(220).easing(Easing.out(Easing.cubic))}
+                exiting={SlideOutDown.duration(160).easing(Easing.in(Easing.cubic))}
+                style={[styles.sheet, { backgroundColor: colors.surface }]}
+              >
+                {/* Handle bar */}
+                <View style={[styles.handleBar, { backgroundColor: colors.surfaceVariant }]} />
 
-              {/* Main container */}
-              <View style={styles.sheetContainer}>
-                {/* Header (Sticky Top) */}
-                <View style={styles.headerRow}>
-                  <View
-                    style={[
-                      styles.iconContainer,
-                      {
-                        backgroundColor: isDark
-                          ? Colors.dark.primaryContainer
-                          : Colors.primaryContainer,
-                      },
-                    ]}
-                  >
-                    <FontAwesome5 name="calendar-check" size={18} color={Colors.primary} />
-                  </View>
-                  <View style={styles.headerText}>
-                    <Text style={[styles.title, { color: colors.textPrimary }]}>Log Details</Text>
-                    {activityName ? (
-                      <Text style={[styles.activityBadgeText, { color: Colors.primary }]}>
-                        {activityName}
-                      </Text>
-                    ) : null}
-                  </View>
-                  {/* Close ×  button */}
-                  <Pressable
-                    onPress={onClose}
-                    hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                    style={({ pressed }) => [
-                      styles.closeIconBtn,
-                      {
-                        backgroundColor: isDark ? colors.surfaceVariant : colors.background,
-                        opacity: pressed ? 0.6 : 1,
-                      },
-                    ]}
-                    android_ripple={{ color: colors.textSecondary + '33', radius: 20, borderless: true }}
-                  >
-                    <Ionicons name="close" size={18} color={colors.textSecondary} />
-                  </Pressable>
-                </View>
-
-                {/* Scrollable middle */}
-                <ScrollView 
-                  style={styles.sheetScroll}
-                  contentContainerStyle={styles.scrollContent}
-                  showsVerticalScrollIndicator={false}
-                >
-                  {/* Info card */}
-                <View
-                  style={[
-                    styles.infoCard,
-                    { backgroundColor: colors.background, borderColor: colors.surfaceVariant },
-                  ]}
-                >
-                  {/* Date row */}
-                  <View style={styles.infoRow}>
+                {/* Main container */}
+                <View style={styles.sheetContainer}>
+                  {/* Header (Sticky Top) */}
+                  <View style={styles.headerRow}>
                     <View
                       style={[
-                        styles.infoIconWrap,
+                        styles.iconContainer,
                         {
                           backgroundColor: isDark
                             ? Colors.dark.primaryContainer
@@ -239,159 +190,47 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                         },
                       ]}
                     >
-                      <FontAwesome5 name="calendar-day" size={13} color={Colors.primary} />
+                      <FontAwesome5 name="calendar-check" size={18} color={Colors.primary} />
                     </View>
-                    <View style={styles.infoTextWrap}>
-                      <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Date</Text>
-                      <Text style={[styles.infoValue, { color: colors.textPrimary }]}>
-                        {dateStr}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View style={[styles.divider, { backgroundColor: colors.surfaceVariant }]} />
-
-                  {/* Time row — hidden for un-logged days */}
-                  {isLogged ? (
-                  <View style={styles.infoRow}>
-                    <View
-                      style={[
-                        styles.infoIconWrap,
-                        {
-                          backgroundColor: timeStr
-                            ? isDark
-                              ? '#1B3A35'
-                              : Colors.successLight
-                            : colors.surfaceVariant,
-                        },
-                      ]}
-                    >
-                      <FontAwesome5
-                        name="clock"
-                        size={13}
-                        color={timeStr ? Colors.success : colors.textSecondary}
-                      />
-                    </View>
-                    <View style={styles.infoTextWrap}>
-                      <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>
-                        Time Logged
-                      </Text>
-                      <Text
-                        style={[
-                          styles.infoValue,
-                          { color: timeStr ? colors.textPrimary : colors.textSecondary },
-                        ]}
-                      >
-                        {timeStr ?? 'No exact time recorded'}
-                      </Text>
-                    </View>
-                    {timeStr ? (
-                      <View
-                        style={[
-                          styles.statusBadge,
-                          { backgroundColor: isDark ? '#1B3A35' : Colors.successLight },
-                        ]}
-                      >
-                        <Ionicons name="checkmark-circle" size={14} color={Colors.success} />
-                        <Text style={[styles.statusBadgeText, { color: Colors.success }]}>
-                          Logged
+                    <View style={styles.headerText}>
+                      <Text style={[styles.title, { color: colors.textPrimary }]}>Log Details</Text>
+                      {activityName ? (
+                        <Text style={[styles.activityBadgeText, { color: Colors.primary }]}>
+                          {activityName}
                         </Text>
-                      </View>
-                    ) : null}
-                  </View>
-                  ) : (
-                  /* Un-logged day banner */
-                  <View style={styles.infoRow}>
-                    <View
-                      style={[
-                        styles.infoIconWrap,
+                      ) : null}
+                    </View>
+                    {/* Close ×  button */}
+                    <Pressable
+                      onPress={onClose}
+                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                      style={({ pressed }) => [
+                        styles.closeIconBtn,
                         {
-                          backgroundColor: isToday
-                            ? timeBoundKind === 'too_late'
-                              ? isDark ? '#3A1A1A' : '#FFF0F0'
-                              : isDark ? '#2D2510' : '#FFF8E7'
-                            : colors.surfaceVariant,
+                          backgroundColor: isDark ? colors.surfaceVariant : colors.background,
+                          opacity: pressed ? 0.6 : 1,
                         },
                       ]}
+                      android_ripple={{ color: colors.textSecondary + '33', radius: 20, borderless: true }}
                     >
-                      <FontAwesome5
-                        name={isToday
-                          ? timeBoundKind === 'too_late' ? 'calendar-times' : 'clock'
-                          : 'calendar-times'}
-                        size={13}
-                        color={
-                          isToday
-                            ? timeBoundKind === 'too_late' ? Colors.error : Colors.warning
-                            : colors.textSecondary
-                        }
-                      />
-                    </View>
-                    <View style={styles.infoTextWrap}>
-                      <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Status</Text>
-                      <Text
-                        style={[
-                          styles.infoValue,
-                          {
-                            color: isToday
-                              ? timeBoundKind === 'too_late' ? Colors.error : Colors.warning
-                              : colors.textSecondary,
-                          },
-                        ]}
-                      >
-                        {isToday
-                          ? timeBoundKind === 'too_late'
-                            ? 'Window passed'
-                            : 'Not yet logged'
-                          : 'Not logged'}
-                      </Text>
-                    </View>
-                    <View
-                      style={[
-                        styles.statusBadge,
-                        {
-                          backgroundColor: isToday
-                            ? timeBoundKind === 'too_late'
-                              ? isDark ? '#3A1A1A' : '#FFF0F0'
-                              : isDark ? '#2D2510' : '#FFF8E7'
-                            : colors.surfaceVariant,
-                        },
-                      ]}
-                    >
-                      <Ionicons
-                        name={
-                          isToday
-                            ? timeBoundKind === 'too_late' ? 'close-circle' : 'time-outline'
-                            : 'close-circle'
-                        }
-                        size={14}
-                        color={
-                          isToday
-                            ? timeBoundKind === 'too_late' ? Colors.error : Colors.warning
-                            : colors.textSecondary
-                        }
-                      />
-                      <Text
-                        style={[
-                          styles.statusBadgeText,
-                          {
-                            color: isToday
-                              ? timeBoundKind === 'too_late' ? Colors.error : Colors.warning
-                              : colors.textSecondary,
-                          },
-                        ]}
-                      >
-                        {isToday
-                          ? timeBoundKind === 'too_late' ? 'Missed' : 'Pending'
-                          : 'Missed'}
-                      </Text>
-                    </View>
+                      <Ionicons name="close" size={18} color={colors.textSecondary} />
+                    </Pressable>
                   </View>
-                  )}
 
-                  {/* ── Task that day ── */}
-                  {taskForDay ? (
-                    <>
-                      <View style={[styles.divider, { backgroundColor: colors.surfaceVariant }]} />
+                  {/* Scrollable middle */}
+                  <ScrollView
+                    style={styles.sheetScroll}
+                    contentContainerStyle={styles.scrollContent}
+                    showsVerticalScrollIndicator={false}
+                  >
+                    {/* Info card */}
+                    <View
+                      style={[
+                        styles.infoCard,
+                        { backgroundColor: colors.background, borderColor: colors.surfaceVariant },
+                      ]}
+                    >
+                      {/* Date row */}
                       <View style={styles.infoRow}>
                         <View
                           style={[
@@ -403,366 +242,552 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                             },
                           ]}
                         >
-                          <FontAwesome5 name="list-ol" size={13} color={Colors.primary} />
+                          <FontAwesome5 name="calendar-day" size={13} color={Colors.primary} />
                         </View>
                         <View style={styles.infoTextWrap}>
-                          <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Task that day</Text>
+                          <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Date</Text>
                           <Text style={[styles.infoValue, { color: colors.textPrimary }]}>
-                            {taskForDay}
+                            {dateStr}
                           </Text>
                         </View>
                       </View>
-                    </>
-                  ) : null}
 
-                  {/* ── Notes section — only shown when requiresNote is true ── */}
-                  {showNotesSection ? (
-                    <>
                       <View style={[styles.divider, { backgroundColor: colors.surfaceVariant }]} />
-                      <View style={styles.notesSection}>
-                    {/* Section header */}
-                    <View style={styles.notesSectionHeader}>
-                      <View
-                        style={[
-                          styles.infoIconWrap,
-                          {
-                            backgroundColor: isDark
-                              ? Colors.dark.primaryContainer
-                              : Colors.primaryContainer,
-                          },
-                        ]}
-                      >
-                        <FontAwesome5 name="sticky-note" size={13} color={Colors.primary} />
-                      </View>
-                      <Text style={[styles.notesSectionTitle, { color: colors.textSecondary }]}>
-                        Notes
-                      </Text>
-                      {hasNotes ? (
-                        <View
-                          style={[
-                            styles.countBadge,
-                            {
-                              backgroundColor: isDark
-                                ? Colors.dark.primaryContainer
-                                : Colors.primaryContainer,
-                            },
-                          ]}
-                        >
-                          <Text style={[styles.countBadgeText, { color: Colors.primary }]}>
-                            {notes!.length}
-                          </Text>
-                        </View>
-                      ) : null}
-                    </View>
 
-                    {/* ── Notes timeline ── */}
-                    {hasNotes ? (
-                      <View>
-                        {notes!.map((entry, i) => (
-                          <Animated.View
-                            key={i}
-                            entering={FadeInDown.delay(i * 50).duration(220)}
-                            style={styles.timelineRow}
+                      {/* Time row — hidden for un-logged days */}
+                      {isLogged ? (
+                        <View style={styles.infoRow}>
+                          <View
+                            style={[
+                              styles.infoIconWrap,
+                              {
+                                backgroundColor: timeStr
+                                  ? isDark
+                                    ? '#1B3A35'
+                                    : Colors.successLight
+                                  : colors.surfaceVariant,
+                              },
+                            ]}
                           >
-                            {/* Dot + connector */}
-                            <View style={styles.timelineIndicator}>
-                              <View
-                                style={[
-                                  styles.dot,
-                                  {
-                                    backgroundColor: Colors.primary,
-                                    borderColor: colors.background,
-                                  },
-                                ]}
-                              />
-                              {i < notes!.length - 1 ? (
-                                <View
-                                  style={[
-                                    styles.connector,
-                                    { backgroundColor: colors.surfaceVariant },
-                                  ]}
-                                />
-                              ) : null}
-                            </View>
-
-                            {/* Note card */}
+                            <FontAwesome5
+                              name="clock"
+                              size={13}
+                              color={timeStr ? Colors.success : colors.textSecondary}
+                            />
+                          </View>
+                          <View style={styles.infoTextWrap}>
+                            <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>
+                              Time Logged
+                            </Text>
+                            <Text
+                              style={[
+                                styles.infoValue,
+                                { color: timeStr ? colors.textPrimary : colors.textSecondary },
+                              ]}
+                            >
+                              {timeStr ?? 'No exact time recorded'}
+                            </Text>
+                          </View>
+                          {timeStr ? (
                             <View
                               style={[
-                                styles.noteCard,
+                                styles.statusBadge,
+                                { backgroundColor: isDark ? '#1B3A35' : Colors.successLight },
+                              ]}
+                            >
+                              <Ionicons name="checkmark-circle" size={14} color={Colors.success} />
+                              <Text style={[styles.statusBadgeText, { color: Colors.success }]}>
+                                Logged
+                              </Text>
+                            </View>
+                          ) : null}
+                        </View>
+                      ) : (
+                        /* Un-logged day banner */
+                        <View style={styles.infoRow}>
+                          <View
+                            style={[
+                              styles.infoIconWrap,
+                              {
+                                backgroundColor: isToday
+                                  ? timeBoundKind === 'too_late'
+                                    ? isDark ? '#3A1A1A' : '#FFF0F0'
+                                    : isDark ? '#2D2510' : '#FFF8E7'
+                                  : colors.surfaceVariant,
+                              },
+                            ]}
+                          >
+                            <FontAwesome5
+                              name={isToday
+                                ? timeBoundKind === 'too_late' ? 'calendar-times' : 'clock'
+                                : 'calendar-times'}
+                              size={13}
+                              color={
+                                isToday
+                                  ? timeBoundKind === 'too_late' ? Colors.error : Colors.warning
+                                  : colors.textSecondary
+                              }
+                            />
+                          </View>
+                          <View style={styles.infoTextWrap}>
+                            <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Status</Text>
+                            <Text
+                              style={[
+                                styles.infoValue,
                                 {
-                                  backgroundColor: colors.surface,
-                                  borderColor: colors.surfaceVariant,
+                                  color: isToday
+                                    ? timeBoundKind === 'too_late' ? Colors.error : Colors.warning
+                                    : colors.textSecondary,
                                 },
                               ]}
                             >
-                              {/* Time pill + action icons row */}
-                              <View style={styles.noteCardTop}>
-                                {entry.time ? (
-                                  <View
-                                    style={[
-                                      styles.timePill,
-                                      {
-                                        backgroundColor: isDark
-                                          ? Colors.dark.primaryContainer
-                                          : Colors.primaryContainer,
-                                      },
-                                    ]}
-                                  >
-                                    <Text
-                                      style={[styles.timePillText, { color: Colors.primary }]}
-                                    >
-                                      {dayjs(entry.time).format('h:mm A')}
-                                    </Text>
-                                  </View>
-                                ) : (
-                                  <View style={{ flex: 1 }} />
-                                )}
+                              {isToday
+                                ? timeBoundKind === 'too_late'
+                                  ? 'Window passed'
+                                  : 'Not yet logged'
+                                : 'Not logged'}
+                            </Text>
+                          </View>
+                          <View
+                            style={[
+                              styles.statusBadge,
+                              {
+                                backgroundColor: isToday
+                                  ? timeBoundKind === 'too_late'
+                                    ? isDark ? '#3A1A1A' : '#FFF0F0'
+                                    : isDark ? '#2D2510' : '#FFF8E7'
+                                  : colors.surfaceVariant,
+                              },
+                            ]}
+                          >
+                            <Ionicons
+                              name={
+                                isToday
+                                  ? timeBoundKind === 'too_late' ? 'close-circle' : 'time-outline'
+                                  : 'close-circle'
+                              }
+                              size={14}
+                              color={
+                                isToday
+                                  ? timeBoundKind === 'too_late' ? Colors.error : Colors.warning
+                                  : colors.textSecondary
+                              }
+                            />
+                            <Text
+                              style={[
+                                styles.statusBadgeText,
+                                {
+                                  color: isToday
+                                    ? timeBoundKind === 'too_late' ? Colors.error : Colors.warning
+                                    : colors.textSecondary,
+                                },
+                              ]}
+                            >
+                              {isToday
+                                ? timeBoundKind === 'too_late' ? 'Missed' : 'Pending'
+                                : 'Missed'}
+                            </Text>
+                          </View>
+                        </View>
+                      )}
 
-                                {/* Action buttons — grouped on the right */}
-                                <View style={styles.noteCardActions}>
-                                  {/* Copy icon — always visible */}
-                                  <Pressable
-                                    style={({ pressed }) => [
-                                      styles.copyIconBtn,
-                                      {
-                                        backgroundColor: copiedIndex === i
-                                          ? (isDark ? '#1B3A35' : Colors.successLight)
-                                          : (isDark ? colors.surfaceVariant : colors.background),
-                                        opacity: pressed ? 0.55 : 1,
-                                      },
-                                    ]}
-                                    onPress={() => handleCopy(entry.text, i)}
-                                    hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                                    android_ripple={{ color: Colors.primary + '33', radius: 16, borderless: true }}
-                                  >
-                                    <Ionicons
-                                      name={copiedIndex === i ? 'checkmark' : 'copy-outline'}
-                                      size={13}
-                                      color={copiedIndex === i ? Colors.success : colors.textSecondary}
-                                    />
-                                  </Pressable>
-
-                                  {/* Edit icon — only shown on today */}
-                                  {!!onNoteEdit && isToday ? (
-                                    <Pressable
-                                      style={({ pressed }) => [
-                                        styles.editIconBtn,
-                                        {
-                                          backgroundColor: isDark
-                                            ? colors.surfaceVariant
-                                            : colors.background,
-                                          opacity: pressed ? 0.55 : 1,
-                                        },
-                                      ]}
-                                      onPress={() => openEdit(i)}
-                                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                                      android_ripple={{ color: Colors.primary + '33', radius: 16, borderless: true }}
-                                    >
-                                      <MaterialIcons
-                                        name="edit"
-                                        size={13}
-                                        color={colors.textSecondary}
-                                      />
-                                    </Pressable>
-                                  ) : null}
-                                </View>
-                              </View>
-
-                              <Text style={[styles.noteCardText, { color: colors.textPrimary }]}>
-                                {entry.text}
+                      {/* ── Task that day ── */}
+                      {taskForDay ? (
+                        <>
+                          <View style={[styles.divider, { backgroundColor: colors.surfaceVariant }]} />
+                          <View style={styles.infoRow}>
+                            <View
+                              style={[
+                                styles.infoIconWrap,
+                                {
+                                  backgroundColor: isSequenceSkipped
+                                    ? isDark ? '#3A2500' : '#FFF7E6'
+                                    : isDark
+                                      ? Colors.dark.primaryContainer
+                                      : Colors.primaryContainer,
+                                },
+                              ]}
+                            >
+                              <FontAwesome5
+                                name={isSequenceSkipped ? 'forward' : 'list-ol'}
+                                size={13}
+                                color={isSequenceSkipped ? Colors.warning : Colors.primary}
+                              />
+                            </View>
+                            <View style={styles.infoTextWrap}>
+                              <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>
+                                {isSequenceSkipped ? 'Sequence Task' : 'Task that day'}
+                              </Text>
+                              <Text style={[
+                                styles.infoValue,
+                                { color: isSequenceSkipped ? colors.textSecondary : colors.textPrimary },
+                              ]}>
+                                {taskForDay}
                               </Text>
                             </View>
-                          </Animated.View>
-                        ))}
-                      </View>
-                    ) : (
-                      <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                        No notes yet
-                      </Text>
-                    )}
+                            {isSequenceSkipped && (
+                              <View style={[
+                                styles.statusBadge,
+                                { backgroundColor: isDark ? '#3A2500' : '#FFF7E6' },
+                              ]}>
+                                <FontAwesome5 name="forward" size={12} color={Colors.warning} />
+                                <Text style={[styles.statusBadgeText, { color: Colors.warning }]}>
+                                  Skipped
+                                </Text>
+                              </View>
+                            )}
+                          </View>
+                        </>
+                      ) : null}
 
-                    {/* Add Note button — outside the scroll area */}
-                    {canAddNote ? (
-                      <Pressable
-                        style={({ pressed }) => [
-                          styles.addNoteBtn,
+                      {/* ── Notes section — only shown when requiresNote is true ── */}
+                      {showNotesSection ? (
+                        <>
+                          <View style={[styles.divider, { backgroundColor: colors.surfaceVariant }]} />
+                          <View style={styles.notesSection}>
+                            {/* Section header */}
+                            <View style={styles.notesSectionHeader}>
+                              <View
+                                style={[
+                                  styles.infoIconWrap,
+                                  {
+                                    backgroundColor: isDark
+                                      ? Colors.dark.primaryContainer
+                                      : Colors.primaryContainer,
+                                  },
+                                ]}
+                              >
+                                <FontAwesome5 name="sticky-note" size={13} color={Colors.primary} />
+                              </View>
+                              <Text style={[styles.notesSectionTitle, { color: colors.textSecondary }]}>
+                                Notes
+                              </Text>
+                              {hasNotes ? (
+                                <View
+                                  style={[
+                                    styles.countBadge,
+                                    {
+                                      backgroundColor: isDark
+                                        ? Colors.dark.primaryContainer
+                                        : Colors.primaryContainer,
+                                    },
+                                  ]}
+                                >
+                                  <Text style={[styles.countBadgeText, { color: Colors.primary }]}>
+                                    {notes!.length}
+                                  </Text>
+                                </View>
+                              ) : null}
+                            </View>
+
+                            {/* ── Notes timeline ── */}
+                            {hasNotes ? (
+                              <View>
+                                {notes!.map((entry, i) => (
+                                  <Animated.View
+                                    key={i}
+                                    entering={FadeInDown.delay(i * 50).duration(220)}
+                                    style={styles.timelineRow}
+                                  >
+                                    {/* Dot + connector */}
+                                    <View style={styles.timelineIndicator}>
+                                      <View
+                                        style={[
+                                          styles.dot,
+                                          {
+                                            backgroundColor: Colors.primary,
+                                            borderColor: colors.background,
+                                          },
+                                        ]}
+                                      />
+                                      {i < notes!.length - 1 ? (
+                                        <View
+                                          style={[
+                                            styles.connector,
+                                            { backgroundColor: colors.surfaceVariant },
+                                          ]}
+                                        />
+                                      ) : null}
+                                    </View>
+
+                                    {/* Note card */}
+                                    <View
+                                      style={[
+                                        styles.noteCard,
+                                        {
+                                          backgroundColor: colors.surface,
+                                          borderColor: colors.surfaceVariant,
+                                        },
+                                      ]}
+                                    >
+                                      {/* Time pill + action icons row */}
+                                      <View style={styles.noteCardTop}>
+                                        {entry.time ? (
+                                          <View
+                                            style={[
+                                              styles.timePill,
+                                              {
+                                                backgroundColor: isDark
+                                                  ? Colors.dark.primaryContainer
+                                                  : Colors.primaryContainer,
+                                              },
+                                            ]}
+                                          >
+                                            <Text
+                                              style={[styles.timePillText, { color: Colors.primary }]}
+                                            >
+                                              {dayjs(entry.time).format('h:mm A')}
+                                            </Text>
+                                          </View>
+                                        ) : (
+                                          <View style={{ flex: 1 }} />
+                                        )}
+
+                                        {/* Action buttons — grouped on the right */}
+                                        <View style={styles.noteCardActions}>
+                                          {/* Copy icon — always visible */}
+                                          <Pressable
+                                            style={({ pressed }) => [
+                                              styles.copyIconBtn,
+                                              {
+                                                backgroundColor: copiedIndex === i
+                                                  ? (isDark ? '#1B3A35' : Colors.successLight)
+                                                  : (isDark ? colors.surfaceVariant : colors.background),
+                                                opacity: pressed ? 0.55 : 1,
+                                              },
+                                            ]}
+                                            onPress={() => handleCopy(entry.text, i)}
+                                            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                                            android_ripple={{ color: Colors.primary + '33', radius: 16, borderless: true }}
+                                          >
+                                            <Ionicons
+                                              name={copiedIndex === i ? 'checkmark' : 'copy-outline'}
+                                              size={13}
+                                              color={copiedIndex === i ? Colors.success : colors.textSecondary}
+                                            />
+                                          </Pressable>
+
+                                          {/* Edit icon — only shown on today */}
+                                          {!!onNoteEdit && isToday ? (
+                                            <Pressable
+                                              style={({ pressed }) => [
+                                                styles.editIconBtn,
+                                                {
+                                                  backgroundColor: isDark
+                                                    ? colors.surfaceVariant
+                                                    : colors.background,
+                                                  opacity: pressed ? 0.55 : 1,
+                                                },
+                                              ]}
+                                              onPress={() => openEdit(i)}
+                                              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                                              android_ripple={{ color: Colors.primary + '33', radius: 16, borderless: true }}
+                                            >
+                                              <MaterialIcons
+                                                name="edit"
+                                                size={13}
+                                                color={colors.textSecondary}
+                                              />
+                                            </Pressable>
+                                          ) : null}
+                                        </View>
+                                      </View>
+
+                                      <Text style={[styles.noteCardText, { color: colors.textPrimary }]}>
+                                        {entry.text}
+                                      </Text>
+                                    </View>
+                                  </Animated.View>
+                                ))}
+                              </View>
+                            ) : (
+                              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                                No notes yet
+                              </Text>
+                            )}
+
+                            {/* Add Note button — outside the scroll area */}
+                            {canAddNote ? (
+                              <Pressable
+                                style={({ pressed }) => [
+                                  styles.addNoteBtn,
+                                  {
+                                    backgroundColor: isDark
+                                      ? Colors.dark.primaryContainer
+                                      : Colors.primaryContainer,
+                                    opacity: pressed ? 0.7 : 1,
+                                  },
+                                ]}
+                                onPress={openAdd}
+                                android_ripple={{ color: Colors.primary + '33', radius: 80 }}
+                              >
+                                <Ionicons name="add-circle-outline" size={16} color={Colors.primary} />
+                                <Text style={[styles.addNoteBtnText, { color: Colors.primary }]}>
+                                  {hasNotes ? 'Add Another Note' : 'Add Note'}
+                                </Text>
+                              </Pressable>
+                            ) : null}
+                          </View>
+                        </>
+                      ) : null}
+                    </View>
+                  </ScrollView>
+                </View>
+              </Animated.View>
+            </View>
+          </View>
+
+          {/* ── Add / Edit note layer (stacked on top inside same Modal) ───────────────────────── */}
+          {noteModalVisible && (
+            <View style={[StyleSheet.absoluteFill, { zIndex: 100, elevation: 100 }]} pointerEvents="box-none">
+              <Animated.View entering={FadeIn.duration(100)} style={[styles.backdrop, { zIndex: 0 }]}>
+                <Pressable style={StyleSheet.absoluteFill} onPress={handleCloseNoteModal} />
+              </Animated.View>
+
+              <KeyboardAvoidingView
+                style={[styles.kavWrapper, { zIndex: 1 }]}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}
+                pointerEvents="box-none"
+              >
+                <View style={styles.kavInner} pointerEvents="box-none">
+                  <Animated.View
+                    entering={SlideInDown.duration(200).easing(Easing.out(Easing.cubic))}
+                    exiting={SlideOutDown.duration(150).easing(Easing.in(Easing.cubic))}
+                    style={[styles.addNoteSheet, { backgroundColor: colors.surface }]}
+                  >
+                    {/* Handle */}
+                    <View style={[styles.handleBar, { backgroundColor: colors.surfaceVariant }]} />
+
+                    {/* Header */}
+                    <View style={styles.addNoteHeader}>
+                      <View
+                        style={[
+                          styles.addNoteIconWrap,
                           {
                             backgroundColor: isDark
                               ? Colors.dark.primaryContainer
                               : Colors.primaryContainer,
-                            opacity: pressed ? 0.7 : 1,
                           },
                         ]}
-                        onPress={openAdd}
-                        android_ripple={{ color: Colors.primary + '33', radius: 80 }}
                       >
-                        <Ionicons name="add-circle-outline" size={16} color={Colors.primary} />
-                        <Text style={[styles.addNoteBtnText, { color: Colors.primary }]}>
-                          {hasNotes ? 'Add Another Note' : 'Add Note'}
+                        <FontAwesome5
+                          name={isEditMode ? 'pen' : 'pen'}
+                          size={16}
+                          color={Colors.primary}
+                        />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.addNoteTitle, { color: colors.textPrimary }]}>
+                          {isEditMode ? 'Edit Note' : 'Add Note'}
+                        </Text>
+                        {activityName ? (
+                          <Text style={[styles.addNoteSubtitle, { color: Colors.primary }]}>
+                            {activityName}
+                          </Text>
+                        ) : null}
+                      </View>
+                      <Pressable
+                        onPress={handleCloseNoteModal}
+                        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                        style={({ pressed }) => [
+                          styles.closeBtn,
+                          {
+                            backgroundColor: isDark ? colors.surfaceVariant : colors.background,
+                            opacity: pressed ? 0.6 : 1,
+                          },
+                        ]}
+                        android_ripple={{ color: colors.textSecondary + '33', radius: 20, borderless: true }}
+                      >
+                        <Ionicons name="close" size={18} color={colors.textSecondary} />
+                      </Pressable>
+                    </View>
+
+                    <Text style={[styles.addNoteHint, { color: colors.textSecondary }]}>
+                      {isEditMode
+                        ? 'Update the note text below.'
+                        : 'Add a note for this day — e.g. reason for missing, what you covered, etc.'}
+                    </Text>
+
+                    {/* Input */}
+                    <View
+                      style={[
+                        styles.inputWrapper,
+                        { backgroundColor: colors.background, borderColor: Colors.primary },
+                      ]}
+                    >
+                      <TextInput
+                        ref={inputRef}
+                        style={[styles.noteTextInput, { color: colors.textPrimary }]}
+                        value={draftNote}
+                        onChangeText={setDraftNote}
+                        placeholder="Write your note here…"
+                        placeholderTextColor={colors.textSecondary}
+                        multiline
+                        maxLength={500}
+                        scrollEnabled={false}
+                        textAlignVertical="top"
+                        selectionColor={Colors.primary}
+                      />
+                    </View>
+
+                    {/* Character count */}
+                    <Text
+                      style={[
+                        styles.charCount,
+                        { color: draftNote.length > 450 ? Colors.warning : colors.textSecondary },
+                      ]}
+                    >
+                      {draftNote.length}/500
+                    </Text>
+
+                    {/* Actions */}
+                    <View style={styles.addNoteActions}>
+                      <Pressable
+                        style={({ pressed }) => [
+                          styles.cancelBtn,
+                          { backgroundColor: colors.surfaceVariant, opacity: pressed ? 0.7 : 1 },
+                        ]}
+                        onPress={handleCloseNoteModal}
+                        disabled={isSaving}
+                        android_ripple={{ color: colors.textSecondary + '22' }}
+                      >
+                        <Text style={[styles.cancelBtnText, { color: colors.textSecondary }]}>
+                          Cancel
                         </Text>
                       </Pressable>
-                    ) : null}
-                      </View>
-                    </>
-                  ) : null}
+
+                      <Pressable
+                        style={({ pressed }) => [
+                          styles.saveBtn,
+                          {
+                            backgroundColor: Colors.primary,
+                            opacity: !draftNote.trim() || isSaving ? 0.5 : pressed ? 0.85 : 1,
+                          },
+                        ]}
+                        onPress={handleSave}
+                        disabled={isSaving || !draftNote.trim()}
+                        android_ripple={{ color: '#ffffff33' }}
+                      >
+                        {isSaving ? (
+                          <ActivityIndicator size={16} color="#fff" />
+                        ) : (
+                          <>
+                            <Ionicons name="checkmark" size={16} color="#fff" />
+                            <Text style={styles.saveBtnText}>
+                              {isEditMode ? 'Update Note' : 'Save Note'}
+                            </Text>
+                          </>
+                        )}
+                      </Pressable>
+                    </View>
+                  </Animated.View>
                 </View>
-                </ScrollView>
-              </View>
-            </Animated.View>
-          </View>
+              </KeyboardAvoidingView>
+            </View>
+          )}
         </View>
-
-        {/* ── Add / Edit note layer (stacked on top inside same Modal) ───────────────────────── */}
-        {noteModalVisible && (
-          <View style={[StyleSheet.absoluteFill, { zIndex: 100, elevation: 100 }]} pointerEvents="box-none">
-            <Animated.View entering={FadeIn.duration(100)} style={[styles.backdrop, { zIndex: 0 }]}>
-              <Pressable style={StyleSheet.absoluteFill} onPress={handleCloseNoteModal} />
-            </Animated.View>
-
-            <KeyboardAvoidingView
-              style={[styles.kavWrapper, { zIndex: 1 }]}
-              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}
-          pointerEvents="box-none"
-        >
-          <View style={styles.kavInner} pointerEvents="box-none">
-            <Animated.View
-              entering={SlideInDown.duration(200).easing(Easing.out(Easing.cubic))}
-              exiting={SlideOutDown.duration(150).easing(Easing.in(Easing.cubic))}
-              style={[styles.addNoteSheet, { backgroundColor: colors.surface }]}
-            >
-              {/* Handle */}
-              <View style={[styles.handleBar, { backgroundColor: colors.surfaceVariant }]} />
-
-              {/* Header */}
-              <View style={styles.addNoteHeader}>
-                <View
-                  style={[
-                    styles.addNoteIconWrap,
-                    {
-                      backgroundColor: isDark
-                        ? Colors.dark.primaryContainer
-                        : Colors.primaryContainer,
-                    },
-                  ]}
-                >
-                  <FontAwesome5
-                    name={isEditMode ? 'pen' : 'pen'}
-                    size={16}
-                    color={Colors.primary}
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.addNoteTitle, { color: colors.textPrimary }]}>
-                    {isEditMode ? 'Edit Note' : 'Add Note'}
-                  </Text>
-                  {activityName ? (
-                    <Text style={[styles.addNoteSubtitle, { color: Colors.primary }]}>
-                      {activityName}
-                    </Text>
-                  ) : null}
-                </View>
-                <Pressable
-                  onPress={handleCloseNoteModal}
-                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                  style={({ pressed }) => [
-                    styles.closeBtn,
-                    {
-                      backgroundColor: isDark ? colors.surfaceVariant : colors.background,
-                      opacity: pressed ? 0.6 : 1,
-                    },
-                  ]}
-                  android_ripple={{ color: colors.textSecondary + '33', radius: 20, borderless: true }}
-                >
-                  <Ionicons name="close" size={18} color={colors.textSecondary} />
-                </Pressable>
-              </View>
-
-              <Text style={[styles.addNoteHint, { color: colors.textSecondary }]}>
-                {isEditMode
-                  ? 'Update the note text below.'
-                  : 'Add a note for this day — e.g. reason for missing, what you covered, etc.'}
-              </Text>
-
-              {/* Input */}
-              <View
-                style={[
-                  styles.inputWrapper,
-                  { backgroundColor: colors.background, borderColor: Colors.primary },
-                ]}
-              >
-                <TextInput
-                  ref={inputRef}
-                  style={[styles.noteTextInput, { color: colors.textPrimary }]}
-                  value={draftNote}
-                  onChangeText={setDraftNote}
-                  placeholder="Write your note here…"
-                  placeholderTextColor={colors.textSecondary}
-                  multiline
-                  maxLength={500}
-                  scrollEnabled={false}
-                  textAlignVertical="top"
-                  selectionColor={Colors.primary}
-                />
-              </View>
-
-              {/* Character count */}
-              <Text
-                style={[
-                  styles.charCount,
-                  { color: draftNote.length > 450 ? Colors.warning : colors.textSecondary },
-                ]}
-              >
-                {draftNote.length}/500
-              </Text>
-
-              {/* Actions */}
-              <View style={styles.addNoteActions}>
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.cancelBtn,
-                    { backgroundColor: colors.surfaceVariant, opacity: pressed ? 0.7 : 1 },
-                  ]}
-                  onPress={handleCloseNoteModal}
-                  disabled={isSaving}
-                  android_ripple={{ color: colors.textSecondary + '22' }}
-                >
-                  <Text style={[styles.cancelBtnText, { color: colors.textSecondary }]}>
-                    Cancel
-                  </Text>
-                </Pressable>
-
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.saveBtn,
-                    {
-                      backgroundColor: Colors.primary,
-                      opacity: !draftNote.trim() || isSaving ? 0.5 : pressed ? 0.85 : 1,
-                    },
-                  ]}
-                  onPress={handleSave}
-                  disabled={isSaving || !draftNote.trim()}
-                  android_ripple={{ color: '#ffffff33' }}
-                >
-                  {isSaving ? (
-                    <ActivityIndicator size={16} color="#fff" />
-                  ) : (
-                    <>
-                      <Ionicons name="checkmark" size={16} color="#fff" />
-                      <Text style={styles.saveBtnText}>
-                        {isEditMode ? 'Update Note' : 'Save Note'}
-                      </Text>
-                    </>
-                  )}
-                </Pressable>
-              </View>
-            </Animated.View>
-          </View>
-        </KeyboardAvoidingView>
-      </View>
-    )}
-  </View>
-  )}
+      )}
     </>
   );
 };

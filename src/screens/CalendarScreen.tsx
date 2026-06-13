@@ -21,10 +21,12 @@ export const CalendarScreen: React.FC = () => {
   const [logModalTask, setLogModalTask] = React.useState<string | null>(null);
   const [logModalIsLogged, setLogModalIsLogged] = React.useState(false);
   const [logModalTimeBoundKind, setLogModalTimeBoundKind] = React.useState<'too_early' | 'too_late' | undefined>(undefined);
+  const [logModalIsSequenceSkipped, setLogModalIsSequenceSkipped] = React.useState(false);
 
-  const { logs, notes, taskHistory, selectedActivityId, activities, appendNote, editNote, isHideExtraDaysEnabled } = useAttendanceStore();
+  const { logs, notes, taskHistory, sequenceSkips, selectedActivityId, activities, appendNote, editNote, isHideExtraDaysEnabled } = useAttendanceStore();
   const selectedActivity = activities.find(a => a.id === selectedActivityId);
   const loggedDates = selectedActivityId ? logs[selectedActivityId] || [] : [];
+  const activitySequenceSkips: string[] = selectedActivityId ? (sequenceSkips[selectedActivityId] ?? []) : [];
   const today = todayStr();
   const markedDates = buildMarkedDates(loggedDates, today, selectedActivity?.createdAt);
 
@@ -75,20 +77,22 @@ export const CalendarScreen: React.FC = () => {
             if (rawLog) {
               const containsTime = rawLog.includes('T');
               setLogModalTime(containsTime ? dayjs(rawLog).format('h:mm A') : null);
-              // Compute which task was active on this day
+              // Compute which task was active on this day (accounting for skips)
               let task: string | null = null;
               if (selectedActivityId) {
                 task = taskHistory[selectedActivityId]?.[day.dateString] || null;
                 if (!task && selectedActivity) {
                   const actLogs = logs[selectedActivityId] || [];
-                  task = getTaskForDate(selectedActivity, day.dateString, actLogs);
+                  task = getTaskForDate(selectedActivity, day.dateString, actLogs, activitySequenceSkips);
                 }
               }
               setLogModalTask(task);
+              setLogModalIsSequenceSkipped(activitySequenceSkips.includes(day.dateString));
               setLogModalTimeBoundKind(undefined);
             } else {
               setLogModalTime(null);
               setLogModalTask(null);
+              setLogModalIsSequenceSkipped(false);
               // Compute time-bound kind for unlogged today
               if (day.dateString === today && selectedActivity?.timeBoundType) {
                 const currentTime = dayjs().format('HH:mm');
@@ -148,6 +152,7 @@ export const CalendarScreen: React.FC = () => {
         isLogged={logModalIsLogged}
         requiresNote={selectedActivity?.requiresNote}
         taskForDay={logModalTask}
+        isSequenceSkipped={logModalIsSequenceSkipped}
         timeBoundKind={logModalTimeBoundKind}
         onNoteAppend={
           selectedActivityId

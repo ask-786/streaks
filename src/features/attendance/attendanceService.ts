@@ -70,6 +70,14 @@ export type NotesMap = Record<string, Record<string, NoteEntry[]>>;
 export type TaskHistoryMap = Record<string, Record<string, string>>;
 
 /**
+ * SequenceSkips: { [activityId]: string[] }
+ * Each value is an array of YYYY-MM-DD dates where the user logged but
+ * chose to skip today's sequence task (e.g. did cardio instead of Push day).
+ * The sequence does not advance on skipped days.
+ */
+export type SequenceSkipsMap = Record<string, string[]>;
+
+/**
  * Attendance Service
  * Handles persistence of activities, logged dates, and notes via AsyncStorage.
  */
@@ -151,6 +159,20 @@ export const attendanceService = {
     await AsyncStorage.setItem(StorageKeys.TASK_HISTORY, JSON.stringify(history));
   },
 
+  getSequenceSkips: async (): Promise<SequenceSkipsMap> => {
+    try {
+      const raw = await AsyncStorage.getItem(StorageKeys.SEQUENCE_SKIPS);
+      if (!raw) return {};
+      return JSON.parse(raw) as SequenceSkipsMap;
+    } catch {
+      return {};
+    }
+  },
+
+  saveSequenceSkips: async (skips: SequenceSkipsMap): Promise<void> => {
+    await AsyncStorage.setItem(StorageKeys.SEQUENCE_SKIPS, JSON.stringify(skips));
+  },
+
   logToday: async (activityId: string, note?: string): Promise<boolean> => {
     const logs = await attendanceService.getLogs();
     const today = todayStr();
@@ -213,6 +235,7 @@ export const attendanceService = {
     await AsyncStorage.removeItem(StorageKeys.LOGS);
     await AsyncStorage.removeItem(StorageKeys.NOTES);
     await AsyncStorage.removeItem(StorageKeys.TASK_HISTORY);
+    await AsyncStorage.removeItem(StorageKeys.SEQUENCE_SKIPS);
   },
 
   exportData: async (): Promise<string> => {
@@ -220,7 +243,8 @@ export const attendanceService = {
     const logs = await attendanceService.getLogs();
     const notes = await attendanceService.getNotes();
     const taskHistory = await attendanceService.getTaskHistory();
-    return JSON.stringify({ activities, logs, notes, taskHistory });
+    const sequenceSkips = await attendanceService.getSequenceSkips();
+    return JSON.stringify({ activities, logs, notes, taskHistory, sequenceSkips });
   },
 
   importData: async (jsonData: string): Promise<boolean> => {
@@ -248,6 +272,11 @@ export const attendanceService = {
         await attendanceService.saveTaskHistory(parsed.taskHistory);
       }
 
+      // Sequence skips are optional (older exports won't have them)
+      if (parsed.sequenceSkips && typeof parsed.sequenceSkips === 'object') {
+        await attendanceService.saveSequenceSkips(parsed.sequenceSkips);
+      }
+
       return true;
     } catch {
       return false;
@@ -260,17 +289,22 @@ export const attendanceService = {
  * Works identically for daily and weekly-goal habits.
  *
  * calendar mode (default):
- *   index = (days elapsed since sequenceStartDate) mod tasks.length
- *   Always deterministic from the date — no logging required.
+ *   index = (days elapsed since sequenceStartDate - skips on or before dateStr) mod tasks.length
+ *   Each sequence skip "pauses" the sequence for that calendar day, so the
+ *   same task reappears on the following day.
  *
  * log mode:
- *   index = (number of logged days strictly before dateStr) mod tasks.length
- *   Task advances only when the user actually logs.
+ *   index = (number of logged days strictly before dateStr that are NOT skipped) mod tasks.length
+ *   Task advances only when the user actually performs the sequence task.
+ *
+ * @param skippedDates - Array of YYYY-MM-DD dates where the sequence was skipped.
+ *   On these dates the user logged but did not perform the sequence task.
  */
 export function getTaskForDate(
   activity: Activity,
   dateStr: string,
   logs: string[] = [],
+  skippedDates: string[] = [],
 ): string | null {
   if (!activity.taskSequence || activity.taskSequence.length === 0) return null;
 
@@ -278,11 +312,13 @@ export function getTaskForDate(
   let index: number;
 
   if (activity.sequenceMode === 'log') {
-    // Count unique calendar days with a log strictly before dateStr
+    // Count unique calendar days with a log strictly before dateStr,
+    // excluding days where the sequence was skipped.
+    const skippedSet = new Set(skippedDates);
     const uniqueLogDays = new Set(
       logs
         .map(l => dayjs(l).format('YYYY-MM-DD'))
-        .filter(d => d < dateStr),
+        .filter(d => d < dateStr && !skippedSet.has(d)),
     );
     index = uniqueLogDays.size % n;
   } else {
@@ -290,7 +326,11 @@ export function getTaskForDate(
     const start =
       activity.sequenceStartDate ??
       dayjs(activity.createdAt).format('YYYY-MM-DD');
-    const offset = dayjs(dateStr).diff(dayjs(start), 'day');
+    const rawOffset = dayjs(dateStr).diff(dayjs(start), 'day');
+    // Subtract the number of skips that occurred on or before dateStr.
+    // Each skip pauses the sequence by one calendar day.
+    const skipsOnOrBefore = skippedDates.filter(d => d <= dateStr).length;
+    const offset = rawOffset - skipsOnOrBefore;
     index = ((offset % n) + n) % n; // handles negative offset correctly
   }
 

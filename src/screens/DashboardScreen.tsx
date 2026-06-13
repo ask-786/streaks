@@ -26,7 +26,7 @@ import ConfettiCannon from 'react-native-confetti-cannon';
 
 export const DashboardScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
-  const { selectedActivityId, activities, logs: allLogs, getActivityStats, logToday, isLoading, isConfettiEnabled } = useAttendanceStore();
+  const { selectedActivityId, activities, logs: allLogs, notes, getActivityStats, logToday, logTodayWithSequenceSkip, sequenceSkips, isLoading, isConfettiEnabled } = useAttendanceStore();
   const selectedActivity = activities.find(a => a.id === selectedActivityId);
   const isCompleted = !!selectedActivity?.completedAt;
   const stats = selectedActivityId
@@ -36,6 +36,7 @@ export const DashboardScreen: React.FC = () => {
   const isWeekly = unit === 'week';
 
   const [noteModalVisible, setNoteModalVisible] = React.useState(false);
+  const [skipModalVisible, setSkipModalVisible] = React.useState(false);
   const confettiRef = React.useRef<any>(null);
 
   const triggerConfetti = () => {
@@ -111,6 +112,19 @@ export const DashboardScreen: React.FC = () => {
     triggerConfetti();
   };
 
+  const handleSkipSequence = () => {
+    if (!selectedActivityId || !selectedActivity) return;
+    if (isTodayLogged || isCompleted) return;
+    setSkipModalVisible(true);
+  };
+
+  const handleSkipSubmit = (note: string) => {
+    if (!selectedActivityId) return;
+    setSkipModalVisible(false);
+    logTodayWithSequenceSkip(selectedActivityId, note || undefined);
+    triggerConfetti();
+  };
+
   const headerScale = useSharedValue(0.9);
   const headerStyle = useAnimatedStyle(() => ({
     transform: [{ scale: headerScale.value }],
@@ -123,12 +137,19 @@ export const DashboardScreen: React.FC = () => {
 
   const today = todayStr();
 
-  // Compute today's task for the selected activity
+  // Sequence skips for this activity
+  const activitySequenceSkips: string[] = selectedActivityId
+    ? (sequenceSkips[selectedActivityId] ?? [])
+    : [];
+  const isTodaySequenceSkipped = activitySequenceSkips.includes(today);
+
+  // Compute today's task for the selected activity (accounting for skips)
   const todayTask = selectedActivity && selectedActivityId
     ? getTaskForDate(
         selectedActivity,
         today,
         allLogs[selectedActivityId] ?? [],
+        activitySequenceSkips,
       )
     : null;
   const totalTasks = selectedActivity?.taskSequence?.length ?? 0;
@@ -136,6 +157,11 @@ export const DashboardScreen: React.FC = () => {
   const todayTaskIndex = todayTask && selectedActivity?.taskSequence
     ? (selectedActivity.taskSequence.indexOf(todayTask) + 1)
     : 0;
+
+  // Today's skip note (first note entry on today, if logged-with-skip)
+  const todaySkipNote = isTodaySequenceSkipped && selectedActivityId
+    ? notes[selectedActivityId]?.[today]?.[0]?.text
+    : undefined;
 
   return (
     <View style={{ flex: 1 }}>
@@ -254,10 +280,43 @@ export const DashboardScreen: React.FC = () => {
               <FontAwesome5 name="list-ol" size={14} color={Colors.primary} />
             </View>
             <Text style={[styles.taskCardLabel, { color: colors.textSecondary }]}>Today's Task</Text>
+            {/* Skip Sequence pill — only shown when not yet logged and not completed */}
+            {!isTodayLogged && !isCompleted && !isTodaySequenceSkipped && (
+              <TouchableOpacity
+                onPress={handleSkipSequence}
+                style={[styles.skipPill, { borderColor: Colors.warning }]}
+                activeOpacity={0.7}
+              >
+                <FontAwesome5 name="forward" size={10} color={Colors.warning} />
+                <Text style={[styles.skipPillText, { color: Colors.warning }]}>Skip Sequence</Text>
+              </TouchableOpacity>
+            )}
+            {/* Skipped chip — shown after logging with sequence skip */}
+            {isTodaySequenceSkipped && (
+              <View style={[styles.skippedChip, { backgroundColor: isDark ? '#3A2500' : '#FFF7E6', borderColor: Colors.warning }]}>
+                <FontAwesome5 name="forward" size={10} color={Colors.warning} />
+                <Text style={[styles.skippedChipText, { color: Colors.warning }]}>Skipped</Text>
+              </View>
+            )}
           </View>
-          <Text style={[styles.taskCardText, { color: colors.textPrimary }]}>
+          <Text style={[
+            styles.taskCardText,
+            { color: isTodaySequenceSkipped ? colors.textSecondary : colors.textPrimary },
+          ]}>
             {todayTask}
           </Text>
+          {/* Skip note */}
+          {isTodaySequenceSkipped && todaySkipNote ? (
+            <Text style={[styles.skipNoteText, { color: colors.textSecondary }]}>
+              📝 {todaySkipNote}
+            </Text>
+          ) : null}
+          {/* Hint when skipped but no note */}
+          {isTodaySequenceSkipped && !todaySkipNote ? (
+            <Text style={[styles.skipNoteText, { color: colors.textSecondary }]}>
+              Logged today — sequence task deferred to next day.
+            </Text>
+          ) : null}
         </Animated.View>
       ) : null}
 
@@ -370,6 +429,17 @@ export const DashboardScreen: React.FC = () => {
       activityName={selectedActivity?.name}
       onClose={() => setNoteModalVisible(false)}
       onSubmit={handleNoteSubmit}
+    />
+    {/* Skip Sequence modal — note is required */}
+    <NoteInputModal
+      visible={skipModalVisible}
+      activityName={selectedActivity?.name}
+      title="Skip Today's Sequence?"
+      subtitle={todayTask ? `"${todayTask}" will be deferred to your next session. Add a note explaining why.` : undefined}
+      submitLabel="Log & Skip Sequence"
+      noteRequired={true}
+      onClose={() => setSkipModalVisible(false)}
+      onSubmit={handleSkipSubmit}
     />
     </View>
   );
@@ -556,5 +626,40 @@ const styles = StyleSheet.create({
   taskCardText: {
     ...Typography.bodyMedium,
     lineHeight: 22,
+  },
+  // ── Skip Sequence pill & chip ─────────────────────────────────────────────
+  skipPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderWidth: 1,
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    marginLeft: 'auto',
+  },
+  skipPillText: {
+    ...Typography.labelMedium,
+    fontWeight: '600',
+  },
+  skippedChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderWidth: 1,
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    marginLeft: 'auto',
+  },
+  skippedChipText: {
+    ...Typography.labelMedium,
+    fontWeight: '700',
+  },
+  skipNoteText: {
+    ...Typography.bodySmall,
+    lineHeight: 18,
+    fontStyle: 'italic',
+    marginTop: 2,
   },
 });

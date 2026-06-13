@@ -18,6 +18,14 @@ import { useTheme } from '../hooks/useTheme';
 export interface NoteInputModalProps {
   visible: boolean;
   activityName?: string;
+  /** Override the modal title. Defaults to "Add a Note". */
+  title?: string;
+  /** Override the subtitle/description text. */
+  subtitle?: string;
+  /** Override the submit button label. Defaults to "Log & Save Note". */
+  submitLabel?: string;
+  /** When false, the note is optional and Submit is always enabled. Defaults to true. */
+  noteRequired?: boolean;
   onClose: () => void;
   onSubmit: (note: string) => void;
 }
@@ -25,6 +33,10 @@ export interface NoteInputModalProps {
 export const NoteInputModal: React.FC<NoteInputModalProps> = ({
   visible,
   activityName,
+  title,
+  subtitle,
+  submitLabel,
+  noteRequired = true,
   onClose,
   onSubmit,
 }) => {
@@ -49,11 +61,11 @@ export const NoteInputModal: React.FC<NoteInputModalProps> = ({
 
   const handleSubmit = () => {
     const trimmed = note.trim();
-    if (!trimmed) return;
+    if (noteRequired && !trimmed) return;
     onSubmit(trimmed);
   };
 
-  const canSubmit = note.trim().length > 0;
+  const canSubmit = noteRequired ? note.trim().length > 0 : true;
 
   if (!visible) return null;
 
@@ -82,10 +94,10 @@ export const NoteInputModal: React.FC<NoteInputModalProps> = ({
             {/* Header */}
             <View style={styles.headerRow}>
               <View style={[styles.iconWrap, { backgroundColor: isDark ? Colors.dark.primaryContainer : Colors.primaryContainer }]}>
-                <FontAwesome5 name="sticky-note" size={16} color={Colors.primary} />
+                <FontAwesome5 name={noteRequired ? 'sticky-note' : 'forward'} size={16} color={Colors.primary} />
               </View>
               <View style={styles.headerText}>
-                <Text style={[styles.title, { color: colors.textPrimary }]}>Add a Note</Text>
+                <Text style={[styles.title, { color: colors.textPrimary }]}>{title ?? 'Add a Note'}</Text>
                 {activityName ? (
                   <Text style={[styles.activityLabel, { color: Colors.primary }]}>{activityName}</Text>
                 ) : null}
@@ -108,7 +120,7 @@ export const NoteInputModal: React.FC<NoteInputModalProps> = ({
             </View>
 
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-              Write a short note about today's log — what did you do, how did it go?
+              {subtitle ?? "Write a short note about today's log \u2014 what did you do, how did it go?"}
             </Text>
 
             {/* Note input */}
@@ -148,7 +160,7 @@ export const NoteInputModal: React.FC<NoteInputModalProps> = ({
                 activeOpacity={0.8}
               >
                 <FontAwesome5 name="check" size={14} color="#FFFFFF" style={styles.submitIcon} />
-                <Text style={styles.btnSubmitText}>Log & Save Note</Text>
+                <Text style={styles.btnSubmitText}>{submitLabel ?? 'Log & Save Note'}</Text>
               </TouchableOpacity>
             </View>
           </Animated.View>
