@@ -289,7 +289,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
   },
 
   logToday: async (activityId: string, note?: string) => {
-    const { logs, notes, taskHistory, activities } = get();
+    const { logs, notes, taskHistory, activities, sequenceSkips } = get();
     const today = todayStr();
     const activityLogs = logs[activityId] || [];
     if (activityLogs.some(log => dayjs(log).format('YYYY-MM-DD') === today)) return;
@@ -304,7 +304,8 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     const updatedTaskHistory = { ...taskHistory };
     const activity = activities.find(a => a.id === activityId);
     if (activity && activity.taskSequence && activity.taskSequence.length > 0) {
-      const task = getTaskForDate(activity, today, updatedLogs[activityId]);
+      const activitySkips = sequenceSkips[activityId] ?? [];
+      const task = getTaskForDate(activity, today, updatedLogs[activityId], activitySkips);
       if (task) {
         if (!updatedTaskHistory[activityId]) updatedTaskHistory[activityId] = {};
         updatedTaskHistory[activityId] = {
