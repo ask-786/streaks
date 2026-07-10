@@ -2,26 +2,24 @@
 /**
  * migrate-logs.js
  * ────────────────────────────────────────────────────────────────────────────
- * Migrates streak-counter exported data from the OLD log format (plain ISO
- * strings) to the NEW format ({ ts: string, date: string }).
+ * Migrates streak-counter exported data to the new { ts, date, tz } format.
  *
- * The `date` field is computed from the UTC timestamp using the CURRENT
- * system timezone — so run this script on the same device/timezone where
- * you originally logged the data (i.e. your phone's timezone set to IST).
+ * What it does:
+ *   1. Converts plain ISO string log entries  →  { ts, date, tz }
+ *   2. Stamps tz on already-migrated entries that are missing it
+ *   3. Stamps tz on note entries that have a non-null time field
  *
- * NOTE: The `tz` field (IANA timezone, e.g. "Asia/Kolkata") is NOT added by
- * this script — old entries don't carry that info. They'll display their time
- * in the current device timezone without a label. Only logs created AFTER
- * this update will show the original timezone (e.g. "2:15 PM IST").
- *
+ * The `date` is computed in the CURRENT system timezone (must match where
+ * you originally logged — run this on IST if all data is from India).
+ * The `tz` field is set to the system's IANA timezone name (e.g. "Asia/Kolkata"),
+ * or you can override it with: --tz Asia/Kolkata
  *
  * Usage:
- *   node scripts/migrate-logs.js <input.json> [output.json]
- *
- * If output.json is omitted, it writes to <input>_migrated.json
+ *   node scripts/migrate-logs.js <input.json> [output.json] [--tz Asia/Kolkata]
  *
  * Example:
- *   node scripts/migrate-logs.js streak_backup.json streak_backup_migrated.json
+ *   node scripts/migrate-logs.js backup.json backup_migrated.json
+ *   node scripts/migrate-logs.js backup.json backup_migrated.json --tz Asia/Kolkata
  */
 
 'use strict';
@@ -29,9 +27,25 @@
 const fs   = require('fs');
 const path = require('path');
 
+// ─── Parse args ─────────────────────────────────────────────────────────────
+
+const args = process.argv.slice(2);
+const tzFlagIdx = args.indexOf('--tz');
+let tzOverride = null;
+if (tzFlagIdx !== -1 && args[tzFlagIdx + 1]) {
+  tzOverride = args[tzFlagIdx + 1];
+  args.splice(tzFlagIdx, 2);
+}
+const [inputArg, outputArg] = args;
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-/** Format a UTC timestamp as YYYY-MM-DD in the LOCAL timezone. */
+/** Detect the system IANA timezone name, e.g. "Asia/Kolkata". */
+function getSystemTz() {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
+/** Format a UTC timestamp as YYYY-MM-DD in the LOCAL (system) timezone. */
 function toLocalDateStr(isoOrDate) {
   const d = new Date(isoOrDate);
   const year  = d.getFullYear();
@@ -50,28 +64,36 @@ function isLogEntry(v) {
   );
 }
 
-/** Migrate a single entry (string or LogEntry) → LogEntry. */
-function migrateEntry(entry) {
+/**
+ * Migrate a single log entry (string or LogEntry) → LogEntry with tz.
+ * Also stamps tz on entries that already have ts+date but are missing tz.
+ */
+function migrateLogEntry(entry, tz) {
   if (isLogEntry(entry)) {
-    // Already migrated — pass through.
+    // Already migrated — just ensure tz is present
+    if (!entry.tz) return { ...entry, tz };
     return entry;
   }
   if (typeof entry === 'string') {
-    // Old format: UTC ISO string  e.g. "2026-07-10T08:45:00.639Z"
-    //         or: bare date string e.g. "2026-07-10"
     const ts   = entry.includes('T') ? entry : `${entry}T00:00:00.000Z`;
     const date = toLocalDateStr(ts);
-    return { ts, date };
+    return { ts, date, tz };
   }
   throw new Error(`Unexpected log entry shape: ${JSON.stringify(entry)}`);
 }
 
+/**
+ * Stamp tz on a NoteEntry that has a non-null time but no tz yet.
+ */
+function migrateNoteEntry(entry, tz) {
+  if (entry.time && !entry.tz) return { ...entry, tz };
+  return entry;
+}
+
 // ─── Main ────────────────────────────────────────────────────────────────────
 
-const [,, inputArg, outputArg] = process.argv;
-
 if (!inputArg) {
-  console.error('Usage: node scripts/migrate-logs.js <input.json> [output.json]');
+  console.error('Usage: node scripts/migrate-logs.js <input.json> [output.json] [--tz Asia/Kolkata]');
   process.exit(1);
 }
 
@@ -85,12 +107,16 @@ if (!fs.existsSync(inputPath)) {
   process.exit(1);
 }
 
-// Show which timezone we'll use for date computation
+// Resolve target timezone
+const tz = tzOverride || getSystemTz();
+
+// Show which timezone we'll use
 const tzOffset = -new Date().getTimezoneOffset();
 const tzSign   = tzOffset >= 0 ? '+' : '-';
 const tzHrs    = String(Math.floor(Math.abs(tzOffset) / 60)).padStart(2, '0');
 const tzMins   = String(Math.abs(tzOffset) % 60).padStart(2, '0');
-console.log(`\nTimezone: UTC${tzSign}${tzHrs}:${tzMins}  (dates will be computed in this timezone)\n`);
+console.log(`\nTimezone  : ${tz} (UTC${tzSign}${tzHrs}:${tzMins})`);
+console.log(`tz field  : "${tz}" will be stamped on all entries\n`);
 
 let data;
 try {
@@ -105,27 +131,32 @@ if (!data.logs || typeof data.logs !== 'object') {
   process.exit(1);
 }
 
-// Migrate logs
+// ─── Migrate logs ───────────────────────────────────────────────────────────
+
 const logs = data.logs;
-let totalEntries    = 0;
-let alreadyMigrated = 0;
-let migrated        = 0;
+let totalLogEntries  = 0;
+let alreadyMigrated  = 0;
+let newlyMigrated    = 0;
+let tzStamped        = 0;
 
 for (const activityId of Object.keys(logs)) {
   const entries = logs[activityId];
   if (!Array.isArray(entries)) continue;
 
   const migratedEntries = entries.map((entry, i) => {
-    totalEntries++;
-    if (isLogEntry(entry)) {
-      alreadyMigrated++;
-      return entry;
+    totalLogEntries++;
+    const wasMigrated = isLogEntry(entry);
+    const hadTz = wasMigrated && !!entry.tz;
+    const result = migrateLogEntry(entry, tz);
+
+    if (!wasMigrated) {
+      newlyMigrated++;
+      const original = typeof entry === 'string' ? entry : JSON.stringify(entry);
+      console.log(`  [log][${activityId.slice(-8)}] #${i + 1}: "${original}"`);
+      console.log(`       → { ts: "${result.ts}", date: "${result.date}", tz: "${result.tz}" }`);
+    } else if (!hadTz) {
+      tzStamped++;
     }
-    migrated++;
-    const result = migrateEntry(entry);
-    // Verbose: show what changed
-    const original = typeof entry === 'string' ? entry : JSON.stringify(entry);
-    console.log(`  [${activityId.slice(-8)}] #${i + 1}: "${original}"  →  { ts: "${result.ts}", date: "${result.date}" }`);
     return result;
   });
 
@@ -134,15 +165,36 @@ for (const activityId of Object.keys(logs)) {
 
 data.logs = logs;
 
+// ─── Migrate notes ──────────────────────────────────────────────────────────
+
+let notesTzStamped = 0;
+
+if (data.notes && typeof data.notes === 'object') {
+  for (const activityId of Object.keys(data.notes)) {
+    const actNotes = data.notes[activityId];
+    if (!actNotes || typeof actNotes !== 'object') continue;
+    for (const dateStr of Object.keys(actNotes)) {
+      const entries = actNotes[dateStr];
+      if (!Array.isArray(entries)) continue;
+      data.notes[activityId][dateStr] = entries.map(entry => {
+        const result = migrateNoteEntry(entry, tz);
+        if (result !== entry) notesTzStamped++;
+        return result;
+      });
+    }
+  }
+}
+
 fs.writeFileSync(outputPath, JSON.stringify(data, null, 2), 'utf8');
 
 console.log(`\n────────────────────────────────────────────`);
-console.log(`Total log entries : ${totalEntries}`);
-console.log(`Already migrated  : ${alreadyMigrated}  (passed through unchanged)`);
-console.log(`Freshly migrated  : ${migrated}`);
+console.log(`Log entries total    : ${totalLogEntries}`);
+console.log(`  Newly migrated     : ${newlyMigrated}  (string → { ts, date, tz })`);
+console.log(`  tz stamped only    : ${tzStamped}  (already had ts+date, added tz)`);
+console.log(`  Already complete   : ${totalLogEntries - newlyMigrated - tzStamped}`);
+console.log(`Note entries updated : ${notesTzStamped}  (added tz to timestamped notes)`);
 console.log(`\nOutput written to : ${outputPath}`);
 console.log(`\nNext steps:`);
-console.log(`  1. Open the app → Settings → Export Data  (copy the JSON)`);
-console.log(`  2. Save it as a .json file and run this script`);
-console.log(`  3. Open the app → Settings → Import Data  (paste the migrated JSON)`);
+console.log(`  1. In the app → Settings → Import Data`);
+console.log(`  2. Paste the contents of: ${outputPath}`);
 console.log(`────────────────────────────────────────────\n`);
