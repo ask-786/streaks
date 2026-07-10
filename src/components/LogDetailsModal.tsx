@@ -31,7 +31,7 @@ import { formatTimeWithTz } from '../utils/dateUtils';
 export interface LogDetailsModalProps {
   visible: boolean;
   dateStr: string;
-  timeStr: string | null;
+  timeData: { time: string, tzDisplay: string | null } | null;
   notes?: NoteEntry[];
   activityName?: string;
   dateKey?: string;
@@ -58,7 +58,7 @@ export interface LogDetailsModalProps {
 export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
   visible,
   dateStr,
-  timeStr,
+  timeData,
   notes,
   activityName,
   isToday = false,
@@ -265,7 +265,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                             style={[
                               styles.infoIconWrap,
                               {
-                                backgroundColor: timeStr
+                                backgroundColor: timeData
                                   ? isDark
                                     ? '#1B3A35'
                                     : Colors.successLight
@@ -276,7 +276,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                             <FontAwesome5
                               name="clock"
                               size={13}
-                              color={timeStr ? Colors.success : colors.textSecondary}
+                              color={timeData ? Colors.success : colors.textSecondary}
                             />
                           </View>
                           <View style={styles.infoTextWrap}>
@@ -286,13 +286,24 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                             <Text
                               style={[
                                 styles.infoValue,
-                                { color: timeStr ? colors.textPrimary : colors.textSecondary },
+                                { color: timeData ? colors.textPrimary : colors.textSecondary },
                               ]}
                             >
-                              {timeStr ?? 'No exact time recorded'}
+                              {timeData ? (
+                                <Text>
+                                  {timeData.time}
+                                  {timeData.tzDisplay && (
+                                    <Text style={{ fontSize: 12, color: colors.textSecondary }}>
+                                      {' '}{timeData.tzDisplay}
+                                    </Text>
+                                  )}
+                                </Text>
+                              ) : (
+                                'No exact time recorded'
+                              )}
                             </Text>
                           </View>
-                          {timeStr ? (
+                          {timeData ? (
                             <View
                               style={[
                                 styles.statusBadge,
@@ -543,7 +554,19 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                                             <Text
                                               style={[styles.timePillText, { color: Colors.primary }]}
                                             >
-                                              {formatTimeWithTz(entry.time!, entry.tz)}
+                                              {(() => {
+                                                const formatted = formatTimeWithTz(entry.time!, entry.tz);
+                                                return (
+                                                  <Text>
+                                                    {formatted.time}
+                                                    {formatted.tzDisplay && (
+                                                      <Text style={{ fontSize: 10, color: isDark ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.5)' }}>
+                                                        {' '}{formatted.tzDisplay}
+                                                      </Text>
+                                                    )}
+                                                  </Text>
+                                                );
+                                              })()}
                                             </Text>
                                           </View>
                                         ) : (

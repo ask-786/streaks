@@ -22,11 +22,11 @@ export const getCurrentTz = (): string =>
  * If `tz` is absent (old entries before this feature) it falls back to the
  * device's current timezone without a label.
  */
-export const formatTimeWithTz = (isoTs: string, tz?: string | null): string => {
+export const formatTimeWithTz = (isoTs: string, tz?: string | null): { time: string, tzDisplay: string | null } => {
   try {
     const targetTz = tz ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
     const date = new Date(isoTs);
-    if (isNaN(date.getTime())) return isoTs;
+    if (isNaN(date.getTime())) return { time: isoTs, tzDisplay: null };
 
     const parts = new Intl.DateTimeFormat('en-US', {
       hour: 'numeric',
@@ -48,9 +48,12 @@ export const formatTimeWithTz = (isoTs: string, tz?: string | null): string => {
     }
 
     const timeStr = `${hour}:${minute} ${period}`.trim();
-    return tz ? `${timeStr} ${tzName}` : timeStr;
+    // On Android/Hermes, Intl sometimes returns "GMT+5:30" instead of "IST".
+    // Strip the "GMT" prefix so it renders as "+5:30" rather than the full form.
+    const displayTz = tzName.startsWith('GMT') ? tzName.slice(3) : tzName;
+    return { time: timeStr, tzDisplay: tz ? displayTz : null };
   } catch {
-    return dayjs(isoTs).format('h:mm A');
+    return { time: dayjs(isoTs).format('h:mm A'), tzDisplay: null };
   }
 };
 

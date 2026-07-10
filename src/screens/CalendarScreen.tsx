@@ -17,7 +17,7 @@ export const CalendarScreen: React.FC = () => {
   const [logDetailsVisible, setLogDetailsVisible] = React.useState(false);
   const [logModalDate, setLogModalDate] = React.useState('');
   const [logModalDateKey, setLogModalDateKey] = React.useState('');
-  const [logModalTime, setLogModalTime] = React.useState<string | null>(null);
+  const [logModalTime, setLogModalTime] = React.useState<{ time: string, tzDisplay: string | null } | null>(null);
   const [logModalTask, setLogModalTask] = React.useState<string | null>(null);
   const [logModalIsLogged, setLogModalIsLogged] = React.useState(false);
   const [logModalTimeBoundKind, setLogModalTimeBoundKind] = React.useState<'too_early' | 'too_late' | undefined>(undefined);
@@ -143,7 +143,7 @@ export const CalendarScreen: React.FC = () => {
       <LogDetailsModal
         visible={logDetailsVisible}
         dateStr={logModalDate}
-        timeStr={logModalTime}
+        timeData={logModalTime}
         notes={logModalNotes}
         activityName={selectedActivity?.name}
         dateKey={logModalDateKey}
