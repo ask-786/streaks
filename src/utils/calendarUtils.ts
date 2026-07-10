@@ -25,11 +25,11 @@ export const buildMarkedDates = (
   activityCreatedAt?: number
 ): MarkedDates => {
   const marked: MarkedDates = {};
-  const sanitizedDates = loggedDates.map(d => dayjs(d).format('YYYY-MM-DD'));
-  const loggedSet = new Set(sanitizedDates);
+  // loggedDates are pre-sanitized YYYY-MM-DD strings (extracted from LogEntry.date by callers)
+  const loggedSet = new Set(loggedDates);
 
   // Mark all logged dates
-  sanitizedDates.forEach((date) => {
+  loggedDates.forEach((date) => {
     marked[date] = {
       customStyles: {
         container: {

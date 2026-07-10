@@ -148,7 +148,7 @@ export const DashboardScreen: React.FC = () => {
     ? getTaskForDate(
         selectedActivity,
         today,
-        allLogs[selectedActivityId] ?? [],
+        (allLogs[selectedActivityId] ?? []).map(e => e.date),
         activitySequenceSkips,
       )
     : null;

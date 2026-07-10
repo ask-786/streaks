@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import dayjs from 'dayjs';
-import { todayStr } from '../../utils/dateUtils';
+import { todayStr, getCurrentTz } from '../../utils/dateUtils';
 import { StorageKeys } from '../../constants';
 
 export interface Activity {
@@ -57,10 +57,24 @@ export interface Activity {
   completedAt?: number;
 }
 
+/**
+ * A single log event. `ts` is the UTC ISO timestamp; `date` is the
+ * YYYY-MM-DD local date at the moment of logging. The `date` field is
+ * intentionally kept separate so it never shifts when the device's
+ * timezone changes (e.g. the user travels to another country).
+ */
+export interface LogEntry {
+  ts: string;   // UTC ISO string, e.g. "2026-07-10T08:45:00.000Z"
+  date: string; // Local YYYY-MM-DD at the time of logging, e.g. "2026-07-10"
+  tz?: string;  // IANA timezone name at time of logging, e.g. "Asia/Kolkata"
+}
+
 export interface NoteEntry {
   text: string;
   /** ISO timestamp when this note was written. Null for notes migrated from the old single-string format. */
   time: string | null;
+  /** IANA timezone name when this note was written, e.g. "Asia/Kolkata". */
+  tz?: string;
 }
 
 // Notes: { [activityId]: { [dateStr YYYY-MM-DD]: NoteEntry[] } }
@@ -102,17 +116,34 @@ export const attendanceService = {
     await attendanceService.saveActivities(updated);
   },
 
-  getLogs: async (): Promise<Record<string, string[]>> => {
+  getLogs: async (): Promise<Record<string, LogEntry[]>> => {
     try {
       const raw = await AsyncStorage.getItem(StorageKeys.LOGS);
       if (!raw) return {};
-      return JSON.parse(raw) as Record<string, string[]>;
+      const parsed = JSON.parse(raw) as Record<string, (string | LogEntry)[]>;
+
+      // Migrate: older versions stored plain ISO strings or bare date strings.
+      // Wrap them in LogEntry objects, computing the local date from the timestamp.
+      const result: Record<string, LogEntry[]> = {};
+      for (const actId of Object.keys(parsed)) {
+        result[actId] = (parsed[actId] ?? []).map(entry => {
+          if (typeof entry === 'string') {
+            // Old format: string is either a UTC ISO string or a bare YYYY-MM-DD date.
+            const ts = entry.includes('T') ? entry : `${entry}T00:00:00.000Z`;
+            const date = dayjs(ts).format('YYYY-MM-DD');
+            return { ts, date };
+          }
+          // Already a LogEntry — pass through.
+          return entry;
+        });
+      }
+      return result;
     } catch {
       return {};
     }
   },
 
-  saveLogs: async (logs: Record<string, string[]>): Promise<void> => {
+  saveLogs: async (logs: Record<string, LogEntry[]>): Promise<void> => {
     await AsyncStorage.setItem(StorageKeys.LOGS, JSON.stringify(logs));
   },
 
@@ -178,18 +209,19 @@ export const attendanceService = {
     const today = todayStr();
 
     const activityLogs = logs[activityId] || [];
-    if (activityLogs.some(log => dayjs(log).format('YYYY-MM-DD') === today)) {
+    if (activityLogs.some(entry => entry.date === today)) {
       return false; // already logged today
     }
 
-    logs[activityId] = [...activityLogs, dayjs().toISOString()];
+    const newEntry: LogEntry = { ts: dayjs().toISOString(), date: today, tz: getCurrentTz() };
+    logs[activityId] = [...activityLogs, newEntry];
     await attendanceService.saveLogs(logs);
 
     // Persist the note if one was provided
     if (note && note.trim()) {
       const notes = await attendanceService.getNotes();
       if (!notes[activityId]) notes[activityId] = {};
-      notes[activityId][today] = [{ text: note.trim(), time: dayjs().toISOString() }];
+      notes[activityId][today] = [{ text: note.trim(), time: dayjs().toISOString(), tz: getCurrentTz() }];
       await attendanceService.saveNotes(notes);
     }
 
@@ -206,7 +238,7 @@ export const attendanceService = {
     const existing = notes[activityId][dateStr] || [];
     notes[activityId][dateStr] = [
       ...existing,
-      { text: text.trim(), time: dayjs().toISOString() },
+      { text: text.trim(), time: dayjs().toISOString(), tz: getCurrentTz() },
     ];
     await attendanceService.saveNotes(notes);
   },
@@ -314,11 +346,10 @@ export function getTaskForDate(
   if (activity.sequenceMode === 'log') {
     // Count unique calendar days with a log strictly before dateStr,
     // excluding days where the sequence was skipped.
+    // `logs` contains pre-sanitized YYYY-MM-DD date strings.
     const skippedSet = new Set(skippedDates);
     const uniqueLogDays = new Set(
-      logs
-        .map(l => dayjs(l).format('YYYY-MM-DD'))
-        .filter(d => d < dateStr && !skippedSet.has(d)),
+      logs.filter(d => d < dateStr && !skippedSet.has(d)),
     );
     index = uniqueLogDays.size % n;
   } else {

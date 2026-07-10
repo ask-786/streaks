@@ -9,7 +9,7 @@ import { CalendarLegend } from '../components/CalendarLegend';
 import { LogDetailsModal } from '../components/LogDetailsModal';
 import { Colors, Spacing, Typography, BorderRadius } from '../constants';
 import { useTheme } from '../hooks/useTheme';
-import { todayStr } from '../utils/dateUtils';
+import { todayStr, formatTimeWithTz } from '../utils/dateUtils';
 import dayjs from 'dayjs';
 
 export const CalendarScreen: React.FC = () => {
@@ -25,7 +25,7 @@ export const CalendarScreen: React.FC = () => {
 
   const { logs, notes, taskHistory, sequenceSkips, selectedActivityId, activities, appendNote, editNote, isHideExtraDaysEnabled } = useAttendanceStore();
   const selectedActivity = activities.find(a => a.id === selectedActivityId);
-  const loggedDates = selectedActivityId ? logs[selectedActivityId] || [] : [];
+  const loggedDates = selectedActivityId ? (logs[selectedActivityId] || []).map(e => e.date) : [];
   const activitySequenceSkips: string[] = selectedActivityId ? (sequenceSkips[selectedActivityId] ?? []) : [];
   const today = todayStr();
   const markedDates = buildMarkedDates(loggedDates, today, selectedActivity?.createdAt);
@@ -64,26 +64,25 @@ export const CalendarScreen: React.FC = () => {
           enableSwipeMonths={true}
           hideExtraDays={isHideExtraDaysEnabled}
           onDayPress={(day) => {
-            // Use dayjs to convert each log to a local-timezone date string before comparing.
-            // This handles UTC ISO strings (e.g. "2026-03-27T18:45:00.639Z") which may fall
-            // on a different calendar day once converted to the user's local timezone (IST).
-            const rawLog = loggedDates.find(
-              log => dayjs(log).format('YYYY-MM-DD') === day.dateString
-            );
+            // Use .date field (locked local date) instead of parsing the UTC timestamp,
+            // so the calendar day never shifts when the device's timezone changes.
+            const rawEntry = selectedActivityId
+              ? (logs[selectedActivityId] || []).find(e => e.date === day.dateString)
+              : undefined;
             const dateKey = day.dateString;
             setLogModalDate(dayjs(day.dateString).format('MMMM D, YYYY'));
             setLogModalDateKey(dateKey);
-            setLogModalIsLogged(!!rawLog);
-            if (rawLog) {
-              const containsTime = rawLog.includes('T');
-              setLogModalTime(containsTime ? dayjs(rawLog).format('h:mm A') : null);
+            setLogModalIsLogged(!!rawEntry);
+            if (rawEntry) {
+              // Show time in the timezone where it was originally logged
+              setLogModalTime(rawEntry.ts.includes('T') ? formatTimeWithTz(rawEntry.ts, rawEntry.tz) : null);
               // Compute which task was active on this day (accounting for skips)
               let task: string | null = null;
               if (selectedActivityId) {
                 task = taskHistory[selectedActivityId]?.[day.dateString] || null;
                 if (!task && selectedActivity) {
-                  const actLogs = logs[selectedActivityId] || [];
-                  task = getTaskForDate(selectedActivity, day.dateString, actLogs, activitySequenceSkips);
+                  const actLogDates = (logs[selectedActivityId] || []).map(e => e.date);
+                  task = getTaskForDate(selectedActivity, day.dateString, actLogDates, activitySequenceSkips);
                 }
               }
               setLogModalTask(task);

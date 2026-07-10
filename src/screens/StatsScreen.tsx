@@ -14,20 +14,22 @@ import { loggedDaysThisMonth, totalDaysPassedThisMonth, todayStr } from '../util
 export const StatsScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
   const { logs, selectedActivityId, getActivityStats } = useAttendanceStore();
-  const loggedDates = selectedActivityId ? logs[selectedActivityId] || [] : [];
+  const logEntries = selectedActivityId ? logs[selectedActivityId] || [] : [];
+  // Extract the locked local date strings for all stats/display purposes
+  const logDateStrings = logEntries.map(e => e.date);
   const stats = selectedActivityId
     ? getActivityStats(selectedActivityId)
     : { currentStreak: 0, longestStreak: 0, unit: 'day' as const, isThisWeekGoalMet: false, weeklyGoal: undefined };
   const { currentStreak, longestStreak, unit, weeklyGoal } = stats;
   const isWeekly = unit === 'week';
 
-  const thisMonthLogged = loggedDaysThisMonth(loggedDates);
+  const thisMonthLogged = loggedDaysThisMonth(logDateStrings);
   const thisMonthTotal = totalDaysPassedThisMonth();
-  const totalLogged = loggedDates.length;
+  const totalLogged = logDateStrings.length;
 
   const firstLoggedDate =
-    loggedDates.length > 0
-      ? dayjs([...loggedDates].sort()[0]).format('MMMM D, YYYY')
+    logDateStrings.length > 0
+      ? dayjs([...logDateStrings].sort()[0]).format('MMMM D, YYYY')
       : null;
 
   return (
@@ -83,11 +85,8 @@ export const StatsScreen: React.FC = () => {
                 const d = dayjs(today);
                 const weekStart = d.subtract((d.day() + 6) % 7, 'day').format('YYYY-MM-DD');
                 const weekEnd = dayjs(weekStart).add(6, 'day').format('YYYY-MM-DD');
-                const thisWeekLogs = loggedDates.filter(dt => {
-                  const ds = dayjs(dt).format('YYYY-MM-DD');
-                  return ds >= weekStart && ds <= weekEnd;
-                });
-                const uniqueThisWeek = new Set(thisWeekLogs.map(dt => dayjs(dt).format('YYYY-MM-DD'))).size;
+                const thisWeekLogs = logDateStrings.filter(dt => dt >= weekStart && dt <= weekEnd);
+                const uniqueThisWeek = new Set(thisWeekLogs).size;
                 return `${uniqueThisWeek} / ${weeklyGoal} sessions`;
               })()}
             </Text>

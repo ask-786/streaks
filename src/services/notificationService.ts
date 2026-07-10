@@ -1,7 +1,7 @@
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
-import { Activity } from '../features/attendance/attendanceService';
+import { Activity, LogEntry } from '../features/attendance/attendanceService';
 
 // Configure how notifications appear when the app is in the foreground
 Notifications.setNotificationHandler({
@@ -38,7 +38,7 @@ export const requestPermissionsAsync = async () => {
 
 export const rescheduleAllNotifications = async (
   activities: Activity[],
-  logs: Record<string, string[]>
+  logs: Record<string, LogEntry[]>
 ) => {
   // 1. Cancel all existing notifications
   await Notifications.cancelAllScheduledNotificationsAsync();
@@ -61,19 +61,12 @@ export const rescheduleAllNotifications = async (
 
   if (activities.length === 0) return;
 
-  // Helper: convert any log entry (ISO string or plain YYYY-MM-DD) to a local date string.
-  // Uses plain Date so there's no dayjs dependency and no UTC-offset confusion.
-  const toLocalDate = (log: string): string => {
-    const d = new Date(log);
-    if (isNaN(d.getTime())) return log.slice(0, 10); // fallback for plain date strings
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
-  };
-
   const now = new Date();
-  const todayLocal = toLocalDate(now.toISOString());
+  // Compute today's local date string (YYYY-MM-DD)
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  const todayLocal = `${yyyy}-${mm}-${dd}`;
 
   // 3. Tonight's evening notification — DYNAMIC content.
   //    Because this function is called reactively (useNotifications hook) every time the
@@ -84,12 +77,10 @@ export const rescheduleAllNotifications = async (
 
   if (now < todayAt9PM) {
     // App was opened before 9PM — schedule a dynamic one-shot for tonight.
-    // The standing DAILY below always runs regardless, but Expo's DAILY trigger
-    // defers to the NEXT occurrence: when scheduled mid-day it fires tomorrow,
-    // not tonight — so there is no duplicate with this DATE trigger tonight.
     const unloggedToday = activities.filter(a => {
       const activityLogs = logs[a.id] || [];
-      return !activityLogs.some(log => toLocalDate(log) === todayLocal);
+      // Use the locked .date field — no timezone parsing needed
+      return !activityLogs.some(entry => entry.date === todayLocal);
     });
 
     if (unloggedToday.length > 0) {

@@ -26,6 +26,7 @@ import { Colors, Typography, Spacing, BorderRadius } from '../constants';
 import { FontAwesome5, Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 import { NoteEntry } from '../features/attendance/attendanceService';
+import { formatTimeWithTz } from '../utils/dateUtils';
 
 export interface LogDetailsModalProps {
   visible: boolean;
@@ -539,7 +540,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                                             <Text
                                               style={[styles.timePillText, { color: Colors.primary }]}
                                             >
-                                              {dayjs(entry.time).format('h:mm A')}
+                                              {formatTimeWithTz(entry.time!, entry.tz)}
                                             </Text>
                                           </View>
                                         ) : (

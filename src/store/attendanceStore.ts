@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import dayjs from 'dayjs';
-import { attendanceService, Activity, NotesMap, NoteEntry, getTaskForDate, TaskHistoryMap, SequenceSkipsMap } from '../features/attendance/attendanceService';
+import { attendanceService, Activity, NotesMap, NoteEntry, LogEntry, getTaskForDate, TaskHistoryMap, SequenceSkipsMap } from '../features/attendance/attendanceService';
 import {
   calculateCurrentStreak,
   calculateLongestStreak,
@@ -9,7 +9,7 @@ import {
   isWeeklyGoalMetThisWeek,
   getThisWeekLogCount,
 } from '../utils/streakUtils';
-import { todayStr } from '../utils/dateUtils';
+import { todayStr, getCurrentTz } from '../utils/dateUtils';
 
 interface ActivityStats {
   currentStreak: number;
@@ -27,7 +27,7 @@ interface ActivityStats {
 
 interface AttendanceState {
   activities: Activity[];
-  logs: Record<string, string[]>;
+  logs: Record<string, LogEntry[]>;
   notes: NotesMap;
   taskHistory: TaskHistoryMap;
   sequenceSkips: SequenceSkipsMap;
@@ -85,7 +85,7 @@ interface AttendanceState {
 }
 
 export { NoteEntry, getTaskForDate };
-export type { SequenceSkipsMap };
+export type { LogEntry, SequenceSkipsMap };
 
 export const useAttendanceStore = create<AttendanceState>((set, get) => ({
   activities: [],
@@ -292,20 +292,22 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     const { logs, notes, taskHistory, activities, sequenceSkips } = get();
     const today = todayStr();
     const activityLogs = logs[activityId] || [];
-    if (activityLogs.some(log => dayjs(log).format('YYYY-MM-DD') === today)) return;
+    if (activityLogs.some(entry => entry.date === today)) return;
 
     set({ isLoading: true });
     await attendanceService.logToday(activityId, note);
 
     const updatedLogs = { ...logs };
-    updatedLogs[activityId] = [...activityLogs, dayjs().toISOString()];
+    updatedLogs[activityId] = [...activityLogs, { ts: dayjs().toISOString(), date: today, tz: getCurrentTz() }];
 
     // Compute and lock in the task history for this specific day
     const updatedTaskHistory = { ...taskHistory };
     const activity = activities.find(a => a.id === activityId);
     if (activity && activity.taskSequence && activity.taskSequence.length > 0) {
       const activitySkips = sequenceSkips[activityId] ?? [];
-      const task = getTaskForDate(activity, today, updatedLogs[activityId], activitySkips);
+      // getTaskForDate expects plain YYYY-MM-DD date strings
+      const logDates = updatedLogs[activityId].map(e => e.date);
+      const task = getTaskForDate(activity, today, logDates, activitySkips);
       if (task) {
         if (!updatedTaskHistory[activityId]) updatedTaskHistory[activityId] = {};
         updatedTaskHistory[activityId] = {
@@ -323,7 +325,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       if (!updatedNotes[activityId]) updatedNotes[activityId] = {};
       updatedNotes[activityId] = {
         ...updatedNotes[activityId],
-        [today]: [{ text: note.trim(), time: dayjs().toISOString() }],
+        [today]: [{ text: note.trim(), time: dayjs().toISOString(), tz: getCurrentTz() }],
       };
     }
 
@@ -337,9 +339,10 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       !freshActivity.completedAt
     ) {
       const { calculateCurrentStreak, calculateCurrentWeeklyStreak } = await import('../utils/streakUtils');
+      const logDates = updatedLogs[activityId].map(e => e.date);
       const newStreak = freshActivity.weeklyGoal
-        ? calculateCurrentWeeklyStreak(updatedLogs[activityId], freshActivity.weeklyGoal)
-        : calculateCurrentStreak(updatedLogs[activityId]);
+        ? calculateCurrentWeeklyStreak(logDates, freshActivity.weeklyGoal)
+        : calculateCurrentStreak(logDates);
       if (newStreak >= freshActivity.streakGoal) {
         updatedActivities = activities.map(a =>
           a.id === activityId ? { ...a, completedAt: Date.now() } : a
@@ -355,7 +358,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     const { logs, notes, sequenceSkips } = get();
     const today = todayStr();
     const activityLogs = logs[activityId] || [];
-    if (activityLogs.some(log => dayjs(log).format('YYYY-MM-DD') === today)) return;
+    if (activityLogs.some(entry => entry.date === today)) return;
 
     set({ isLoading: true });
 
@@ -363,7 +366,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     await attendanceService.logToday(activityId, note);
 
     const updatedLogs = { ...logs };
-    updatedLogs[activityId] = [...activityLogs, dayjs().toISOString()];
+    updatedLogs[activityId] = [...activityLogs, { ts: dayjs().toISOString(), date: today, tz: getCurrentTz() }];
 
     // Record the sequence skip
     const updatedSkips = { ...sequenceSkips };
@@ -381,7 +384,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       if (!updatedNotes[activityId]) updatedNotes[activityId] = {};
       updatedNotes[activityId] = {
         ...updatedNotes[activityId],
-        [today]: [{ text: note.trim(), time: dayjs().toISOString() }],
+        [today]: [{ text: note.trim(), time: dayjs().toISOString(), tz: getCurrentTz() }],
       };
     }
 
@@ -400,7 +403,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     const existing = updatedNotes[activityId][dateStr] || [];
     updatedNotes[activityId] = {
       ...updatedNotes[activityId],
-      [dateStr]: [...existing, { text: trimmed, time: dayjs().toISOString() }],
+      [dateStr]: [...existing, { text: trimmed, time: dayjs().toISOString(), tz: getCurrentTz() }],
     };
     set({ notes: updatedNotes });
   },
@@ -460,9 +463,10 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
   },
 
   getActivityStats: (activityId: string) => {
-    const logs = get().logs[activityId] || [];
+    const logEntries = get().logs[activityId] || [];
+    const logs = logEntries.map(e => e.date); // plain YYYY-MM-DD strings for streak utils
     const activity = get().activities.find(a => a.id === activityId);
-    const isTodayLogged = logs.some(log => dayjs(log).format('YYYY-MM-DD') === todayStr());
+    const isTodayLogged = logEntries.some(e => e.date === todayStr());
 
     if (activity?.weeklyGoal) {
       const goal = activity.weeklyGoal;

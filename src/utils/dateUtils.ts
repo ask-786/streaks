@@ -8,6 +8,53 @@ import { DATE_FORMAT } from '../constants/dateFormat';
 export const todayStr = (): string => dayjs().format(DATE_FORMAT);
 
 /**
+ * Returns the IANA timezone name of the current device, e.g. "Asia/Kolkata".
+ * Store this alongside each log/note entry so the time can always be
+ * displayed in the original timezone regardless of where the device is later.
+ */
+export const getCurrentTz = (): string =>
+  Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+/**
+ * Formats a UTC ISO timestamp for display in the timezone where it was recorded.
+ * If `tz` (IANA name) is provided the time and short abbreviation are both shown,
+ * e.g. "2:15 PM IST" or "12:45 PM GST".
+ * If `tz` is absent (old entries before this feature) it falls back to the
+ * device's current timezone without a label.
+ */
+export const formatTimeWithTz = (isoTs: string, tz?: string | null): string => {
+  try {
+    const targetTz = tz ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const date = new Date(isoTs);
+    if (isNaN(date.getTime())) return isoTs;
+
+    const parts = new Intl.DateTimeFormat('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+      timeZone: targetTz,
+      timeZoneName: 'short',
+    }).formatToParts(date);
+
+    let hour = '';
+    let minute = '';
+    let period = '';
+    let tzName = '';
+    for (const p of parts) {
+      if (p.type === 'hour')         hour   = p.value;
+      else if (p.type === 'minute') minute = p.value;
+      else if (p.type === 'dayPeriod')  period = p.value;
+      else if (p.type === 'timeZoneName') tzName = p.value;
+    }
+
+    const timeStr = `${hour}:${minute} ${period}`.trim();
+    return tz ? `${timeStr} ${tzName}` : timeStr;
+  } catch {
+    return dayjs(isoTs).format('h:mm A');
+  }
+};
+
+/**
  * Returns yesterday's date as a YYYY-MM-DD string.
  */
 export const yesterdayStr = (): string =>
