@@ -46,6 +46,8 @@ export interface LogDetailsModalProps {
   isSequenceSkipped?: boolean;
   /** If today is unlogged and time-bound, whether the window is already passed or not yet open. */
   timeBoundKind?: 'too_early' | 'too_late';
+  /** Whether the overall activity has been marked as completed (goal reached or manual). */
+  isActivityCompleted?: boolean;
   /** Appends a new note entry for today. */
   onNoteAppend?: (text: string) => Promise<void>;
   /** Edits an existing note entry by index. */
@@ -65,6 +67,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
   taskForDay,
   isSequenceSkipped = false,
   timeBoundKind,
+  isActivityCompleted = false,
   onNoteAppend,
   onNoteEdit,
   onClose,
@@ -152,8 +155,8 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
     copyTimerRef.current = setTimeout(() => setCopiedIndex(null), 1500);
   };
 
-  // Only allow adding notes on today — past days are read-only
-  const canAddNote = isToday && !!onNoteAppend;
+  // Only allow adding notes on today, and only if the activity itself is not completed
+  const canAddNote = isToday && !isActivityCompleted && !!onNoteAppend;
   const hasNotes = notes && notes.length > 0;
   // Always show the notes section so users can annotate any logged day
   const showNotesSection = true;
@@ -571,8 +574,8 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                                             />
                                           </Pressable>
 
-                                          {/* Edit icon — only shown on today */}
-                                          {!!onNoteEdit && isToday ? (
+                                          {/* Edit icon — only shown on today and activity is not completed */}
+                                          {!!onNoteEdit && isToday && !isActivityCompleted ? (
                                             <Pressable
                                               style={({ pressed }) => [
                                                 styles.editIconBtn,

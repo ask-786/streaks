@@ -153,6 +153,7 @@ export const CalendarScreen: React.FC = () => {
         taskForDay={logModalTask}
         isSequenceSkipped={logModalIsSequenceSkipped}
         timeBoundKind={logModalTimeBoundKind}
+        isActivityCompleted={!!selectedActivity?.completedAt}
         onNoteAppend={
           selectedActivityId
             ? async (text) => {
