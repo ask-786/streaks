@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Text } from 'react-native-paper';
 import { Calendar } from 'react-native-calendars';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -30,6 +30,19 @@ export const CalendarScreen: React.FC = () => {
   const today = todayStr();
   const markedDates = buildMarkedDates(loggedDates, today, selectedActivity?.createdAt, selectedActivity?.completedAt);
 
+  // Start / end date jump helpers
+  const startDate = selectedActivity
+    ? dayjs(selectedActivity.createdAt).format('YYYY-MM-DD')
+    : null;
+  const endDate = selectedActivity
+    ? selectedActivity.completedAt
+      ? dayjs(selectedActivity.completedAt).format('YYYY-MM-DD')
+      : today
+    : null;
+
+  // Controlled month for the calendar — defaults to today's month
+  const [currentMonth, setCurrentMonth] = React.useState(today);
+
   // Derive note entries reactively from the store so they stay fresh after appending
   const logModalNotes =
     selectedActivityId && logModalDateKey
@@ -45,10 +58,62 @@ export const CalendarScreen: React.FC = () => {
       >
       {/* Header */}
       <Animated.View entering={FadeInDown.delay(0).springify()} style={styles.header}>
-        <Text style={[styles.title, { color: colors.textPrimary }]}>Attendance Calendar</Text>
-        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          {loggedDates.length} day{loggedDates.length !== 1 ? 's' : ''} logged total
-        </Text>
+        <View style={styles.headerRow}>
+          <View style={styles.headerTextBlock}>
+            <Text style={[styles.title, { color: colors.textPrimary }]}>Attendance Calendar</Text>
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+              {loggedDates.length} day{loggedDates.length !== 1 ? 's' : ''} logged total
+            </Text>
+          </View>
+          {/* Jump buttons — only shown when an activity is selected */}
+          {selectedActivity && startDate && endDate ? (
+            <View style={styles.jumpButtons}>
+              <TouchableOpacity
+                style={[
+                  styles.jumpBtn,
+                  { backgroundColor: colors.surface, borderColor: Colors.primary + '40' },
+                ]}
+                onPress={() => setCurrentMonth(startDate)}
+                activeOpacity={0.75}
+              >
+                <Text style={[styles.jumpBtnIcon, { color: Colors.primary }]}>⏮</Text>
+                <Text style={[styles.jumpBtnLabel, { color: Colors.primary }]}>Start</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.jumpBtn,
+                  {
+                    backgroundColor: selectedActivity.completedAt
+                      ? Colors.success + '18'
+                      : Colors.primary + '18',
+                    borderColor: selectedActivity.completedAt
+                      ? Colors.success + '60'
+                      : Colors.primary + '40',
+                  },
+                ]}
+                onPress={() => setCurrentMonth(endDate)}
+                activeOpacity={0.75}
+              >
+                <Text
+                  style={[
+                    styles.jumpBtnIcon,
+                    { color: selectedActivity.completedAt ? Colors.success : Colors.primary },
+                  ]}
+                >
+                  ⏭
+                </Text>
+                <Text
+                  style={[
+                    styles.jumpBtnLabel,
+                    { color: selectedActivity.completedAt ? Colors.success : Colors.primary },
+                  ]}
+                >
+                  {selectedActivity.completedAt ? 'Done' : 'Today'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+        </View>
       </Animated.View>
 
       {/* Calendar */}
@@ -57,7 +122,8 @@ export const CalendarScreen: React.FC = () => {
         style={[styles.calendarCard, { backgroundColor: colors.surface }]}
       >
         <Calendar
-          current={today}
+          key={currentMonth}
+          current={currentMonth}
           markedDates={markedDates}
           markingType={'custom'}
           maxDate={today}
@@ -185,6 +251,38 @@ const styles = StyleSheet.create({
   },
   header: {
     marginBottom: Spacing.lg,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+  },
+  headerTextBlock: {
+    flex: 1,
+  },
+  jumpButtons: {
+    flexDirection: 'row',
+    gap: Spacing.xs,
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  jumpBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 6,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+  },
+  jumpBtnIcon: {
+    fontSize: 11,
+  },
+  jumpBtnLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.2,
   },
   title: {
     ...Typography.headlineLarge,
