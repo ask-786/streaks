@@ -28,7 +28,7 @@ export const CalendarScreen: React.FC = () => {
   const loggedDates = selectedActivityId ? (logs[selectedActivityId] || []).map(e => e.date) : [];
   const activitySequenceSkips: string[] = selectedActivityId ? (sequenceSkips[selectedActivityId] ?? []) : [];
   const today = todayStr();
-  const markedDates = buildMarkedDates(loggedDates, today, selectedActivity?.createdAt);
+  const markedDates = buildMarkedDates(loggedDates, today, selectedActivity?.createdAt, selectedActivity?.completedAt);
 
   // Derive note entries reactively from the store so they stay fresh after appending
   const logModalNotes =
