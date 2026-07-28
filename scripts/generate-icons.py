@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Regenerate every app icon in `assets/` from one vector source.
 
-The artwork — three rising torches — is described once as SVG paths, rendered at
-4x, and then fitted into each target canvas. Everything downstream (adaptive
-icon layers, monochrome/themed icon, notification icon, splash badge, favicon)
-comes from that single render, so the variants can never drift apart.
+The artwork — three rising torches — is described once as vector geometry: the
+shafts as stroked lines, the flames as outlines traced from the original
+hand-made icon (flame-outlines.json). It is rendered once, oversampled, then
+fitted into each target canvas. Everything downstream (adaptive icon layers,
+monochrome/themed icon, notification icon, splash badge, favicon) comes from
+that single render, so the variants can never drift apart.
 
     pip install pillow cairosvg
     python3 scripts/generate-icons.py
@@ -15,6 +17,7 @@ Re-run after changing any constant below and commit the resulting PNGs.
 from __future__ import annotations
 
 import io
+import json
 import math
 import os
 
@@ -38,43 +41,48 @@ UX, UY = math.cos(_RAD), -math.sin(_RAD)
 
 SHAFT_R = 46.0                    # torch shaft half-width
 GAP = 13.0                        # transparent gap between flame and shaft
-SPACING = 128.0                   # perpendicular distance between shafts
+# Perpendicular distance between shafts. Each flame reaches ~76 units to the
+# right of its own shaft, so this has to stay clear of the next shaft's knockout
+# or that shaft slices the tip off the flame beside it.
+SPACING = 138.0
 BASE_X, BASE_Y = 230.0, 800.0     # bottom end of the shortest torch
 
-TORCHES = [
-    # (shaft length, flame height)
-    (230.0, 158.0),
-    (330.0, 175.0),
-    (430.0, 192.0),
-]
+SHAFT_LENGTHS = (230.0, 330.0, 430.0)
 
-# Flame outline in normalised space: base centre at (0, 0), one unit tall,
-# negative y is up. Three tongues split by deep notches, leaning right.
-FLAME = [
-    ("M", (0.160, -1.000)),
-    ("C", (0.215, -0.735), (0.205, -0.530), (0.190, -0.360)),    # inner right of main tongue
-    ("C", (0.275, -0.435), (0.375, -0.520), (0.460, -0.620)),    # up into the right tongue
-    ("C", (0.495, -0.430), (0.510, -0.255), (0.470, -0.100)),    # outer right edge
-    ("C", (0.435, 0.060), (0.265, 0.160), (0.000, 0.160)),       # base, right half
-    ("C", (-0.265, 0.160), (-0.435, 0.060), (-0.470, -0.100)),   # base, left half
-    ("C", (-0.505, -0.265), (-0.470, -0.375), (-0.400, -0.480)), # outer left edge
-    ("C", (-0.330, -0.415), (-0.240, -0.370), (-0.165, -0.360)), # down into the left notch
-    ("C", (-0.190, -0.600), (-0.040, -0.860), (0.160, -1.000)),  # inner left of main tongue
-    ("Z",),
-]
+KNOCKOUT = SHAFT_R + GAP          # radius the shaft clears out of its flame
+
+# The traced flames carry a filled-in base whose edge is a spline approximating
+# the very circle the knockout cuts. Sampling error leaves that spline a fraction
+# of a pixel outside the true circle, which survives as a hairline ring around
+# the shaft, so cut fractionally wider than the base to swallow it.
+BLEED = 1.2
+
+# The flames are traced from the original artwork (see flame-outlines.json), so
+# their proportions are pinned to the shape of that trace: each outline was
+# reconstructed by filling the crescent a 60.9px knockout had cut out of a flame
+# 191.6 / 204.1 / 242.1px tall. Keeping those ratios against our own knockout
+# radius reproduces the original flames exactly.
+FLAME_HEIGHTS = tuple(KNOCKOUT * ratio for ratio in (3.1368, 3.3221, 3.9803))
 
 RENDER = 2048                     # working resolution for the vector render
 
+with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                       "flame-outlines.json")) as _fh:
+    FLAMES = json.load(_fh)
 
-def _flame_path(cx: float, cy: float, h: float) -> str:
-    parts = []
-    for seg in FLAME:
-        if seg[0] == "Z":
-            parts.append("Z")
-            continue
-        pts = " ".join("%.2f %.2f" % (cx + x * h, cy + y * h) for x, y in seg[1:])
-        parts.append(f"{seg[0]} {pts}")
-    return '<path d="%s"/>' % " ".join(parts)
+
+def _flame_path(cx: float, cy: float, h: float, outline: list) -> str:
+    """A closed Catmull-Rom spline through `outline`, placed with its origin —
+    the shaft's cap centre — at (cx, cy) and scaled to `h` tall."""
+    pts = [(cx + x * h, cy + y * h) for x, y in outline]
+    n = len(pts)
+    d = ["M %.2f %.2f" % pts[0]]
+    for i in range(n):
+        p0, p1, p2, p3 = (pts[(i - 1) % n], pts[i], pts[(i + 1) % n], pts[(i + 2) % n])
+        c1 = (p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6)
+        c2 = (p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6)
+        d.append("C %.2f %.2f %.2f %.2f %.2f %.2f" % (c1 + c2 + p2))
+    return '<path d="%s Z"/>' % " ".join(d)
 
 
 def _alpha(body: str) -> Image.Image:
@@ -86,29 +94,32 @@ def _alpha(body: str) -> Image.Image:
     return Image.open(io.BytesIO(buf)).convert("RGBA").split()[-1]
 
 
-def _layers() -> tuple[str, str, str]:
+def _layers(shaft_r: float) -> tuple[str, str, str]:
     shafts, knockouts, flames = [], [], []
-    for i, (length, flame_h) in enumerate(TORCHES):
+    for i, length in enumerate(SHAFT_LENGTHS):
         bx = BASE_X + i * SPACING / math.sin(_RAD)
         by = BASE_Y
         tx, ty = bx + UX * length, by + UY * length
         line = (f'<line x1="{bx:.2f}" y1="{by:.2f}" x2="{tx:.2f}" y2="{ty:.2f}" '
                 f'stroke-linecap="round"')
-        shafts.append(f'{line} stroke-width="{2 * SHAFT_R}"/>')
-        knockouts.append(f'{line} stroke-width="{2 * (SHAFT_R + GAP)}"/>')
-        flames.append(_flame_path(tx, ty, flame_h))
+        shafts.append(f'{line} stroke-width="{2 * shaft_r}"/>')
+        knockouts.append(f'{line} stroke-width="{2 * (KNOCKOUT + BLEED)}"/>')
+        flames.append(_flame_path(tx, ty, FLAME_HEIGHTS[i], FLAMES[i]))
     return "".join(flames), "".join(knockouts), "".join(shafts)
 
 
 def artwork(gap: bool = True) -> Image.Image:
-    """White torches on transparent, cropped tight. `gap=False` fuses the flames
-    onto the shafts for sizes too small to hold a 1px separation."""
-    flames, knockouts, shafts = _layers()
-    flame_a = _alpha(flames)
-    shaft_a = _alpha(shafts)
-    if gap:
-        flame_a = ImageChops.subtract(flame_a, _alpha(knockouts))
-    alpha = ImageChops.lighter(flame_a, shaft_a)
+    """White torches on transparent, cropped tight.
+
+    The flames are always cut back to the same knockout circle; `gap` only
+    decides how thick the shaft under them is drawn. `gap=False` widens the
+    shaft to fill the gap rather than shrinking the cut, which keeps the flame
+    silhouette identical at sizes too small to hold a 1px separation.
+    """
+    flames, knockouts, shafts = _layers(SHAFT_R if gap else KNOCKOUT + BLEED)
+    alpha = ImageChops.lighter(
+        ImageChops.subtract(_alpha(flames), _alpha(knockouts)), _alpha(shafts)
+    )
     out = Image.new("RGBA", alpha.size, (255, 255, 255, 0))
     out.putalpha(alpha)
     return out.crop(alpha.getbbox())
@@ -150,8 +161,9 @@ def circle_box(art: Image.Image, radius: float) -> int:
 
     The composition is diagonal, so its bounding box is a poor proxy for how
     much of a round mask it actually needs — measure the real extent instead.
+    Scale off the longer side, which is what `place` fits the box to.
     """
-    return round(art.width * radius / enclosing_radius(art))
+    return round(max(art.size) * radius / enclosing_radius(art))
 
 
 def place(canvas: Image.Image, art: Image.Image, box: int,

@@ -76,8 +76,10 @@ eas build --platform android
 Every icon in `assets/` is generated from a single vector source in
 `scripts/generate-icons.py` — the adaptive icon layers, the themed (monochrome)
 icon, the notification icon, the splash badge, the favicon, and the amber dev
-variants. Edit the constants at the top of that script rather than the PNGs, then
-regenerate and commit the result:
+variants. The flame outlines in `scripts/flame-outlines.json` are traced from the
+original hand-drawn icon, so the mark itself is unchanged. Edit the constants at
+the top of the script rather than the PNGs, then regenerate and commit the
+result:
 
 ```bash
 pip install pillow cairosvg
