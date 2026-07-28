@@ -69,4 +69,17 @@ To build the test or production variants (e.g., Android APKs/AABs):
 eas build --platform android
 ```
 
-*Note: The app is configured in `app.json` to support multiple variants on the same device (e.g., using different package names like `com.anonymous.streakcounter` for different environments).*
+*Note: The app is configured in `app.json` to support multiple variants on the same device (e.g., using different package names like `com.anonymous.streakcounter` for different environments).* The development variant (`APP_VARIANT=development`) also gets an amber icon so it is easy to tell apart from the production build on the home screen.
+
+## 🎨 App Icons
+
+Every icon in `assets/` is generated from a single vector source in
+`scripts/generate-icons.py` — the adaptive icon layers, the themed (monochrome)
+icon, the notification icon, the splash badge, the favicon, and the amber dev
+variants. Edit the constants at the top of that script rather than the PNGs, then
+regenerate and commit the result:
+
+```bash
+pip install pillow cairosvg
+python3 scripts/generate-icons.py
+```
