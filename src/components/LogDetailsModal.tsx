@@ -27,6 +27,7 @@ import { FontAwesome5, Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 import { NoteEntry } from '../features/attendance/attendanceService';
 import { formatTimeWithTz } from '../utils/dateUtils';
+import { haptics } from '../utils/haptics';
 
 export interface LogDetailsModalProps {
   visible: boolean;
@@ -111,12 +112,14 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
   }, [visible, noteModalVisible, onClose]);
 
   const openAdd = () => {
+    haptics.medium();
     setEditingIndex(null);
     setDraftNote('');
     setNoteModalVisible(true);
   };
 
   const openEdit = (index: number) => {
+    haptics.medium();
     setEditingIndex(index);
     setDraftNote(notes?.[index]?.text ?? '');
     setNoteModalVisible(true);
@@ -124,7 +127,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
 
   const handleSave = async () => {
     const trimmed = draftNote.trim();
-    if (!trimmed) return;
+    if (!trimmed) return haptics.warning();
     setIsSaving(true);
     try {
       if (isEditMode) {
@@ -132,6 +135,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
       } else {
         await onNoteAppend?.(trimmed);
       }
+      haptics.success();
       Keyboard.dismiss();
       setNoteModalVisible(false);
       setEditingIndex(null);
@@ -142,6 +146,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
   };
 
   const handleCloseNoteModal = () => {
+    haptics.light();
     Keyboard.dismiss();
     setNoteModalVisible(false);
     setEditingIndex(null);
@@ -150,6 +155,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
 
   const handleCopy = async (text: string, index: number) => {
     await Clipboard.setStringAsync(text);
+    haptics.success();
     setCopiedIndex(index);
     if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
     copyTimerRef.current = setTimeout(() => setCopiedIndex(null), 1500);
@@ -205,6 +211,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                     {/* Close ×  button */}
                     <Pressable
                       onPress={onClose}
+                      onPressIn={() => haptics.light()}
                       hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                       style={({ pressed }) => [
                         styles.closeIconBtn,

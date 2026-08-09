@@ -132,7 +132,7 @@ export const ActivitySettingsScreen: React.FC = () => {
 
   const handleSaveTimeBound = async () => {
     if (!selectedActivityId || !selectedActivity || !timeBoundType) return;
-    if (!isTimeValid) return;
+    if (!isTimeValid) return haptics.warning();
 
     const newStart = to24h(timeBoundStartTime, startAmPm);
     const newEnd = timeBoundType === 'between' ? to24h(timeBoundEndTime, endAmPm) : null;
@@ -193,6 +193,7 @@ export const ActivitySettingsScreen: React.FC = () => {
           text: 'Reset',
           style: 'destructive',
           onPress: () => {
+            haptics.error(); // destructive and irreversible — it should land hard
             if (selectedActivityId) resetActivityData(selectedActivityId);
           },
         },
@@ -273,7 +274,7 @@ export const ActivitySettingsScreen: React.FC = () => {
             },
           ]}
           onPress={() => {
-            haptics.light();
+            haptics.selection();
             toggleAmPm();
           }}
           accessibilityRole="button"

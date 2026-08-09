@@ -73,7 +73,8 @@ export const LogButton: React.FC<LogButtonProps> = ({
       haptics.warning();
       return;
     }
-    haptics.success();
+    // No success pulse here: the press may only open a note prompt. The screen
+    // owning the flow fires it once the streak is actually logged.
     onPress();
   };
 

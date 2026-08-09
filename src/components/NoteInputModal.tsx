@@ -81,8 +81,10 @@ export const NoteInputModal: React.FC<NoteInputModalProps> = ({
   const canSubmit = noteRequired ? trimmed.length > 0 : true;
 
   const handleSubmit = () => {
-    if (!canSubmit) return;
-    haptics.medium();
+    // Rejection is ours to signal; the *outcome* belongs to the caller, which
+    // is the only thing that knows whether this logged a streak. Firing here
+    // too would stack two pulses on one tap.
+    if (!canSubmit) return haptics.warning();
     onSubmit(trimmed);
   };
 
@@ -155,6 +157,7 @@ export const NoteInputModal: React.FC<NoteInputModalProps> = ({
               </View>
               <Pressable
                 onPress={onClose}
+                onPressIn={() => haptics.light()}
                 hitSlop={HitSlop.md}
                 style={({ pressed }) => [
                   styles.close,

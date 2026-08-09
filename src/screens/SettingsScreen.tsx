@@ -107,6 +107,7 @@ const Row: React.FC<RowProps> = ({
   return (
     <Pressable
       onPress={onPress}
+      onPressIn={() => haptics.light()}
       hitSlop={HitSlop.sm}
       android_ripple={{ color: alpha(colors.primary, 0.1) }}
       style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
@@ -130,6 +131,8 @@ export const SettingsScreen: React.FC = () => {
     setConfettiEnabled,
     isHideExtraDaysEnabled,
     setHideExtraDaysEnabled,
+    isHapticsEnabled,
+    setHapticsEnabled,
   } = useAttendanceStore();
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -155,9 +158,11 @@ export const SettingsScreen: React.FC = () => {
           dialogTitle: 'Export Streak Data',
         });
       } else {
+        haptics.error();
         Alert.alert('Error', 'Sharing is not available on this device');
       }
     } catch {
+      haptics.error();
       Alert.alert('Export Failed', 'An error occurred while exporting data.');
     } finally {
       setIsProcessing(false);
@@ -172,11 +177,14 @@ export const SettingsScreen: React.FC = () => {
       });
       const success = await importData(fileContent);
       if (success) {
+        haptics.success();
         Alert.alert('Success', 'Data imported successfully!');
       } else {
+        haptics.error();
         Alert.alert('Invalid Data', 'The selected file does not contain valid application data.');
       }
     } catch {
+      haptics.error();
       Alert.alert('Import Failed', 'Failed to read or process the file.');
     } finally {
       setIsProcessing(false);
@@ -205,6 +213,7 @@ export const SettingsScreen: React.FC = () => {
         }
       }
     } catch {
+      haptics.error();
       Alert.alert('Import Error', 'Could not open document picker.');
     }
   };
@@ -258,7 +267,7 @@ export const SettingsScreen: React.FC = () => {
               <Switch
                 {...switchProps(isConfettiEnabled)}
                 onValueChange={v => {
-                  haptics.light();
+                  haptics.toggle(v);
                   setConfettiEnabled(v);
                 }}
               />
@@ -268,13 +277,36 @@ export const SettingsScreen: React.FC = () => {
             icon="calendar-outline"
             label="Hide adjacent days"
             sublabel="Show only the current month in the calendar"
-            isLast
             right={
               <Switch
                 {...switchProps(isHideExtraDaysEnabled)}
                 onValueChange={v => {
-                  haptics.light();
+                  haptics.toggle(v);
                   setHideExtraDaysEnabled(v);
+                }}
+              />
+            }
+          />
+          <Row
+            icon="phone-portrait-outline"
+            label="Haptics"
+            sublabel="Subtle vibration as you tap around"
+            tint={colors.primary}
+            isLast
+            right={
+              <Switch
+                {...switchProps(isHapticsEnabled)}
+                onValueChange={v => {
+                  // Order matters, so the flip is felt either way. The store
+                  // action mirrors the flag into the haptics util synchronously
+                  // before it awaits, so switching on then firing is audible.
+                  if (v) {
+                    setHapticsEnabled(true);
+                    haptics.toggle(true);
+                  } else {
+                    haptics.toggle(false); // last tick before it goes quiet
+                    setHapticsEnabled(false);
+                  }
                 }}
               />
             }

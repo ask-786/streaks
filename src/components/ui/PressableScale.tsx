@@ -58,7 +58,7 @@ export const PressableScale: React.FC<PressableScaleProps> = ({
   const handleLongPress = useCallback(
     (e: any) => {
       if (onLongPress) {
-        haptics.selection();
+        haptics.longPress();
         onLongPress(e);
       }
     },

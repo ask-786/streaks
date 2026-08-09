@@ -27,6 +27,7 @@ import { FontAwesome5 } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 import { TaskSequenceEditor } from './TaskSequenceEditor';
 import { to12h, to24h, isValidTime12h } from '../utils/dateUtils';
+import { haptics } from '../utils/haptics';
 
 export interface ActivityFormModalProps {
   visible: boolean;
@@ -163,12 +164,14 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
   }, [visible, initialName, initialRequiresNote, initialWeeklyGoal, initialTaskSequence, initialSequenceMode, initialTimeBoundType, initialTimeBoundStartTime, initialTimeBoundEndTime, initialActivityType, initialStreakGoal]);
 
   const handleWeeklyToggle = (val: boolean) => {
+    haptics.toggle(val);
     setWeeklyModeEnabled(val);
     pickerHeight.value = withTiming(val ? 60 : 0, { duration: 250 });
     pickerOpacity.value = withTiming(val ? 1 : 0, { duration: 200 });
   };
 
   const handleTaskSeqToggle = (val: boolean) => {
+    haptics.toggle(val);
     setTaskSeqEnabled(val);
     taskSeqHeight.value = withTiming(val ? 1200 : 0, { duration: 300 });
     taskSeqOpacity.value = withTiming(val ? 1 : 0, { duration: 250 });
@@ -176,6 +179,7 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
   };
 
   const handleTimeBoundToggle = (val: boolean) => {
+    haptics.toggle(val);
     setTimeBoundEnabled(val);
     timeBoundHeight.value = withTiming(val ? 320 : 0, { duration: 300 });
     timeBoundOpacity.value = withTiming(val ? 1 : 0, { duration: 250 });
@@ -223,8 +227,10 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
   }, [visible, onClose]);
 
   const handleSave = () => {
-    if (!name.trim()) return;
-    if (activityType === 'goal' && (!streakGoal || streakGoal < 1)) return;
+    // Guards double as the validity check, so anything past them is a real save.
+    if (!name.trim()) return haptics.warning();
+    if (activityType === 'goal' && (!streakGoal || streakGoal < 1)) return haptics.warning();
+    haptics.success();
     onSave(
       name.trim(),
       requiresNote,
@@ -336,7 +342,14 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
               selectionColor={colors.primary}
             />
             {name.length > 0 && (
-              <TouchableOpacity onPress={() => setName('')} style={styles.clearBtn} hitSlop={8}>
+              <TouchableOpacity
+                onPress={() => {
+                  haptics.light();
+                  setName('');
+                }}
+                style={styles.clearBtn}
+                hitSlop={8}
+              >
                 <FontAwesome5 name="times" size={14} color={colors.textDisabled} />
               </TouchableOpacity>
             )}
@@ -365,7 +378,10 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
                       borderColor: activityType === 'goal' ? colors.success : colors.border,
                     },
                   ]}
-                  onPress={() => setActivityType('goal')}
+                  onPress={() => {
+                    if (activityType !== 'goal') haptics.selection();
+                    setActivityType('goal');
+                  }}
                   activeOpacity={0.75}
                 >
                   <View style={[styles.typeIconWrap, {
@@ -405,7 +421,10 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
                       borderColor: activityType === 'endless' ? colors.primary : colors.border,
                     },
                   ]}
-                  onPress={() => setActivityType('endless')}
+                  onPress={() => {
+                    if (activityType !== 'endless') haptics.selection();
+                    setActivityType('endless');
+                  }}
                   activeOpacity={0.75}
                 >
                   <View style={[styles.typeIconWrap, {
@@ -524,7 +543,10 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
                           : colors.surfaceVariant,
                       },
                     ]}
-                    onPress={() => setWeeklyGoal(n)}
+                    onPress={() => {
+                      if (weeklyGoal !== n) haptics.selection();
+                      setWeeklyGoal(n);
+                    }}
                     activeOpacity={0.7}
                   >
                     <Text style={[
@@ -558,7 +580,10 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
             </View>
             <Switch
               value={requiresNote}
-              onValueChange={setRequiresNote}
+              onValueChange={val => {
+                haptics.toggle(val);
+                setRequiresNote(val);
+              }}
               trackColor={{ false: colors.surfaceVariant, true: colors.primaryMuted }}
               thumbColor={requiresNote ? colors.primary : colors.textSecondary}
             />
@@ -614,7 +639,10 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
                       styles.modePill,
                       { backgroundColor: sequenceMode === mode ? colors.primary : colors.surfaceVariant },
                     ]}
-                    onPress={() => setSequenceMode(mode)}
+                    onPress={() => {
+                      if (sequenceMode !== mode) haptics.selection();
+                      setSequenceMode(mode);
+                    }}
                     activeOpacity={0.75}
                   >
                     <FontAwesome5
@@ -692,7 +720,10 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
                       styles.modePill,
                       { backgroundColor: timeBoundType === type ? colors.primary : colors.surfaceVariant },
                     ]}
-                    onPress={() => setTimeBoundType(type)}
+                    onPress={() => {
+                      if (timeBoundType !== type) haptics.selection();
+                      setTimeBoundType(type);
+                    }}
                     activeOpacity={0.75}
                   >
                     <Text style={[
@@ -729,7 +760,10 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
                   style={[styles.amPmToggle, {
                     backgroundColor: startAmPm === 'AM' ? colors.surfaceVariant : colors.primaryContainer,
                   }]}
-                  onPress={() => setStartAmPm(startAmPm === 'AM' ? 'PM' : 'AM')}
+                  onPress={() => {
+                    haptics.selection();
+                    setStartAmPm(startAmPm === 'AM' ? 'PM' : 'AM');
+                  }}
                 >
                   <Text style={[styles.amPmText, { color: startAmPm === 'PM' ? colors.primary : colors.textPrimary }]}>
                     {startAmPm}
@@ -760,7 +794,10 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
                     style={[styles.amPmToggle, {
                       backgroundColor: endAmPm === 'AM' ? colors.surfaceVariant : colors.primaryContainer,
                     }]}
-                    onPress={() => setEndAmPm(endAmPm === 'AM' ? 'PM' : 'AM')}
+                    onPress={() => {
+                      haptics.selection();
+                      setEndAmPm(endAmPm === 'AM' ? 'PM' : 'AM');
+                    }}
                   >
                     <Text style={[styles.amPmText, { color: endAmPm === 'PM' ? colors.primary : colors.textPrimary }]}>
                       {endAmPm}
@@ -785,7 +822,10 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
           <View style={styles.actions}>
             <TouchableOpacity
               style={[styles.btnCancel, { backgroundColor: colors.surfaceVariant }]}
-              onPress={onClose}
+              onPress={() => {
+                haptics.light();
+                onClose();
+              }}
               activeOpacity={0.7}
             >
               <Text style={[styles.btnCancelText, { color: colors.textSecondary }]}>Cancel</Text>

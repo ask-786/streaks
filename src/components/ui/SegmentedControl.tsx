@@ -77,7 +77,9 @@ export function SegmentedControl<T extends string>({
             key={option.value}
             style={styles.segment}
             onPress={() => {
-              if (!active) haptics.light();
+              // A segment change is a move between discrete choices, not a
+              // generic tap — `selection` reads as sliding onto a detent.
+              if (!active) haptics.selection();
               onChange(option.value);
             }}
             accessibilityRole="tab"

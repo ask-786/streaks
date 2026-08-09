@@ -11,6 +11,7 @@ import {
   stagger,
 } from '../constants';
 import { useTheme } from '../hooks/useTheme';
+import { haptics } from '../utils/haptics';
 import { Card, Chip, ProgressBar, PressableScale } from './ui';
 
 export interface ActivityStats {
@@ -211,6 +212,7 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
             >
               <Pressable
                 onPress={() => onEdit(id, name)}
+                onPressIn={() => haptics.light()}
                 hitSlop={HitSlop.sm}
                 style={({ pressed }) => [
                   styles.actionBtn,
@@ -226,6 +228,7 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
               </Pressable>
               <Pressable
                 onPress={() => onDelete(id, name)}
+                onPressIn={() => haptics.warning()}
                 hitSlop={HitSlop.sm}
                 style={({ pressed }) => [
                   styles.actionBtn,
