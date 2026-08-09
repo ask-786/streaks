@@ -14,8 +14,9 @@ import DraggableFlatList, {
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { FontAwesome5, Ionicons } from '@expo/vector-icons';
-import { Colors, Typography, Spacing, BorderRadius } from '../constants';
+import { Typography, Spacing, BorderRadius, HitSlop, alpha } from '../constants';
 import { useTheme } from '../hooks/useTheme';
+import { haptics } from '../utils/haptics';
 
 export interface TaskSequenceEditorProps {
   tasks: string[];
@@ -28,7 +29,7 @@ export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
   tasks,
   onChange,
 }) => {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const [addingText, setAddingText] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -148,21 +149,19 @@ export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
     const index = getIndex() ?? 0;
     const text = item.text;
     return (
-      <ScaleDecorator activeScale={1}>
+      <ScaleDecorator activeScale={1.02}>
         <View
           style={[
             styles.taskRow,
             {
-              backgroundColor: isActive
-                ? isDark ? '#2A264A' : '#EEF2FF'
-                : colors.background,
-              borderColor: isActive ? Colors.primary : colors.surfaceVariant,
+              backgroundColor: isActive ? colors.primaryMuted : colors.surfaceSunken,
+              borderColor: isActive ? colors.primaryBorder : colors.border,
             },
           ]}
         >
           {/* Index pill */}
-          <View style={[styles.indexPill, { backgroundColor: colors.primaryContainer }]}>
-            <Text style={[styles.indexText, { color: Colors.primary }]}>{index + 1}</Text>
+          <View style={[styles.indexPill, { backgroundColor: alpha(colors.primary, 0.12) }]}>
+            <Text style={[styles.indexText, { color: colors.primary }]}>{index + 1}</Text>
           </View>
 
           {editingIndex === index ? (
@@ -177,11 +176,23 @@ export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
                 returnKeyType="done"
                 multiline
               />
-              <TouchableOpacity onPress={() => setEditingIndex(null)} hitSlop={10} style={styles.actionIconBtn}>
-                <Ionicons name="close" size={20} color={colors.textSecondary} />
+              <TouchableOpacity
+                onPress={() => setEditingIndex(null)}
+                hitSlop={HitSlop.md}
+                style={styles.actionIconBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel editing"
+              >
+                <Ionicons name="close" size={19} color={colors.textSecondary} />
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => commitEdit(index)} hitSlop={10} style={styles.actionIconBtn}>
-                <Ionicons name="checkmark" size={20} color={Colors.primary} />
+              <TouchableOpacity
+                onPress={() => commitEdit(index)}
+                hitSlop={HitSlop.md}
+                style={styles.actionIconBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Save task"
+              >
+                <Ionicons name="checkmark" size={19} color={colors.primary} />
               </TouchableOpacity>
             </>
           ) : (
@@ -197,34 +208,59 @@ export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
               {/* Edit */}
               <TouchableOpacity
                 onPress={() => startEdit(index, text)}
-                hitSlop={10}
+                hitSlop={HitSlop.md}
                 style={styles.actionIconBtn}
+                accessibilityRole="button"
+                accessibilityLabel={`Edit task ${index + 1}`}
               >
-                <FontAwesome5 name="pencil-alt" size={14} color={colors.textSecondary} />
+                <FontAwesome5 name="pen" size={13} color={colors.textTertiary} />
               </TouchableOpacity>
 
               {/* Delete */}
               <TouchableOpacity
                 onPress={() => deleteTask(index)}
-                hitSlop={10}
+                hitSlop={HitSlop.md}
                 style={styles.actionIconBtn}
+                accessibilityRole="button"
+                accessibilityLabel={`Delete task ${index + 1}`}
               >
-                <Ionicons name="close-circle" size={20} color={Colors.error} />
+                <FontAwesome5 name="times" size={14} color={colors.danger} />
               </TouchableOpacity>
 
               {/* Drag handle */}
-              <TouchableOpacity onLongPress={drag} onPressIn={drag} hitSlop={6} style={styles.dragHandle}>
-                <FontAwesome5 name="grip-lines" size={14} color={colors.textSecondary} />
+              <TouchableOpacity
+                onLongPress={() => {
+                  haptics.selection();
+                  drag();
+                }}
+                onPressIn={drag}
+                hitSlop={HitSlop.sm}
+                style={styles.dragHandle}
+                accessibilityLabel={`Reorder task ${index + 1}`}
+              >
+                <FontAwesome5 name="grip-lines" size={13} color={colors.textDisabled} />
               </TouchableOpacity>
             </>
           )}
         </View>
       </ScaleDecorator>
     );
-  }, [editingIndex, editingText, colors, isDark, tasks, onChange]);
+  }, [editingIndex, editingText, colors, tasks, onChange]);
 
   return (
     <View style={styles.root}>
+      {/* Empty state — a bare "Add task" button gives no sense of what a
+          sequence is for. */}
+      {items.length === 0 && !isAdding ? (
+        <View style={[styles.empty, { borderColor: colors.border }]}>
+          <FontAwesome5 name="stream" size={18} color={colors.textDisabled} />
+          <Text style={[styles.emptyText, { color: colors.textTertiary }]}>
+            No sequence yet. Add tasks and this habit will cycle through them, one per
+            session.
+          </Text>
+        </View>
+      ) : null}
+
       {/* Task list */}
       {items.length > 0 && (
         <DraggableFlatList
@@ -245,7 +281,7 @@ export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
         <View
           style={[
             styles.addInputRow,
-            { backgroundColor: colors.background, borderColor: Colors.primary },
+            { backgroundColor: colors.surfaceSunken, borderColor: colors.primaryBorder },
           ]}
         >
           <TextInput
@@ -253,19 +289,31 @@ export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
             value={addingText}
             onChangeText={setAddingText}
             placeholder="Describe the task…"
-            placeholderTextColor={colors.textSecondary}
+            placeholderTextColor={colors.textDisabled}
             autoFocus
             maxLength={200}
             onSubmitEditing={commitAdd}
             returnKeyType="done"
             multiline
+            selectionColor={colors.primary}
           />
           <View style={styles.addInputActions}>
-            <TouchableOpacity onPress={() => { setIsAdding(false); setAddingText(''); }} hitSlop={8}>
-              <Ionicons name="close" size={20} color={colors.textSecondary} />
+            <TouchableOpacity
+              onPress={() => { setIsAdding(false); setAddingText(''); }}
+              hitSlop={HitSlop.md}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel adding task"
+            >
+              <Ionicons name="close" size={19} color={colors.textSecondary} />
             </TouchableOpacity>
-            <TouchableOpacity onPress={commitAdd} hitSlop={8} style={styles.addConfirmBtn}>
-              <Ionicons name="checkmark" size={20} color="#fff" />
+            <TouchableOpacity
+              onPress={commitAdd}
+              hitSlop={HitSlop.md}
+              style={[styles.addConfirmBtn, { backgroundColor: colors.primary }]}
+              accessibilityRole="button"
+              accessibilityLabel="Add task"
+            >
+              <Ionicons name="checkmark" size={18} color={colors.onPrimary} />
             </TouchableOpacity>
           </View>
         </View>
@@ -274,27 +322,37 @@ export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
       {/* Bottom action row */}
       <View style={styles.actionRow}>
         <TouchableOpacity
-          style={[styles.actionBtn, { backgroundColor: colors.primaryContainer }]}
-          onPress={() => setIsAdding(true)}
+          style={[styles.actionBtn, { backgroundColor: colors.primaryMuted }]}
+          onPress={() => {
+            haptics.light();
+            setIsAdding(true);
+          }}
           activeOpacity={0.75}
+          accessibilityRole="button"
+          accessibilityLabel="Add a task"
         >
-          <Ionicons name="add" size={16} color={Colors.primary} />
-          <Text style={[styles.actionBtnText, { color: Colors.primary }]}>Add task</Text>
+          <Ionicons name="add" size={16} color={colors.primary} />
+          <Text style={[styles.actionBtnText, { color: colors.primary }]}>Add task</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.actionBtn, { backgroundColor: colors.surfaceVariant }]}
+          style={[
+            styles.actionBtn,
+            { backgroundColor: colors.surfaceVariant, borderColor: colors.border },
+          ]}
           onPress={handleImport}
           activeOpacity={0.75}
+          accessibilityRole="button"
+          accessibilityLabel="Import tasks from a JSON file"
         >
-          <FontAwesome5 name="file-import" size={13} color={colors.textSecondary} />
+          <FontAwesome5 name="file-import" size={12} color={colors.textSecondary} />
           <Text style={[styles.actionBtnText, { color: colors.textSecondary }]}>Import JSON</Text>
         </TouchableOpacity>
       </View>
 
       {tasks.length > 0 && (
-        <Text style={[styles.hint, { color: colors.textSecondary }]}>
-          {tasks.length} task{tasks.length !== 1 ? 's' : ''} · hold handle to reorder
+        <Text style={[styles.hint, { color: colors.textDisabled }]}>
+          {tasks.length} task{tasks.length !== 1 ? 's' : ''} · drag the handle to reorder
         </Text>
       )}
     </View>
@@ -305,20 +363,34 @@ const styles = StyleSheet.create({
   root: {
     gap: Spacing.xs,
   },
+  empty: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm + 4,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderStyle: 'dashed',
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md - 2,
+    marginBottom: Spacing.sm,
+  },
+  emptyText: {
+    ...Typography.bodySmall,
+    flex: 1,
+  },
   taskRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: BorderRadius.md,
-    borderWidth: 1.5,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: Spacing.sm,
-    marginBottom: Spacing.xs,
+    borderRadius: BorderRadius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: Spacing.sm + 2,
+    paddingVertical: Spacing.sm + 2,
+    marginBottom: Spacing.xs + 2,
     gap: Spacing.sm,
   },
   indexPill: {
-    minWidth: 24,
-    height: 24,
-    borderRadius: 12,
+    minWidth: 22,
+    height: 22,
+    borderRadius: BorderRadius.xs,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 4,
@@ -326,43 +398,42 @@ const styles = StyleSheet.create({
   indexText: {
     ...Typography.labelMedium,
     fontWeight: '700',
-    fontSize: 11,
+    fontSize: 10.5,
   },
   taskText: {
-    ...Typography.bodySmall,
+    ...Typography.bodyMedium,
     flex: 1,
-    lineHeight: 18,
   },
   actionIconBtn: {
-    paddingHorizontal: 4,
+    paddingHorizontal: 5,
   },
   dragHandle: {
-    paddingHorizontal: 4,
+    paddingHorizontal: 5,
   },
   addInputRow: {
-    borderRadius: BorderRadius.md,
-    borderWidth: 1.5,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: Spacing.sm + 2,
+    paddingVertical: Spacing.sm + 2,
     marginBottom: Spacing.xs,
     gap: Spacing.sm,
   },
   addInput: {
-    ...Typography.bodySmall,
-    minHeight: 36,
-    maxHeight: 80,
+    ...Typography.bodyMedium,
+    minHeight: 38,
+    maxHeight: 90,
+    padding: 0,
   },
   addInputActions: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
     alignItems: 'center',
-    gap: Spacing.sm,
+    gap: Spacing.md,
     marginTop: 4,
   },
   addConfirmBtn: {
-    backgroundColor: Colors.primary,
-    borderRadius: BorderRadius.sm,
-    padding: 4,
+    borderRadius: BorderRadius.xs,
+    padding: 5,
   },
   actionRow: {
     flexDirection: 'row',
@@ -373,17 +444,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md - 2,
+    paddingVertical: Spacing.sm + 2,
+    borderRadius: BorderRadius.full,
   },
   actionBtnText: {
     ...Typography.labelMedium,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   hint: {
-    ...Typography.bodySmall,
-    marginTop: 4,
-    fontStyle: 'italic',
+    ...Typography.caption,
+    marginTop: Spacing.xs,
   },
 });

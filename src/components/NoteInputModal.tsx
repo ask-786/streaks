@@ -1,19 +1,31 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   StyleSheet,
   TextInput,
-  TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   BackHandler,
 } from 'react-native';
 import { Text } from 'react-native-paper';
-import Animated, { FadeIn, SlideInDown, SlideOutDown, Easing } from 'react-native-reanimated';
-import { Colors, Typography, Spacing, BorderRadius } from '../constants';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, { FadeIn, SlideInDown, SlideOutDown } from 'react-native-reanimated';
 import { FontAwesome5, Ionicons } from '@expo/vector-icons';
+import {
+  Typography,
+  Spacing,
+  BorderRadius,
+  Duration,
+  Ease,
+  HitSlop,
+  alpha,
+} from '../constants';
 import { useTheme } from '../hooks/useTheme';
+import { haptics } from '../utils/haptics';
+import { PressableScale } from './ui';
+
+const MAX_LENGTH = 280;
 
 export interface NoteInputModalProps {
   visible: boolean;
@@ -40,128 +52,207 @@ export const NoteInputModal: React.FC<NoteInputModalProps> = ({
   onClose,
   onSubmit,
 }) => {
-  const { colors, isDark } = useTheme();
+  const { colors, elevation } = useTheme();
+  const insets = useSafeAreaInsets();
   const [note, setNote] = useState('');
+  const inputRef = useRef<TextInput>(null);
 
+  // Hardware back closes the sheet.
   useEffect(() => {
-    if (visible) setNote('');
-  }, [visible]);
-
-  // Handle hardware back button
-  useEffect(() => {
-    if (visible) {
-      const backAction = () => {
-        onClose();
-        return true;
-      };
-      const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
-      return () => backHandler.remove();
-    }
+    if (!visible) return;
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      onClose();
+      return true;
+    });
+    return () => backHandler.remove();
   }, [visible, onClose]);
 
+  useEffect(() => {
+    if (visible) {
+      setNote('');
+      // Focus after the sheet has finished sliding in — focusing immediately
+      // fights the entrance animation and the keyboard lands mid-transition.
+      const t = setTimeout(() => inputRef.current?.focus(), Duration.normal + 60);
+      return () => clearTimeout(t);
+    }
+  }, [visible]);
+
+  const trimmed = note.trim();
+  const canSubmit = noteRequired ? trimmed.length > 0 : true;
+
   const handleSubmit = () => {
-    const trimmed = note.trim();
-    if (noteRequired && !trimmed) return;
+    if (!canSubmit) return;
+    haptics.medium();
     onSubmit(trimmed);
   };
 
-  const canSubmit = noteRequired ? note.trim().length > 0 : true;
-
   if (!visible) return null;
 
+  const remaining = MAX_LENGTH - note.length;
+  const countColor =
+    remaining <= 0
+      ? colors.danger
+      : remaining < 30
+        ? colors.warning
+        : colors.textTertiary;
+
   return (
-    <View style={[StyleSheet.absoluteFill, { zIndex: 9999, elevation: 9999 }]} pointerEvents="box-none">
+    <View
+      style={[StyleSheet.absoluteFill, { zIndex: 9999, elevation: 9999 }]}
+      pointerEvents="box-none"
+    >
       {/* Backdrop */}
-      <Animated.View entering={FadeIn.duration(120)} style={styles.backdrop}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+      <Animated.View
+        entering={FadeIn.duration(Duration.fast)}
+        style={[styles.backdrop, { backgroundColor: colors.scrim }]}
+      >
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Dismiss" />
       </Animated.View>
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={[styles.kavWrapper, { zIndex: 1 }]}
+        style={[styles.kav, { zIndex: 1 }]}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}
         pointerEvents="box-none"
       >
         <View style={styles.kavInner} pointerEvents="box-none">
           <Animated.View
-            entering={SlideInDown.duration(220).easing(Easing.out(Easing.cubic))}
-            exiting={SlideOutDown.duration(160).easing(Easing.in(Easing.cubic))}
-            style={[styles.sheet, { backgroundColor: colors.surface }]}
+            entering={SlideInDown.duration(Duration.normal).easing(Ease.out)}
+            exiting={SlideOutDown.duration(Duration.fast).easing(Ease.in)}
+            style={[
+              styles.sheet,
+              elevation.overlay,
+              {
+                backgroundColor: colors.surface,
+                paddingBottom: Spacing.lg + insets.bottom,
+                // The sheet is flush with the screen edge; a ring across the
+                // bottom would just be a stray line.
+                borderBottomWidth: 0,
+              },
+            ]}
           >
-            {/* Handle bar */}
-            <View style={[styles.handleBar, { backgroundColor: colors.surfaceVariant }]} />
+            {/* Grab handle */}
+            <View style={[styles.handle, { backgroundColor: colors.borderStrong }]} />
 
             {/* Header */}
-            <View style={styles.headerRow}>
-              <View style={[styles.iconWrap, { backgroundColor: isDark ? Colors.dark.primaryContainer : Colors.primaryContainer }]}>
-                <FontAwesome5 name={noteRequired ? 'sticky-note' : 'forward'} size={16} color={Colors.primary} />
+            <View style={styles.header}>
+              <View style={[styles.iconWrap, { backgroundColor: alpha(colors.primary, 0.12) }]}>
+                <FontAwesome5
+                  name={noteRequired ? 'sticky-note' : 'forward'}
+                  size={15}
+                  color={colors.primary}
+                />
               </View>
               <View style={styles.headerText}>
-                <Text style={[styles.title, { color: colors.textPrimary }]}>{title ?? 'Add a Note'}</Text>
+                <Text style={[styles.title, { color: colors.textPrimary }]}>
+                  {title ?? 'Add a note'}
+                </Text>
                 {activityName ? (
-                  <Text style={[styles.activityLabel, { color: Colors.primary }]}>{activityName}</Text>
+                  <Text style={[styles.activity, { color: colors.textTertiary }]} numberOfLines={1}>
+                    {activityName}
+                  </Text>
                 ) : null}
               </View>
-              {/* Close button */}
               <Pressable
                 onPress={onClose}
-                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                hitSlop={HitSlop.md}
                 style={({ pressed }) => [
-                  styles.closeBtn,
-                  {
-                    backgroundColor: isDark ? colors.surfaceVariant : colors.background,
-                    opacity: pressed ? 0.6 : 1,
-                  },
+                  styles.close,
+                  { backgroundColor: colors.surfaceVariant, opacity: pressed ? 0.6 : 1 },
                 ]}
-                android_ripple={{ color: colors.textSecondary + '33', radius: 20, borderless: true }}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
               >
-                <Ionicons name="close" size={18} color={colors.textSecondary} />
+                <Ionicons name="close" size={17} color={colors.textSecondary} />
               </Pressable>
             </View>
 
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-              {subtitle ?? "Write a short note about today's log \u2014 what did you do, how did it go?"}
+              {subtitle ??
+                'A line about how it went. Future you will be glad it is here.'}
             </Text>
 
             {/* Note input */}
-            <View style={[styles.inputWrapper, { backgroundColor: colors.background, borderColor: Colors.primary }]}>
+            <View
+              style={[
+                styles.inputWrapper,
+                {
+                  backgroundColor: colors.surfaceSunken,
+                  borderColor: colors.border,
+                },
+              ]}
+            >
               <TextInput
+                ref={inputRef}
                 style={[styles.input, { color: colors.textPrimary }]}
-                placeholder="e.g., Read 15 pages of Clean Code"
-                placeholderTextColor={Colors.textDisabled}
+                placeholder="e.g. Read 15 pages of Clean Code"
+                placeholderTextColor={colors.textDisabled}
                 value={note}
                 onChangeText={setNote}
                 multiline
-                maxLength={280}
-                selectionColor={Colors.primary}
+                maxLength={MAX_LENGTH}
+                selectionColor={colors.primary}
                 textAlignVertical="top"
+                accessibilityLabel="Note text"
               />
             </View>
 
-            {/* Character count */}
-            <Text style={[styles.charCount, { color: note.length > 250 ? Colors.warning : colors.textSecondary }]}>
-              {note.length}/280
-            </Text>
+            <View style={styles.metaRow}>
+              {noteRequired && trimmed.length === 0 ? (
+                <Text style={[styles.requiredHint, { color: colors.textTertiary }]}>
+                  A note is required for this habit
+                </Text>
+              ) : (
+                <View style={{ flex: 1 }} />
+              )}
+              <Text style={[styles.charCount, { color: countColor }]}>
+                {note.length}/{MAX_LENGTH}
+              </Text>
+            </View>
 
             {/* Actions */}
             <View style={styles.actions}>
-              <TouchableOpacity
-                style={[styles.btnCancel, { backgroundColor: colors.surfaceVariant }]}
+              <PressableScale
                 onPress={onClose}
-                activeOpacity={0.7}
+                scaleTo={0.96}
+                style={[styles.btnCancel, { backgroundColor: colors.surfaceVariant }]}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel"
               >
-                <Text style={[styles.btnCancelText, { color: colors.textSecondary }]}>Cancel</Text>
-              </TouchableOpacity>
+                <Text style={[styles.btnCancelText, { color: colors.textSecondary }]}>
+                  Cancel
+                </Text>
+              </PressableScale>
 
-              <TouchableOpacity
-                style={[styles.btnSubmit, !canSubmit && styles.btnSubmitDisabled]}
+              <PressableScale
                 onPress={handleSubmit}
                 disabled={!canSubmit}
-                activeOpacity={0.8}
+                haptic={false}
+                scaleTo={0.97}
+                style={[
+                  styles.btnSubmit,
+                  canSubmit
+                    ? { backgroundColor: colors.primary }
+                    : { backgroundColor: colors.surfaceVariant },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={submitLabel ?? 'Log and save note'}
+                accessibilityState={{ disabled: !canSubmit }}
               >
-                <FontAwesome5 name="check" size={14} color="#FFFFFF" style={styles.submitIcon} />
-                <Text style={styles.btnSubmitText}>{submitLabel ?? 'Log & Save Note'}</Text>
-              </TouchableOpacity>
+                <FontAwesome5
+                  name="check"
+                  size={13}
+                  color={canSubmit ? colors.onPrimary : colors.textDisabled}
+                />
+                <Text
+                  style={[
+                    styles.btnSubmitText,
+                    { color: canSubmit ? colors.onPrimary : colors.textDisabled },
+                  ]}
+                >
+                  {submitLabel ?? 'Log & save'}
+                </Text>
+              </PressableScale>
             </View>
           </Animated.View>
         </View>
@@ -173,45 +264,39 @@ export const NoteInputModal: React.FC<NoteInputModalProps> = ({
 const styles = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.55)',
   },
-  kavWrapper: {
+  kav: {
     flex: 1,
     justifyContent: 'flex-end',
   },
   kavInner: {
-    justifyContent: 'flex-end',
     flex: 1,
+    justifyContent: 'flex-end',
   },
   sheet: {
-    borderTopLeftRadius: BorderRadius.xl,
-    borderTopRightRadius: BorderRadius.xl,
+    borderTopLeftRadius: BorderRadius.xxl,
+    borderTopRightRadius: BorderRadius.xxl,
+    borderBottomWidth: 0,
     paddingTop: Spacing.sm,
     paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.lg,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -6 },
-    shadowOpacity: 0.18,
-    shadowRadius: 24,
-    elevation: 20,
   },
-  handleBar: {
-    width: 40,
+  handle: {
+    width: 38,
     height: 4,
     borderRadius: 2,
     alignSelf: 'center',
-    marginBottom: Spacing.md,
     marginTop: Spacing.xs,
+    marginBottom: Spacing.md + 2,
   },
-  headerRow: {
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: Spacing.sm + 2,
     marginBottom: Spacing.sm,
-    gap: Spacing.sm,
   },
   iconWrap: {
-    width: 40,
-    height: 40,
+    width: 38,
+    height: 38,
     borderRadius: BorderRadius.md,
     alignItems: 'center',
     justifyContent: 'center',
@@ -220,14 +305,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   title: {
-    ...Typography.headlineLarge,
+    ...Typography.headlineMedium,
   },
-  activityLabel: {
-    ...Typography.labelMedium,
-    fontWeight: '600',
+  activity: {
+    ...Typography.caption,
     marginTop: 2,
   },
-  closeBtn: {
+  close: {
     width: 34,
     height: 34,
     borderRadius: BorderRadius.full,
@@ -236,35 +320,42 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     ...Typography.bodyMedium,
-    lineHeight: 20,
     marginBottom: Spacing.md,
   },
   inputWrapper: {
-    borderRadius: BorderRadius.lg,
-    borderWidth: 1.5,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    marginBottom: Spacing.xs,
-    minHeight: 110,
+    borderRadius: BorderRadius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: Spacing.md - 2,
+    paddingVertical: Spacing.sm + 2,
+    minHeight: 112,
   },
   input: {
     ...Typography.bodyLarge,
-    lineHeight: 22,
-    minHeight: 90,
+    minHeight: 88,
+    padding: 0,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.md + 2,
+  },
+  requiredHint: {
+    ...Typography.caption,
+    flex: 1,
   },
   charCount: {
-    ...Typography.bodySmall,
-    textAlign: 'right',
-    marginBottom: Spacing.lg,
+    ...Typography.caption,
+    fontVariant: ['tabular-nums'],
   },
   actions: {
     flexDirection: 'row',
-    gap: Spacing.sm,
+    gap: Spacing.sm + 2,
   },
   btnCancel: {
     flex: 1,
-    paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.lg,
+    paddingVertical: Spacing.md - 2,
+    borderRadius: BorderRadius.full,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -275,22 +366,14 @@ const styles = StyleSheet.create({
   btnSubmit: {
     flex: 2,
     flexDirection: 'row',
-    backgroundColor: Colors.primary,
-    paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.lg,
+    paddingVertical: Spacing.md - 2,
+    borderRadius: BorderRadius.full,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: Spacing.xs,
-  },
-  btnSubmitDisabled: {
-    backgroundColor: Colors.textDisabled,
-  },
-  submitIcon: {
-    marginRight: 4,
+    gap: Spacing.sm,
   },
   btnSubmitText: {
     ...Typography.labelLarge,
-    color: '#FFFFFF',
     fontWeight: '700',
   },
 });

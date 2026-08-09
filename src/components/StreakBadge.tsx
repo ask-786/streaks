@@ -1,9 +1,7 @@
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
-import { Text } from 'react-native-paper';
-import { Colors, Spacing, Typography, BorderRadius } from '../constants';
-import { FontAwesome5 } from '@expo/vector-icons';
+import { StyleProp, ViewStyle } from 'react-native';
 import { useTheme } from '../hooks/useTheme';
+import { StatTile } from './ui';
 
 interface StreakBadgeProps {
   label: string;
@@ -11,45 +9,41 @@ interface StreakBadgeProps {
   icon?: string;
   accent?: string;
   accentLight?: string;
+  unit?: string;
+  caption?: string;
+  delay?: number;
+  style?: StyleProp<ViewStyle>;
 }
 
+/**
+ * StreakBadge — kept as a named concept because streaks are the app's headline
+ * metric, but it now renders through the shared StatTile so it matches every
+ * other number on screen.
+ */
 export const StreakBadge: React.FC<StreakBadgeProps> = ({
   label,
   count,
   icon = 'fire',
-  accent = Colors.primary,
-  accentLight = Colors.primaryContainer,
+  accent,
+  accentLight,
+  unit,
+  caption,
+  delay = 0,
+  style,
 }) => {
   const { colors } = useTheme();
 
   return (
-    <View style={[styles.card, { backgroundColor: accentLight }]}>
-      <FontAwesome5 name={icon} size={28} color={accent} style={styles.icon} />
-      <Text style={[styles.count, { color: accent }]}>{count}</Text>
-      <Text style={[styles.label, { color: colors.textSecondary }]}>{label}</Text>
-    </View>
+    <StatTile
+      label={label}
+      value={count}
+      unit={unit}
+      icon={icon}
+      accent={accent ?? colors.primary}
+      accentMuted={accentLight}
+      caption={caption}
+      delay={delay}
+      style={style}
+    />
   );
 };
-
-const styles = StyleSheet.create({
-  card: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: BorderRadius.lg,
-    paddingVertical: Spacing.lg,
-    paddingHorizontal: Spacing.md,
-  },
-  icon: {
-    marginBottom: Spacing.xs,
-  },
-  count: {
-    ...Typography.displayMedium,
-    lineHeight: 36,
-  },
-  label: {
-    ...Typography.bodySmall,
-    marginTop: Spacing.xs,
-    textAlign: 'center',
-  },
-});

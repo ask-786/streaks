@@ -3,22 +3,30 @@ import Constants from 'expo-constants';
 import {
   View,
   StyleSheet,
-  TouchableOpacity,
+  Pressable,
   Alert,
   ActivityIndicator,
   ScrollView,
   Switch,
-  Platform,
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
-import { useTheme } from '../hooks/useTheme';
+import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
+import { useTheme, ThemePreference } from '../hooks/useTheme';
 import { useAttendanceStore } from '../store/attendanceStore';
-import { Colors, Typography, Spacing, BorderRadius } from '../constants';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import {
+  Typography,
+  Spacing,
+  BorderRadius,
+  ScreenPadding,
+  HitSlop,
+  alpha,
+} from '../constants';
+import { haptics } from '../utils/haptics';
+import { Card, SegmentedControl } from '../components/ui';
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
@@ -26,70 +34,111 @@ interface SectionProps {
   title: string;
   children: React.ReactNode;
   delay?: number;
-  colors: any;
 }
 
-const Section: React.FC<SectionProps> = ({ title, children, delay = 0, colors }) => (
-  <Animated.View entering={FadeInDown.delay(delay).springify()}>
-    <View style={[styles.section, { backgroundColor: colors.surface }]}>
-      <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>{title}</Text>
-      {children}
-    </View>
-  </Animated.View>
-);
+const Section: React.FC<SectionProps> = ({ title, children, delay = 0 }) => {
+  const { colors } = useTheme();
+  return (
+    <Animated.View entering={FadeInDown.delay(delay).springify()} style={styles.section}>
+      <Text style={[styles.sectionTitle, { color: colors.textTertiary }]}>{title}</Text>
+      <Card elevation="low" padding={0}>
+        {children}
+      </Card>
+    </Animated.View>
+  );
+};
 
 interface RowProps {
   icon: string;
   iconLib?: 'ionicons' | 'fa5';
   label: string;
   sublabel?: string;
-  colors: any;
   right?: React.ReactNode;
   onPress?: () => void;
-  isFirst?: boolean;
   isLast?: boolean;
   danger?: boolean;
+  tint?: string;
 }
 
 const Row: React.FC<RowProps> = ({
-  icon, iconLib = 'ionicons', label, sublabel, colors, right, onPress, isFirst, isLast, danger,
+  icon,
+  iconLib = 'ionicons',
+  label,
+  sublabel,
+  right,
+  onPress,
+  isLast,
+  danger,
+  tint,
 }) => {
+  const { colors } = useTheme();
   const IconComp = iconLib === 'fa5' ? FontAwesome5 : Ionicons;
-  const labelColor = danger ? Colors.error : colors.textPrimary;
-  const iconColor = danger ? Colors.error : Colors.primary;
+  const accent = danger ? colors.danger : (tint ?? colors.primary);
+  const labelColor = danger ? colors.danger : colors.textPrimary;
 
-  return (
-    <TouchableOpacity
-      onPress={onPress}
-      activeOpacity={onPress ? 0.65 : 1}
+  const content = (
+    <View
       style={[
         styles.row,
-        isFirst && styles.rowFirst,
-        isLast && styles.rowLast,
-        { borderBottomColor: colors.surfaceVariant },
-        isLast && { borderBottomWidth: 0 },
+        !isLast && {
+          borderBottomWidth: StyleSheet.hairlineWidth,
+          borderBottomColor: colors.divider,
+        },
       ]}
     >
-      <View style={[styles.rowIconWrap, { backgroundColor: danger ? Colors.errorLight : colors.primaryContainer ?? Colors.primaryContainer }]}>
-        <IconComp name={icon as any} size={16} color={iconColor} />
+      <View style={[styles.rowIcon, { backgroundColor: alpha(accent, 0.12) }]}>
+        <IconComp name={icon as any} size={15} color={accent} />
       </View>
-      <View style={styles.rowTextWrap}>
+      <View style={styles.rowText}>
         <Text style={[styles.rowLabel, { color: labelColor }]}>{label}</Text>
-        {sublabel ? <Text style={[styles.rowSublabel, { color: colors.textSecondary }]}>{sublabel}</Text> : null}
+        {sublabel ? (
+          <Text style={[styles.rowSublabel, { color: colors.textTertiary }]}>{sublabel}</Text>
+        ) : null}
       </View>
-      {right ?? (onPress && !right ? (
-        <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
-      ) : null)}
-    </TouchableOpacity>
+      {right ??
+        (onPress ? (
+          <Ionicons name="chevron-forward" size={16} color={colors.textDisabled} />
+        ) : null)}
+    </View>
+  );
+
+  if (!onPress) return content;
+
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={HitSlop.sm}
+      android_ripple={{ color: alpha(colors.primary, 0.1) }}
+      style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+      accessibilityRole="button"
+      accessibilityLabel={sublabel ? `${label}. ${sublabel}` : label}
+    >
+      {content}
+    </Pressable>
   );
 };
 
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 
 export const SettingsScreen: React.FC = () => {
-  const { colors, isDark, toggleTheme } = useTheme();
-  const { exportData, importData, activities, isConfettiEnabled, setConfettiEnabled, isHideExtraDaysEnabled, setHideExtraDaysEnabled } = useAttendanceStore();
+  const { colors, isDark, preference, setPreference } = useTheme();
+  const {
+    exportData,
+    importData,
+    activities,
+    isConfettiEnabled,
+    setConfettiEnabled,
+    isHideExtraDaysEnabled,
+    setHideExtraDaysEnabled,
+  } = useAttendanceStore();
   const [isProcessing, setIsProcessing] = useState(false);
+
+  const switchProps = (value: boolean) => ({
+    value,
+    trackColor: { false: colors.surfaceVariant, true: alpha(colors.primary, 0.55) },
+    thumbColor: value ? colors.primary : colors.surface,
+    ios_backgroundColor: colors.surfaceVariant,
+  });
 
   const handleExport = async () => {
     try {
@@ -160,110 +209,109 @@ export const SettingsScreen: React.FC = () => {
     }
   };
 
+  const totalLogged = activities.length;
+
   return (
-    <View style={[styles.screenWrapper, { backgroundColor: colors.background }]}>
+    <View style={[styles.screen, { backgroundColor: colors.background }]}>
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
         {/* Page header */}
-        <Animated.View entering={FadeInDown.delay(0).springify()}>
-          <View style={styles.pageHeader}>
-            <Text style={[styles.pageTitle, { color: colors.textPrimary }]}>Settings</Text>
-            <Text style={[styles.pageSubtitle, { color: colors.textSecondary }]}>
-              Customize your experience
-            </Text>
-          </View>
+        <Animated.View entering={FadeInDown.springify()} style={styles.header}>
+          <Text style={[styles.eyebrow, { color: colors.textTertiary }]}>Preferences</Text>
+          <Text style={[styles.title, { color: colors.textPrimary }]}>Settings</Text>
+          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+            {totalLogged} habit{totalLogged === 1 ? '' : 's'} tracked on this device
+          </Text>
         </Animated.View>
 
-        {/* Appearance */}
-        <Section title="APPEARANCE" delay={60} colors={colors}>
-          <Row
-            icon={isDark ? 'sunny' : 'moon'}
-            label="Dark Mode"
-            sublabel={isDark ? 'Currently using dark theme' : 'Currently using light theme'}
-            colors={colors}
-            isFirst
-            right={
-              <Switch
-                value={isDark}
-                onValueChange={toggleTheme}
-                trackColor={{ false: colors.surfaceVariant, true: Colors.primary + 'AA' }}
-                thumbColor={isDark ? Colors.primary : colors.textSecondary}
-                ios_backgroundColor={colors.surfaceVariant}
-              />
-            }
-          />
+        {/* Theme — a three-way choice, so the app can follow the OS */}
+        <Animated.View entering={FadeInDown.delay(50).springify()} style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.textTertiary }]}>Appearance</Text>
+          <Card elevation="low">
+            <SegmentedControl<ThemePreference>
+              value={preference}
+              onChange={setPreference}
+              options={[
+                { value: 'light', label: 'Light', icon: 'sun' },
+                { value: 'dark', label: 'Dark', icon: 'moon' },
+                { value: 'system', label: 'Auto', icon: 'mobile-alt' },
+              ]}
+            />
+            <Text style={[styles.themeHint, { color: colors.textTertiary }]}>
+              {preference === 'system'
+                ? `Following your device — currently ${isDark ? 'dark' : 'light'}.`
+                : `Always ${preference}, whatever your device is set to.`}
+            </Text>
+          </Card>
+        </Animated.View>
+
+        {/* Behaviour */}
+        <Section title="Behaviour" delay={110}>
           <Row
             icon="sparkles"
-            iconLib="ionicons"
-            label="Confetti Effect"
-            sublabel="Show confetti when logging a habit"
-            colors={colors}
+            label="Confetti"
+            sublabel="Celebrate each day you log"
+            tint={colors.accent}
             right={
               <Switch
-                value={isConfettiEnabled}
-                onValueChange={setConfettiEnabled}
-                trackColor={{ false: colors.surfaceVariant, true: Colors.primary + 'AA' }}
-                thumbColor={isConfettiEnabled ? Colors.primary : colors.textSecondary}
-                ios_backgroundColor={colors.surfaceVariant}
+                {...switchProps(isConfettiEnabled)}
+                onValueChange={v => {
+                  haptics.light();
+                  setConfettiEnabled(v);
+                }}
               />
             }
           />
           <Row
             icon="calendar-outline"
-            iconLib="ionicons"
-            label="Hide Extra Days"
-            sublabel="Only show dates of the current month in calendar"
-            colors={colors}
+            label="Hide adjacent days"
+            sublabel="Show only the current month in the calendar"
             isLast
             right={
               <Switch
-                value={isHideExtraDaysEnabled}
-                onValueChange={setHideExtraDaysEnabled}
-                trackColor={{ false: colors.surfaceVariant, true: Colors.primary + 'AA' }}
-                thumbColor={isHideExtraDaysEnabled ? Colors.primary : colors.textSecondary}
-                ios_backgroundColor={colors.surfaceVariant}
+                {...switchProps(isHideExtraDaysEnabled)}
+                onValueChange={v => {
+                  haptics.light();
+                  setHideExtraDaysEnabled(v);
+                }}
               />
             }
           />
         </Section>
 
         {/* Data Management */}
-        <Section title="DATA MANAGEMENT" delay={120} colors={colors}>
+        <Section title="Your data" delay={170}>
           <Row
             icon="cloud-upload-outline"
-            label="Export Data"
-            sublabel="Share a backup of your habits & logs"
-            colors={colors}
+            label="Export backup"
+            sublabel="Save your habits and logs to a file"
+            tint={colors.success}
             onPress={isProcessing ? undefined : handleExport}
-            isFirst
           />
           <Row
             icon="cloud-download-outline"
-            label="Import Data"
-            sublabel="Restore from a backup file"
-            colors={colors}
+            label="Import backup"
+            sublabel="Replace everything with a saved file"
+            tint={colors.warning}
             onPress={isProcessing ? undefined : handleImport}
             isLast
           />
         </Section>
 
         {/* About */}
-        <Section title="ABOUT" delay={180} colors={colors}>
+        <Section title="About" delay={230}>
           <Row
             icon="flame"
-            iconLib="ionicons"
-            label="Streak Counter"
+            label="Streaks"
             sublabel={`Version ${Constants.expoConfig?.version ?? '—'}`}
-            colors={colors}
-            isFirst
           />
           <Row
-            icon="heart-outline"
-            label="Made with love"
-            sublabel="Track your habits & build consistency"
-            colors={colors}
+            icon="lock-closed-outline"
+            label="Stays on your device"
+            sublabel="No account, no sync, no analytics"
+            tint={colors.success}
             isLast
           />
         </Section>
@@ -271,109 +319,94 @@ export const SettingsScreen: React.FC = () => {
 
       {/* Loading overlay */}
       {isProcessing && (
-        <View style={styles.loadingOverlay}>
-          <View style={[styles.loadingCard, { backgroundColor: colors.surface }]}>
-            <ActivityIndicator size="large" color={Colors.primary} />
-            <Text style={[styles.loadingText, { color: colors.textPrimary }]}>Processing…</Text>
-          </View>
-        </View>
+        <Animated.View
+          entering={FadeIn.duration(140)}
+          style={[styles.overlay, { backgroundColor: colors.scrim }]}
+        >
+          <Card elevation="high" padding={Spacing.xl} style={styles.loadingCard}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={[styles.loadingText, { color: colors.textPrimary }]}>
+              Working on it…
+            </Text>
+          </Card>
+        </Animated.View>
       )}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  screenWrapper: {
+  screen: {
     flex: 1,
   },
-  scrollContent: {
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.xl,
-    paddingBottom: Spacing.xxl,
+  content: {
+    paddingHorizontal: ScreenPadding,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.xxxl,
   },
-  pageHeader: {
-    marginBottom: Spacing.xl,
-  },
-  pageTitle: {
-    fontSize: 30,
-    fontWeight: '800',
-    letterSpacing: -0.5,
-  },
-  pageSubtitle: {
-    ...Typography.bodyMedium,
-    marginTop: Spacing.xs,
-  },
-  // Section
-  section: {
-    borderRadius: BorderRadius.xl,
+  header: {
     marginBottom: Spacing.lg,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    elevation: 3,
+  },
+  eyebrow: {
+    ...Typography.overline,
+    marginBottom: 6,
+  },
+  title: {
+    ...Typography.displayMedium,
+  },
+  subtitle: {
+    ...Typography.bodyMedium,
+    marginTop: 4,
+  },
+  section: {
+    marginBottom: Spacing.lg,
   },
   sectionTitle: {
-    ...Typography.labelMedium,
-    letterSpacing: 1,
-    paddingHorizontal: Spacing.md,
-    paddingTop: Spacing.md,
-    paddingBottom: Spacing.xs,
+    ...Typography.overline,
+    marginBottom: Spacing.sm,
+    marginLeft: 2,
   },
-  // Row
+  themeHint: {
+    ...Typography.caption,
+    marginTop: Spacing.sm + 2,
+    textAlign: 'center',
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: Spacing.md - 2,
     paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingVertical: Spacing.md - 2,
+    minHeight: 62,
   },
-  rowFirst: {
-    // no extra needed; borderBottom separates from next row
-  },
-  rowLast: {
-    borderBottomWidth: 0,
-  },
-  rowIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: BorderRadius.md,
+  rowIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: BorderRadius.xs,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: Spacing.md,
   },
-  rowTextWrap: {
+  rowText: {
     flex: 1,
   },
   rowLabel: {
-    ...Typography.bodyLarge,
-    fontWeight: '600',
+    ...Typography.titleLarge,
   },
   rowSublabel: {
-    ...Typography.bodySmall,
+    ...Typography.caption,
     marginTop: 2,
   },
-  // Loading
-  loadingOverlay: {
+  overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.35)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   loadingCard: {
-    padding: Spacing.xl,
-    borderRadius: BorderRadius.xl,
     alignItems: 'center',
     gap: Spacing.md,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.2,
-    shadowRadius: 16,
-    elevation: 12,
+    minWidth: 180,
   },
   loadingText: {
-    ...Typography.bodyMedium,
-    fontWeight: '600',
+    ...Typography.titleMedium,
   },
 });
