@@ -1,8 +1,10 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Text } from 'react-native-paper';
-import { Colors, Spacing, Typography, BorderRadius } from '../constants';
+import { FontAwesome5 } from '@expo/vector-icons';
+import { Spacing, Typography, BorderRadius, alpha } from '../constants';
 import { useTheme } from '../hooks/useTheme';
+import { Card, ProgressBar } from './ui';
 
 interface MonthlyProgressProps {
   loggedDays: number;
@@ -10,68 +12,78 @@ interface MonthlyProgressProps {
 }
 
 /**
- * MonthlyProgress — Animated progress bar showing logged / total days this month.
+ * MonthlyProgress — consistency for the current month.
+ *
+ * The percentage is the headline now rather than a footnote under the bar, and
+ * it is colour-coded so a glance tells you whether the month is going well.
  */
 export const MonthlyProgress: React.FC<MonthlyProgressProps> = ({
   loggedDays,
   totalDays,
 }) => {
   const { colors } = useTheme();
-  const percentage = totalDays > 0 ? Math.min(loggedDays / totalDays, 1) : 0;
-  const percentDisplay = Math.round(percentage * 100);
+  const ratio = totalDays > 0 ? Math.min(loggedDays / totalDays, 1) : 0;
+  const percent = Math.round(ratio * 100);
+
+  // Three bands: struggling, holding, strong.
+  const tint =
+    percent >= 80 ? colors.success : percent >= 50 ? colors.primary : colors.warning;
+  const verdict =
+    percent >= 80 ? 'Excellent consistency' : percent >= 50 ? 'Holding steady' : 'Room to grow';
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.surface }]}>
+    <Card elevation="low">
       <View style={styles.header}>
-        <Text style={[styles.label, { color: colors.textPrimary }]}>Monthly Progress</Text>
-        <Text style={[styles.fraction, { color: colors.textSecondary }]}>
-          {loggedDays}/{totalDays} days
-        </Text>
+        <View style={[styles.iconChip, { backgroundColor: alpha(tint, 0.12) }]}>
+          <FontAwesome5 name="chart-line" size={13} color={tint} />
+        </View>
+        <View style={styles.headerText}>
+          <Text style={[styles.label, { color: colors.textTertiary }]}>This Month</Text>
+          <Text style={[styles.verdict, { color: colors.textPrimary }]}>{verdict}</Text>
+        </View>
+        <Text style={[styles.percent, { color: tint }]}>{percent}%</Text>
       </View>
-      <View style={[styles.track, { backgroundColor: colors.primaryContainer }]}>
-        <View style={[styles.fill, { width: `${percentDisplay}%` }]} />
-      </View>
-      <Text style={styles.percentage}>{percentDisplay}%</Text>
-    </View>
+
+      <ProgressBar value={ratio} color={tint} height={10} style={styles.bar} />
+
+      <Text style={[styles.fraction, { color: colors.textTertiary }]}>
+        {loggedDays} of {totalDays} day{totalDays === 1 ? '' : 's'} logged so far
+      </Text>
+    </Card>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.md,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
-  },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: Spacing.sm,
+    gap: Spacing.sm + 2,
+  },
+  iconChip: {
+    width: 30,
+    height: 30,
+    borderRadius: BorderRadius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerText: {
+    flex: 1,
   },
   label: {
+    ...Typography.overline,
+  },
+  verdict: {
     ...Typography.titleMedium,
+    marginTop: 2,
+  },
+  percent: {
+    ...Typography.numeralMedium,
+  },
+  bar: {
+    marginTop: Spacing.md,
   },
   fraction: {
-    ...Typography.bodySmall,
-  },
-  track: {
-    height: 10,
-    borderRadius: BorderRadius.full,
-    overflow: 'hidden',
-  },
-  fill: {
-    height: '100%',
-    backgroundColor: Colors.primary,
-    borderRadius: BorderRadius.full,
-  },
-  percentage: {
-    ...Typography.labelMedium,
-    color: Colors.primary,
-    marginTop: Spacing.xs,
-    textAlign: 'right',
+    ...Typography.caption,
+    marginTop: Spacing.sm,
   },
 });

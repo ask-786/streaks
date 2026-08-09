@@ -4,13 +4,14 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  Modal,
-  KeyboardAvoidingView,
+  Keyboard,
   Platform,
   Pressable,
   Switch,
   ScrollView,
+  BackHandler,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from 'react-native-paper';
 import Animated, {
   FadeIn,
@@ -21,7 +22,7 @@ import Animated, {
   withTiming,
   useSharedValue,
 } from 'react-native-reanimated';
-import { Colors, Typography, Spacing, BorderRadius } from '../constants';
+import { Typography, Spacing, BorderRadius, HitSlop, alpha } from '../constants';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 import { TaskSequenceEditor } from './TaskSequenceEditor';
@@ -74,6 +75,8 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
   onSave,
 }) => {
   const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
+
   const [name, setName] = useState('');
   const [requiresNote, setRequiresNote] = useState(false);
   const [weeklyModeEnabled, setWeeklyModeEnabled] = useState(false);
@@ -84,7 +87,7 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
   const [activityType, setActivityType] = useState<'goal' | 'endless'>('endless');
   const [streakGoal, setStreakGoal] = useState(30);
   const [streakGoalText, setStreakGoalText] = useState('30');
-  
+
   const [timeBoundEnabled, setTimeBoundEnabled] = useState(false);
   const [timeBoundType, setTimeBoundType] = useState<'before' | 'after' | 'between'>('before');
   const [timeBoundStartTime, setTimeBoundStartTime] = useState('');
@@ -136,15 +139,15 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
       const sg = initialStreakGoal && initialStreakGoal > 0 ? initialStreakGoal : 30;
       setStreakGoal(sg);
       setStreakGoalText(sg.toString());
-      
+
       const hasTimeBound = !!initialTimeBoundType;
       setTimeBoundEnabled(hasTimeBound);
       setTimeBoundType(initialTimeBoundType ?? 'before');
-      
+
       const start12 = to12h(initialTimeBoundStartTime ?? '');
       setTimeBoundStartTime(start12.time);
       setStartAmPm(start12.ampm);
-      
+
       const end12 = to12h(initialTimeBoundEndTime ?? '');
       setTimeBoundEndTime(end12.time);
       setEndAmPm(end12.ampm);
@@ -178,6 +181,47 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
     timeBoundOpacity.value = withTiming(val ? 1 : 0, { duration: 250 });
   };
 
+  /**
+   * Keyboard lift, measured rather than derived from view frames.
+   *
+   * KeyboardAvoidingView cannot work here. It computes the lift as
+   * `frame.y + frame.height - keyboardFrame.screenY`, but on Android
+   * `keyboardDidHide` reports `screenY` as the *visible* area height — system
+   * bars excluded — while this overlay's frame spans the full screen edge to
+   * edge. Subtracting one from the other leaves a positive remainder instead of
+   * zero once the keyboard closes, and that remainder is a permanent gap under
+   * the sheet. (With `behavior="height"` it also accumulates, since that branch
+   * adds the previous value back in.) It never showed before because nothing
+   * focused an input on open, so the keyboard never appeared to begin with.
+   *
+   * `endCoordinates.height` is just the keyboard's height, with no frame to
+   * disagree with. On Android it excludes the navigation bar, which this overlay
+   * does cover, so that inset is added back to land flush on the keyboard.
+   */
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  useEffect(() => {
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const show = Keyboard.addListener(showEvt, e =>
+      setKeyboardHeight(e.endCoordinates.height),
+    );
+    const hide = Keyboard.addListener(hideEvt, () => setKeyboardHeight(0));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+
+  // Hardware back — previously handled by Modal.onRequestClose.
+  useEffect(() => {
+    if (!visible) return;
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      onClose();
+      return true;
+    });
+    return () => backHandler.remove();
+  }, [visible, onClose]);
+
   const handleSave = () => {
     if (!name.trim()) return;
     if (activityType === 'goal' && (!streakGoal || streakGoal < 1)) return;
@@ -196,7 +240,7 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
   };
 
   const isEditing = !!editingItemId;
-  
+
   const isTimeOrderValid = !timeBoundEnabled || timeBoundType !== 'between' || (
     isValidTime12h(timeBoundStartTime) && isValidTime12h(timeBoundEndTime) &&
     to24h(timeBoundStartTime, startAmPm) < to24h(timeBoundEndTime, endAmPm)
@@ -207,34 +251,49 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
       ? isValidTime12h(timeBoundStartTime) && isValidTime12h(timeBoundEndTime) && isTimeOrderValid
       : isValidTime12h(timeBoundStartTime)
   );
-  
+
   const isStreakGoalValid = activityType !== 'goal' || (streakGoal >= 1);
   const canSave = name.trim().length > 0 && isTimeValid && isStreakGoalValid;
 
-  const timeOrderInvalid = timeBoundEnabled && timeBoundType === 'between' && 
-    isValidTime12h(timeBoundStartTime) && isValidTime12h(timeBoundEndTime) && 
+  const timeOrderInvalid = timeBoundEnabled && timeBoundType === 'between' &&
+    isValidTime12h(timeBoundStartTime) && isValidTime12h(timeBoundEndTime) &&
     to24h(timeBoundStartTime, startAmPm) >= to24h(timeBoundEndTime, endAmPm);
 
   const startInvalid = (timeBoundEnabled && timeBoundStartTime.length > 0 && !isValidTime12h(timeBoundStartTime)) || timeOrderInvalid;
   const endInvalid = (timeBoundEnabled && timeBoundType === 'between' && timeBoundEndTime.length > 0 && !isValidTime12h(timeBoundEndTime)) || timeOrderInvalid;
 
+  if (!visible) return null;
+
   return (
-    <Modal
-      visible={visible}
-      transparent={true}
-      animationType="none"
-      onRequestClose={onClose}
-      statusBarTranslucent
+    /**
+     * An in-tree overlay rather than a Modal.
+     *
+     * A Modal is its own Android Dialog window, and a Dialog will not extend
+     * under the navigation bar — so the sheet and its scrim both stopped short
+     * and left a live, undimmed strip of the screen behind showing through.
+     * The screen underneath is edge-to-edge, so an absoluteFill here covers the
+     * whole display. Same mechanism as NoteInputModal and LogDetailsModal.
+     */
+    <View
+      style={[StyleSheet.absoluteFill, { zIndex: 9999, elevation: 9999 }]}
+      pointerEvents="box-none"
     >
       {/* Backdrop */}
-      <Animated.View entering={FadeIn.duration(120)} style={styles.backdrop}>
+      <Animated.View entering={FadeIn.duration(120)} style={[styles.backdrop, { backgroundColor: colors.scrim }]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
       </Animated.View>
 
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.kavWrapper}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}
+      <View
+        style={[
+          styles.kavWrapper,
+          {
+            paddingBottom:
+              keyboardHeight > 0
+                ? keyboardHeight + (Platform.OS === 'android' ? insets.bottom : 0)
+                : 0,
+          },
+        ]}
+        pointerEvents="box-none"
       >
         <Animated.View
           entering={SlideInDown.duration(200).easing(Easing.out(Easing.cubic))}
@@ -262,23 +321,23 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
           </Text>
 
           {/* Input */}
-          <View style={[styles.inputWrapper, { backgroundColor: colors.background, borderColor: colors.surfaceVariant }]}>
+          <View style={[styles.inputWrapper, { backgroundColor: colors.background, borderColor: colors.border }]}>
             <TextInput
               ref={inputRef}
               style={[styles.input, { color: colors.textPrimary }]}
               placeholder="e.g., Read 10 pages"
-              placeholderTextColor={Colors.textDisabled}
+              placeholderTextColor={colors.textDisabled}
               value={name}
               onChangeText={setName}
               onSubmitEditing={handleSave}
               autoFocus
               maxLength={40}
               returnKeyType="done"
-              selectionColor={Colors.primary}
+              selectionColor={colors.primary}
             />
             {name.length > 0 && (
               <TouchableOpacity onPress={() => setName('')} style={styles.clearBtn} hitSlop={8}>
-                <FontAwesome5 name="times" size={14} color={Colors.textDisabled} />
+                <FontAwesome5 name="times" size={14} color={colors.textDisabled} />
               </TouchableOpacity>
             )}
           </View>
@@ -301,9 +360,9 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
                     styles.typeCard,
                     {
                       backgroundColor: activityType === 'goal'
-                        ? (isDark ? '#1E2A1E' : '#F0FDF4')
+                        ? colors.successMuted
                         : colors.background,
-                      borderColor: activityType === 'goal' ? Colors.success : colors.surfaceVariant,
+                      borderColor: activityType === 'goal' ? colors.success : colors.border,
                     },
                   ]}
                   onPress={() => setActivityType('goal')}
@@ -311,17 +370,17 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
                 >
                   <View style={[styles.typeIconWrap, {
                     backgroundColor: activityType === 'goal'
-                      ? (isDark ? '#1A3A1A' : Colors.successLight)
+                      ? colors.successMuted
                       : colors.surfaceVariant,
                   }]}>
                     <FontAwesome5
                       name="bullseye"
                       size={16}
-                      color={activityType === 'goal' ? Colors.success : colors.textSecondary}
+                      color={activityType === 'goal' ? colors.success : colors.textSecondary}
                     />
                   </View>
                   <Text style={[styles.typeCardTitle, {
-                    color: activityType === 'goal' ? Colors.success : colors.textPrimary,
+                    color: activityType === 'goal' ? colors.success : colors.textPrimary,
                   }]}>
                     Goal-Based
                   </Text>
@@ -329,7 +388,7 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
                     Completes when streak goal is hit
                   </Text>
                   {activityType === 'goal' && (
-                    <View style={[styles.typeCheckDot, { backgroundColor: Colors.success }]}>
+                    <View style={[styles.typeCheckDot, { backgroundColor: colors.success }]}>
                       <FontAwesome5 name="check" size={9} color="#fff" />
                     </View>
                   )}
@@ -341,9 +400,9 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
                     styles.typeCard,
                     {
                       backgroundColor: activityType === 'endless'
-                        ? (isDark ? Colors.dark?.primaryContainer ?? '#1E1B4B' : '#EEF2FF')
+                        ? colors.primarySubtle
                         : colors.background,
-                      borderColor: activityType === 'endless' ? Colors.primary : colors.surfaceVariant,
+                      borderColor: activityType === 'endless' ? colors.primary : colors.border,
                     },
                   ]}
                   onPress={() => setActivityType('endless')}
@@ -351,17 +410,17 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
                 >
                   <View style={[styles.typeIconWrap, {
                     backgroundColor: activityType === 'endless'
-                      ? (isDark ? Colors.dark?.primaryContainer ?? '#1E1B4B' : Colors.primaryContainer)
+                      ? colors.primaryMuted
                       : colors.surfaceVariant,
                   }]}>
                     <FontAwesome5
                       name="infinity"
                       size={14}
-                      color={activityType === 'endless' ? Colors.primary : colors.textSecondary}
+                      color={activityType === 'endless' ? colors.primary : colors.textSecondary}
                     />
                   </View>
                   <Text style={[styles.typeCardTitle, {
-                    color: activityType === 'endless' ? Colors.primary : colors.textPrimary,
+                    color: activityType === 'endless' ? colors.primary : colors.textPrimary,
                   }]}>
                     Endless
                   </Text>
@@ -369,7 +428,7 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
                     No target — track forever
                   </Text>
                   {activityType === 'endless' && (
-                    <View style={[styles.typeCheckDot, { backgroundColor: Colors.primary }]}>
+                    <View style={[styles.typeCheckDot, { backgroundColor: colors.primary }]}>
                       <FontAwesome5 name="check" size={9} color="#fff" />
                     </View>
                   )}
@@ -379,16 +438,16 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
               {/* Streak Goal input — only for goal-based */}
               {activityType === 'goal' && (
                 <View style={[styles.streakGoalRow, {
-                  backgroundColor: isDark ? '#1E2A1E' : '#F0FDF4',
-                  borderColor: Colors.success,
+                  backgroundColor: colors.successMuted,
+                  borderColor: colors.success,
                 }]}>
-                  <FontAwesome5 name="trophy" size={14} color={Colors.success} />
+                  <FontAwesome5 name="trophy" size={14} color={colors.success} />
                   <Text style={[styles.streakGoalLabel, { color: colors.textPrimary }]}>
                     Streak Goal
                   </Text>
                   <View style={[styles.streakGoalInputWrap, {
                     backgroundColor: colors.background,
-                    borderColor: colors.surfaceVariant,
+                    borderColor: colors.border,
                   }]}>
                     <TextInput
                       style={[styles.streakGoalInput, { color: colors.textPrimary }]}
@@ -414,19 +473,19 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
           {/* ── Weekly Goal Mode toggle ────────────────────────── */}
           <View style={[styles.toggleRow, {
             backgroundColor: weeklyModeEnabled
-              ? (isDark ? Colors.dark?.primaryContainer ?? '#1E1B4B' : '#EEF2FF')
+              ? colors.primarySubtle
               : colors.background,
-            borderColor: weeklyModeEnabled ? Colors.primary : colors.surfaceVariant,
+            borderColor: weeklyModeEnabled ? colors.primary : colors.border,
           }]}>
             <View style={[styles.toggleIconWrap, {
               backgroundColor: weeklyModeEnabled
-                ? (isDark ? Colors.dark?.primaryContainer ?? '#1E1B4B' : Colors.primaryContainer)
+                ? colors.primaryMuted
                 : colors.surfaceVariant,
             }]}>
               <FontAwesome5
                 name="calendar-check"
                 size={14}
-                color={weeklyModeEnabled ? Colors.primary : colors.textSecondary}
+                color={weeklyModeEnabled ? colors.primary : colors.textSecondary}
               />
             </View>
             <View style={styles.toggleTextWrap}>
@@ -442,14 +501,14 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
             <Switch
               value={weeklyModeEnabled}
               onValueChange={handleWeeklyToggle}
-              trackColor={{ false: colors.surfaceVariant, true: Colors.primaryContainer }}
-              thumbColor={weeklyModeEnabled ? Colors.primary : colors.textSecondary}
+              trackColor={{ false: colors.surfaceVariant, true: colors.primaryMuted }}
+              thumbColor={weeklyModeEnabled ? colors.primary : colors.textSecondary}
             />
           </View>
 
           {/* Goal picker — animates in/out */}
           <Animated.View style={pickerStyle}>
-            <View style={[styles.goalPicker, { backgroundColor: colors.background, borderColor: colors.surfaceVariant }]}>
+            <View style={[styles.goalPicker, { backgroundColor: colors.background, borderColor: colors.border }]}>
               <Text style={[styles.goalPickerLabel, { color: colors.textSecondary }]}>
                 Sessions per week
               </Text>
@@ -461,7 +520,7 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
                       styles.goalOption,
                       {
                         backgroundColor: weeklyGoal === n
-                          ? Colors.primary
+                          ? colors.primary
                           : colors.surfaceVariant,
                       },
                     ]}
@@ -481,12 +540,12 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
           </Animated.View>
 
           {/* Require note toggle */}
-          <View style={[styles.toggleRow, { backgroundColor: colors.background, borderColor: colors.surfaceVariant, marginBottom: Spacing.sm }]}>
-            <View style={[styles.toggleIconWrap, { backgroundColor: requiresNote ? (isDark ? Colors.dark?.primaryContainer ?? '#1E1B4B' : Colors.primaryContainer) : colors.surfaceVariant }]}>
+          <View style={[styles.toggleRow, { backgroundColor: colors.background, borderColor: colors.border, marginBottom: Spacing.sm }]}>
+            <View style={[styles.toggleIconWrap, { backgroundColor: requiresNote ? colors.primaryMuted : colors.surfaceVariant }]}>
               <FontAwesome5
                 name="sticky-note"
                 size={14}
-                color={requiresNote ? Colors.primary : colors.textSecondary}
+                color={requiresNote ? colors.primary : colors.textSecondary}
               />
             </View>
             <View style={styles.toggleTextWrap}>
@@ -500,28 +559,28 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
             <Switch
               value={requiresNote}
               onValueChange={setRequiresNote}
-              trackColor={{ false: colors.surfaceVariant, true: Colors.primaryContainer }}
-              thumbColor={requiresNote ? Colors.primary : colors.textSecondary}
+              trackColor={{ false: colors.surfaceVariant, true: colors.primaryMuted }}
+              thumbColor={requiresNote ? colors.primary : colors.textSecondary}
             />
           </View>
 
           {/* ── Task Sequence toggle ───────────────────────────────────────── */}
           <View style={[styles.toggleRow, {
             backgroundColor: taskSeqEnabled
-              ? (isDark ? Colors.dark?.primaryContainer ?? '#1E1B4B' : '#EEF2FF')
+              ? colors.primarySubtle
               : colors.background,
-            borderColor: taskSeqEnabled ? Colors.primary : colors.surfaceVariant,
+            borderColor: taskSeqEnabled ? colors.primary : colors.border,
             marginBottom: Spacing.sm,
           }]}>
             <View style={[styles.toggleIconWrap, {
               backgroundColor: taskSeqEnabled
-                ? (isDark ? Colors.dark?.primaryContainer ?? '#1E1B4B' : Colors.primaryContainer)
+                ? colors.primaryMuted
                 : colors.surfaceVariant,
             }]}>
               <FontAwesome5
                 name="list-ol"
                 size={13}
-                color={taskSeqEnabled ? Colors.primary : colors.textSecondary}
+                color={taskSeqEnabled ? colors.primary : colors.textSecondary}
               />
             </View>
             <View style={styles.toggleTextWrap}>
@@ -537,15 +596,15 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
             <Switch
               value={taskSeqEnabled}
               onValueChange={handleTaskSeqToggle}
-              trackColor={{ false: colors.surfaceVariant, true: Colors.primaryContainer }}
-              thumbColor={taskSeqEnabled ? Colors.primary : colors.textSecondary}
+              trackColor={{ false: colors.surfaceVariant, true: colors.primaryMuted }}
+              thumbColor={taskSeqEnabled ? colors.primary : colors.textSecondary}
             />
           </View>
 
           {/* Task sequence editor — animates open */}
           <Animated.View style={taskSeqStyle}>
             {/* Advancement mode picker */}
-            <View style={[styles.modePickerRow, { backgroundColor: colors.background, borderColor: colors.surfaceVariant }]}>
+            <View style={[styles.modePickerRow, { backgroundColor: colors.background, borderColor: colors.border }]}>
               <Text style={[styles.modePickerLabel, { color: colors.textSecondary }]}>Advance by</Text>
               <View style={styles.modePills}>
                 {(['calendar', 'log'] as const).map(mode => (
@@ -553,7 +612,7 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
                     key={mode}
                     style={[
                       styles.modePill,
-                      { backgroundColor: sequenceMode === mode ? Colors.primary : colors.surfaceVariant },
+                      { backgroundColor: sequenceMode === mode ? colors.primary : colors.surfaceVariant },
                     ]}
                     onPress={() => setSequenceMode(mode)}
                     activeOpacity={0.75}
@@ -587,20 +646,20 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
           {/* ── Time Bound toggle ───────────────────────────────────────── */}
           <View style={[styles.toggleRow, {
             backgroundColor: timeBoundEnabled
-              ? (isDark ? Colors.dark?.primaryContainer ?? '#1E1B4B' : '#EEF2FF')
+              ? colors.primarySubtle
               : colors.background,
-            borderColor: timeBoundEnabled ? Colors.primary : colors.surfaceVariant,
+            borderColor: timeBoundEnabled ? colors.primary : colors.border,
             marginBottom: Spacing.sm,
           }]}>
             <View style={[styles.toggleIconWrap, {
               backgroundColor: timeBoundEnabled
-                ? (isDark ? Colors.dark?.primaryContainer ?? '#1E1B4B' : Colors.primaryContainer)
+                ? colors.primaryMuted
                 : colors.surfaceVariant,
             }]}>
               <FontAwesome5
                 name="clock"
                 size={13}
-                color={timeBoundEnabled ? Colors.primary : colors.textSecondary}
+                color={timeBoundEnabled ? colors.primary : colors.textSecondary}
               />
             </View>
             <View style={styles.toggleTextWrap}>
@@ -616,14 +675,14 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
             <Switch
               value={timeBoundEnabled}
               onValueChange={handleTimeBoundToggle}
-              trackColor={{ false: colors.surfaceVariant, true: Colors.primaryContainer }}
-              thumbColor={timeBoundEnabled ? Colors.primary : colors.textSecondary}
+              trackColor={{ false: colors.surfaceVariant, true: colors.primaryMuted }}
+              thumbColor={timeBoundEnabled ? colors.primary : colors.textSecondary}
             />
           </View>
 
           {/* Time Bound picker — animates open */}
           <Animated.View style={timeBoundStyle}>
-            <View style={[styles.modePickerRow, { backgroundColor: colors.background, borderColor: colors.surfaceVariant }]}>
+            <View style={[styles.modePickerRow, { backgroundColor: colors.background, borderColor: colors.border }]}>
               <Text style={[styles.modePickerLabel, { color: colors.textSecondary }]}>Type</Text>
               <View style={styles.modePills}>
                 {(['before', 'after', 'between'] as const).map(type => (
@@ -631,7 +690,7 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
                     key={type}
                     style={[
                       styles.modePill,
-                      { backgroundColor: timeBoundType === type ? Colors.primary : colors.surfaceVariant },
+                      { backgroundColor: timeBoundType === type ? colors.primary : colors.surfaceVariant },
                     ]}
                     onPress={() => setTimeBoundType(type)}
                     activeOpacity={0.75}
@@ -654,13 +713,13 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
               </Text>
               <View style={[styles.inputWrapper, {
                 backgroundColor: colors.background,
-                borderColor: startInvalid ? Colors.error : colors.surfaceVariant,
+                borderColor: startInvalid ? colors.danger : colors.border,
                 marginBottom: 0,
               }]}>
                 <TextInput
-                  style={[styles.input, { flex: 1, color: startInvalid ? Colors.error : colors.textPrimary }]}
+                  style={[styles.input, { flex: 1, color: startInvalid ? colors.danger : colors.textPrimary }]}
                   placeholder="HH:MM"
-                  placeholderTextColor={Colors.textDisabled}
+                  placeholderTextColor={colors.textDisabled}
                   value={timeBoundStartTime}
                   onChangeText={setTimeBoundStartTime}
                   keyboardType="numbers-and-punctuation"
@@ -672,7 +731,7 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
                   }]}
                   onPress={() => setStartAmPm(startAmPm === 'AM' ? 'PM' : 'AM')}
                 >
-                  <Text style={[styles.amPmText, { color: startAmPm === 'PM' ? Colors.primary : colors.textPrimary }]}>
+                  <Text style={[styles.amPmText, { color: startAmPm === 'PM' ? colors.primary : colors.textPrimary }]}>
                     {startAmPm}
                   </Text>
                 </TouchableOpacity>
@@ -685,13 +744,13 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
                 <Text style={[styles.timeFieldLabel, { color: colors.textSecondary }]}>End Time</Text>
                 <View style={[styles.inputWrapper, {
                   backgroundColor: colors.background,
-                  borderColor: endInvalid ? Colors.error : colors.surfaceVariant,
+                  borderColor: endInvalid ? colors.danger : colors.border,
                   marginBottom: 0,
                 }]}>
                   <TextInput
-                    style={[styles.input, { flex: 1, color: endInvalid ? Colors.error : colors.textPrimary }]}
+                    style={[styles.input, { flex: 1, color: endInvalid ? colors.danger : colors.textPrimary }]}
                     placeholder="HH:MM"
-                    placeholderTextColor={Colors.textDisabled}
+                    placeholderTextColor={colors.textDisabled}
                     value={timeBoundEndTime}
                     onChangeText={setTimeBoundEndTime}
                     keyboardType="numbers-and-punctuation"
@@ -703,7 +762,7 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
                     }]}
                     onPress={() => setEndAmPm(endAmPm === 'AM' ? 'PM' : 'AM')}
                   >
-                    <Text style={[styles.amPmText, { color: endAmPm === 'PM' ? Colors.primary : colors.textPrimary }]}>
+                    <Text style={[styles.amPmText, { color: endAmPm === 'PM' ? colors.primary : colors.textPrimary }]}>
                       {endAmPm}
                     </Text>
                   </TouchableOpacity>
@@ -713,7 +772,7 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
 
             {/* Validation error hint */}
             {timeOrderInvalid && (
-              <Text style={[styles.timeErrorHint, { color: Colors.error }]}>
+              <Text style={[styles.timeErrorHint, { color: colors.danger }]}>
                 End time must be after start time
               </Text>
             )}
@@ -733,32 +792,44 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.btnSave, !canSave && styles.btnSaveDisabled]}
+              style={[
+                styles.btnSave,
+                { backgroundColor: canSave ? colors.primary : colors.surfaceVariant },
+              ]}
               onPress={handleSave}
               disabled={!canSave}
               activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !canSave }}
+              accessibilityLabel={isEditing ? 'Save changes' : 'Create habit'}
             >
-              <Text style={styles.btnSaveText}>{isEditing ? 'Save Changes' : 'Create Habit'}</Text>
+              <Text
+                style={[
+                  styles.btnSaveText,
+                  { color: canSave ? colors.onPrimary : colors.textDisabled },
+                ]}
+              >
+                {isEditing ? 'Save changes' : 'Create habit'}
+              </Text>
             </TouchableOpacity>
           </View>
         </Animated.View>
-      </KeyboardAvoidingView>
-    </Modal>
+      </View>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.45)',
   },
   kavWrapper: {
     flex: 1,
     justifyContent: 'flex-end',
   },
   sheet: {
-    borderTopLeftRadius: BorderRadius.xl,
-    borderTopRightRadius: BorderRadius.xl,
+    borderTopLeftRadius: BorderRadius.xxl,
+    borderTopRightRadius: BorderRadius.xxl,
     paddingTop: Spacing.sm,
     paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.xxl,
@@ -793,7 +864,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: BorderRadius.lg,
-    borderWidth: 1.5,
+    borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: Spacing.md,
     marginBottom: Spacing.xs,
   },
@@ -814,7 +885,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: BorderRadius.lg,
-    borderWidth: 1.5,
+    borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.md,
     marginBottom: Spacing.sm,
@@ -840,7 +911,7 @@ const styles = StyleSheet.create({
   },
   goalPicker: {
     borderRadius: BorderRadius.lg,
-    borderWidth: 1.5,
+    borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
     marginBottom: Spacing.sm,
@@ -875,7 +946,7 @@ const styles = StyleSheet.create({
   btnCancel: {
     flex: 1,
     paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.lg,
+    borderRadius: BorderRadius.full,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -885,18 +956,13 @@ const styles = StyleSheet.create({
   },
   btnSave: {
     flex: 2,
-    backgroundColor: Colors.primary,
     paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.lg,
+    borderRadius: BorderRadius.full,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  btnSaveDisabled: {
-    backgroundColor: Colors.textDisabled,
-  },
   btnSaveText: {
     ...Typography.labelLarge,
-    color: '#FFFFFF',
     fontWeight: '700',
   },
   // ── Task sequence mode picker ───────────────────────────────────────────────
@@ -904,7 +970,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: BorderRadius.lg,
-    borderWidth: 1.5,
+    borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
     marginBottom: Spacing.xs,
@@ -934,7 +1000,6 @@ const styles = StyleSheet.create({
   modeHint: {
     ...Typography.bodySmall,
     marginBottom: Spacing.sm,
-    fontStyle: 'italic',
   },
   amPmToggle: {
     paddingHorizontal: Spacing.sm,
@@ -959,7 +1024,6 @@ const styles = StyleSheet.create({
   timeErrorHint: {
     ...Typography.bodySmall,
     marginTop: Spacing.sm,
-    fontStyle: 'italic',
   },
   // ── Activity type selector ──────────────────────────────────────────────────
   sectionLabel: {
@@ -978,7 +1042,7 @@ const styles = StyleSheet.create({
   typeCard: {
     flex: 1,
     borderRadius: BorderRadius.lg,
-    borderWidth: 1.5,
+    borderWidth: StyleSheet.hairlineWidth,
     padding: Spacing.md,
     gap: 6,
     position: 'relative',
@@ -1013,7 +1077,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: BorderRadius.lg,
-    borderWidth: 1.5,
+    borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
     marginBottom: Spacing.md,
@@ -1025,7 +1089,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   streakGoalInputWrap: {
-    borderWidth: 1.5,
+    borderWidth: StyleSheet.hairlineWidth,
     borderRadius: BorderRadius.md,
     paddingHorizontal: Spacing.sm,
     paddingVertical: 4,

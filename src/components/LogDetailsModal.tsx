@@ -22,7 +22,7 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import dayjs from 'dayjs';
-import { Colors, Typography, Spacing, BorderRadius } from '../constants';
+import { Typography, Spacing, BorderRadius, alpha } from '../constants';
 import { FontAwesome5, Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 import { NoteEntry } from '../features/attendance/attendanceService';
@@ -72,7 +72,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
   onNoteEdit,
   onClose,
 }) => {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
 
   /** null = adding a new note; number = editing note at that index */
   const [noteModalVisible, setNoteModalVisible] = React.useState(false);
@@ -166,7 +166,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
       {/* ── Main log-details sheet ─────────────────────────────────────────── */}
       {(visible || noteModalVisible) && (
         <View style={[StyleSheet.absoluteFill, { zIndex: 9999, elevation: 9999 }]} pointerEvents="box-none">
-          <Animated.View entering={FadeIn.duration(120)} style={[styles.backdrop, { zIndex: 0 }]}>
+          <Animated.View entering={FadeIn.duration(120)} style={[styles.backdrop, { zIndex: 0, backgroundColor: colors.scrim }]}>
             <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
           </Animated.View>
 
@@ -188,18 +188,16 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                       style={[
                         styles.iconContainer,
                         {
-                          backgroundColor: isDark
-                            ? Colors.dark.primaryContainer
-                            : Colors.primaryContainer,
+                          backgroundColor: colors.primaryMuted,
                         },
                       ]}
                     >
-                      <FontAwesome5 name="calendar-check" size={18} color={Colors.primary} />
+                      <FontAwesome5 name="calendar-check" size={18} color={colors.primary} />
                     </View>
                     <View style={styles.headerText}>
                       <Text style={[styles.title, { color: colors.textPrimary }]}>Log Details</Text>
                       {activityName ? (
-                        <Text style={[styles.activityBadgeText, { color: Colors.primary }]}>
+                        <Text style={[styles.activityBadgeText, { color: colors.primary }]}>
                           {activityName}
                         </Text>
                       ) : null}
@@ -211,7 +209,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                       style={({ pressed }) => [
                         styles.closeIconBtn,
                         {
-                          backgroundColor: isDark ? colors.surfaceVariant : colors.background,
+                          backgroundColor: colors.surfaceVariant,
                           opacity: pressed ? 0.6 : 1,
                         },
                       ]}
@@ -231,7 +229,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                     <View
                       style={[
                         styles.infoCard,
-                        { backgroundColor: colors.background, borderColor: colors.surfaceVariant },
+                        { backgroundColor: colors.background, borderColor: colors.border },
                       ]}
                     >
                       {/* Date row */}
@@ -240,13 +238,11 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                           style={[
                             styles.infoIconWrap,
                             {
-                              backgroundColor: isDark
-                                ? Colors.dark.primaryContainer
-                                : Colors.primaryContainer,
+                              backgroundColor: colors.primaryMuted,
                             },
                           ]}
                         >
-                          <FontAwesome5 name="calendar-day" size={13} color={Colors.primary} />
+                          <FontAwesome5 name="calendar-day" size={13} color={colors.primary} />
                         </View>
                         <View style={styles.infoTextWrap}>
                           <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Date</Text>
@@ -266,9 +262,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                               styles.infoIconWrap,
                               {
                                 backgroundColor: timeData
-                                  ? isDark
-                                    ? '#1B3A35'
-                                    : Colors.successLight
+                                  ? colors.successMuted
                                   : colors.surfaceVariant,
                               },
                             ]}
@@ -276,7 +270,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                             <FontAwesome5
                               name="clock"
                               size={13}
-                              color={timeData ? Colors.success : colors.textSecondary}
+                              color={timeData ? colors.success : colors.textSecondary}
                             />
                           </View>
                           <View style={styles.infoTextWrap}>
@@ -307,11 +301,11 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                             <View
                               style={[
                                 styles.statusBadge,
-                                { backgroundColor: isDark ? '#1B3A35' : Colors.successLight },
+                                { backgroundColor: colors.successMuted },
                               ]}
                             >
-                              <Ionicons name="checkmark-circle" size={14} color={Colors.success} />
-                              <Text style={[styles.statusBadgeText, { color: Colors.success }]}>
+                              <Ionicons name="checkmark-circle" size={14} color={colors.success} />
+                              <Text style={[styles.statusBadgeText, { color: colors.success }]}>
                                 Logged
                               </Text>
                             </View>
@@ -326,8 +320,8 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                               {
                                 backgroundColor: isToday
                                   ? timeBoundKind === 'too_late'
-                                    ? isDark ? '#3A1A1A' : '#FFF0F0'
-                                    : isDark ? '#2D2510' : '#FFF8E7'
+                                    ? colors.dangerMuted
+                                    : colors.warningMuted
                                   : colors.surfaceVariant,
                               },
                             ]}
@@ -339,7 +333,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                               size={13}
                               color={
                                 isToday
-                                  ? timeBoundKind === 'too_late' ? Colors.error : Colors.warning
+                                  ? timeBoundKind === 'too_late' ? colors.danger : colors.warning
                                   : colors.textSecondary
                               }
                             />
@@ -351,7 +345,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                                 styles.infoValue,
                                 {
                                   color: isToday
-                                    ? timeBoundKind === 'too_late' ? Colors.error : Colors.warning
+                                    ? timeBoundKind === 'too_late' ? colors.danger : colors.warning
                                     : colors.textSecondary,
                                 },
                               ]}
@@ -369,8 +363,8 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                               {
                                 backgroundColor: isToday
                                   ? timeBoundKind === 'too_late'
-                                    ? isDark ? '#3A1A1A' : '#FFF0F0'
-                                    : isDark ? '#2D2510' : '#FFF8E7'
+                                    ? colors.dangerMuted
+                                    : colors.warningMuted
                                   : colors.surfaceVariant,
                               },
                             ]}
@@ -384,7 +378,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                               size={14}
                               color={
                                 isToday
-                                  ? timeBoundKind === 'too_late' ? Colors.error : Colors.warning
+                                  ? timeBoundKind === 'too_late' ? colors.danger : colors.warning
                                   : colors.textSecondary
                               }
                             />
@@ -393,7 +387,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                                 styles.statusBadgeText,
                                 {
                                   color: isToday
-                                    ? timeBoundKind === 'too_late' ? Colors.error : Colors.warning
+                                    ? timeBoundKind === 'too_late' ? colors.danger : colors.warning
                                     : colors.textSecondary,
                                 },
                               ]}
@@ -416,17 +410,15 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                                 styles.infoIconWrap,
                                 {
                                   backgroundColor: isSequenceSkipped
-                                    ? isDark ? '#3A2500' : '#FFF7E6'
-                                    : isDark
-                                      ? Colors.dark.primaryContainer
-                                      : Colors.primaryContainer,
+                                    ? colors.warningMuted
+                                    : colors.primaryMuted,
                                 },
                               ]}
                             >
                               <FontAwesome5
                                 name={isSequenceSkipped ? 'forward' : 'list-ol'}
                                 size={13}
-                                color={isSequenceSkipped ? Colors.warning : Colors.primary}
+                                color={isSequenceSkipped ? colors.warning : colors.primary}
                               />
                             </View>
                             <View style={styles.infoTextWrap}>
@@ -438,10 +430,10 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                                 {isSequenceSkipped && (
                                   <View style={[
                                     styles.skippedInlinePill,
-                                    { backgroundColor: isDark ? '#3A2500' : '#FFF7E6', borderColor: Colors.warning },
+                                    { backgroundColor: colors.warningMuted, borderColor: colors.warning },
                                   ]}>
-                                    <FontAwesome5 name="forward" size={9} color={Colors.warning} />
-                                    <Text style={[styles.skippedInlinePillText, { color: Colors.warning }]}>
+                                    <FontAwesome5 name="forward" size={9} color={colors.warning} />
+                                    <Text style={[styles.skippedInlinePillText, { color: colors.warning }]}>
                                       Skipped
                                     </Text>
                                   </View>
@@ -469,13 +461,11 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                                 style={[
                                   styles.infoIconWrap,
                                   {
-                                    backgroundColor: isDark
-                                      ? Colors.dark.primaryContainer
-                                      : Colors.primaryContainer,
+                                    backgroundColor: colors.primaryMuted,
                                   },
                                 ]}
                               >
-                                <FontAwesome5 name="sticky-note" size={13} color={Colors.primary} />
+                                <FontAwesome5 name="sticky-note" size={13} color={colors.primary} />
                               </View>
                               <Text style={[styles.notesSectionTitle, { color: colors.textSecondary }]}>
                                 Notes
@@ -485,13 +475,11 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                                   style={[
                                     styles.countBadge,
                                     {
-                                      backgroundColor: isDark
-                                        ? Colors.dark.primaryContainer
-                                        : Colors.primaryContainer,
+                                      backgroundColor: colors.primaryMuted,
                                     },
                                   ]}
                                 >
-                                  <Text style={[styles.countBadgeText, { color: Colors.primary }]}>
+                                  <Text style={[styles.countBadgeText, { color: colors.primary }]}>
                                     {notes!.length}
                                   </Text>
                                 </View>
@@ -513,7 +501,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                                         style={[
                                           styles.dot,
                                           {
-                                            backgroundColor: Colors.primary,
+                                            backgroundColor: colors.primary,
                                             borderColor: colors.background,
                                           },
                                         ]}
@@ -534,7 +522,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                                         styles.noteCard,
                                         {
                                           backgroundColor: colors.surface,
-                                          borderColor: colors.surfaceVariant,
+                                          borderColor: colors.border,
                                         },
                                       ]}
                                     >
@@ -545,14 +533,12 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                                             style={[
                                               styles.timePill,
                                               {
-                                                backgroundColor: isDark
-                                                  ? Colors.dark.primaryContainer
-                                                  : Colors.primaryContainer,
+                                                backgroundColor: colors.primaryMuted,
                                               },
                                             ]}
                                           >
                                             <Text
-                                              style={[styles.timePillText, { color: Colors.primary }]}
+                                              style={[styles.timePillText, { color: colors.primary }]}
                                             >
                                               {(() => {
                                                 const formatted = formatTimeWithTz(entry.time!, entry.tz);
@@ -560,7 +546,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                                                   <Text>
                                                     {formatted.time}
                                                     {formatted.tzDisplay && (
-                                                      <Text style={{ fontSize: 10, color: isDark ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.5)' }}>
+                                                      <Text style={{ fontSize: 10, color: colors.textTertiary }}>
                                                         {' '}{formatted.tzDisplay}
                                                       </Text>
                                                     )}
@@ -581,19 +567,19 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                                               styles.copyIconBtn,
                                               {
                                                 backgroundColor: copiedIndex === i
-                                                  ? (isDark ? '#1B3A35' : Colors.successLight)
-                                                  : (isDark ? colors.surfaceVariant : colors.background),
+                                                  ? (colors.successMuted)
+                                                  : (colors.surfaceVariant),
                                                 opacity: pressed ? 0.55 : 1,
                                               },
                                             ]}
                                             onPress={() => handleCopy(entry.text, i)}
                                             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                                            android_ripple={{ color: Colors.primary + '33', radius: 16, borderless: true }}
+                                            android_ripple={{ color: colors.primary + '33', radius: 16, borderless: true }}
                                           >
                                             <Ionicons
                                               name={copiedIndex === i ? 'checkmark' : 'copy-outline'}
                                               size={13}
-                                              color={copiedIndex === i ? Colors.success : colors.textSecondary}
+                                              color={copiedIndex === i ? colors.success : colors.textSecondary}
                                             />
                                           </Pressable>
 
@@ -603,15 +589,13 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                                               style={({ pressed }) => [
                                                 styles.editIconBtn,
                                                 {
-                                                  backgroundColor: isDark
-                                                    ? colors.surfaceVariant
-                                                    : colors.background,
+                                                  backgroundColor: colors.surfaceVariant,
                                                   opacity: pressed ? 0.55 : 1,
                                                 },
                                               ]}
                                               onPress={() => openEdit(i)}
                                               hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                                              android_ripple={{ color: Colors.primary + '33', radius: 16, borderless: true }}
+                                              android_ripple={{ color: colors.primary + '33', radius: 16, borderless: true }}
                                             >
                                               <MaterialIcons
                                                 name="edit"
@@ -642,17 +626,15 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                                 style={({ pressed }) => [
                                   styles.addNoteBtn,
                                   {
-                                    backgroundColor: isDark
-                                      ? Colors.dark.primaryContainer
-                                      : Colors.primaryContainer,
+                                    backgroundColor: colors.primaryMuted,
                                     opacity: pressed ? 0.7 : 1,
                                   },
                                 ]}
                                 onPress={openAdd}
-                                android_ripple={{ color: Colors.primary + '33', radius: 80 }}
+                                android_ripple={{ color: colors.primary + '33', radius: 80 }}
                               >
-                                <Ionicons name="add-circle-outline" size={16} color={Colors.primary} />
-                                <Text style={[styles.addNoteBtnText, { color: Colors.primary }]}>
+                                <Ionicons name="add-circle-outline" size={16} color={colors.primary} />
+                                <Text style={[styles.addNoteBtnText, { color: colors.primary }]}>
                                   {hasNotes ? 'Add Another Note' : 'Add Note'}
                                 </Text>
                               </Pressable>
@@ -670,7 +652,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
           {/* ── Add / Edit note layer (stacked on top inside same Modal) ───────────────────────── */}
           {noteModalVisible && (
             <View style={[StyleSheet.absoluteFill, { zIndex: 100, elevation: 100 }]} pointerEvents="box-none">
-              <Animated.View entering={FadeIn.duration(100)} style={[styles.backdrop, { zIndex: 0 }]}>
+              <Animated.View entering={FadeIn.duration(100)} style={[styles.backdrop, { zIndex: 0, backgroundColor: colors.scrim }]}>
                 <Pressable style={StyleSheet.absoluteFill} onPress={handleCloseNoteModal} />
               </Animated.View>
 
@@ -695,16 +677,14 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                         style={[
                           styles.addNoteIconWrap,
                           {
-                            backgroundColor: isDark
-                              ? Colors.dark.primaryContainer
-                              : Colors.primaryContainer,
+                            backgroundColor: colors.primaryMuted,
                           },
                         ]}
                       >
                         <FontAwesome5
                           name={isEditMode ? 'pen' : 'pen'}
                           size={16}
-                          color={Colors.primary}
+                          color={colors.primary}
                         />
                       </View>
                       <View style={{ flex: 1 }}>
@@ -712,7 +692,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                           {isEditMode ? 'Edit Note' : 'Add Note'}
                         </Text>
                         {activityName ? (
-                          <Text style={[styles.addNoteSubtitle, { color: Colors.primary }]}>
+                          <Text style={[styles.addNoteSubtitle, { color: colors.primary }]}>
                             {activityName}
                           </Text>
                         ) : null}
@@ -723,7 +703,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                         style={({ pressed }) => [
                           styles.closeBtn,
                           {
-                            backgroundColor: isDark ? colors.surfaceVariant : colors.background,
+                            backgroundColor: colors.surfaceVariant,
                             opacity: pressed ? 0.6 : 1,
                           },
                         ]}
@@ -743,7 +723,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                     <View
                       style={[
                         styles.inputWrapper,
-                        { backgroundColor: colors.background, borderColor: Colors.primary },
+                        { backgroundColor: colors.background, borderColor: colors.primary },
                       ]}
                     >
                       <TextInput
@@ -757,7 +737,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                         maxLength={500}
                         scrollEnabled={false}
                         textAlignVertical="top"
-                        selectionColor={Colors.primary}
+                        selectionColor={colors.primary}
                       />
                     </View>
 
@@ -765,7 +745,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                     <Text
                       style={[
                         styles.charCount,
-                        { color: draftNote.length > 450 ? Colors.warning : colors.textSecondary },
+                        { color: draftNote.length > 450 ? colors.warning : colors.textSecondary },
                       ]}
                     >
                       {draftNote.length}/500
@@ -791,7 +771,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                         style={({ pressed }) => [
                           styles.saveBtn,
                           {
-                            backgroundColor: Colors.primary,
+                            backgroundColor: colors.primary,
                             opacity: !draftNote.trim() || isSaving ? 0.5 : pressed ? 0.85 : 1,
                           },
                         ]}
@@ -825,7 +805,6 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
 const styles = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.55)',
   },
   kvWrapper: {
     flex: 1,
@@ -844,8 +823,8 @@ const styles = StyleSheet.create({
   },
   // Main sheet
   sheet: {
-    borderTopLeftRadius: BorderRadius.xl,
-    borderTopRightRadius: BorderRadius.xl,
+    borderTopLeftRadius: BorderRadius.xxl,
+    borderTopRightRadius: BorderRadius.xxl,
     paddingTop: Spacing.sm,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -6 },
@@ -986,7 +965,6 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     ...Typography.bodyMedium,
-    fontStyle: 'italic',
     paddingVertical: Spacing.xs,
   },
 
@@ -1077,8 +1055,8 @@ const styles = StyleSheet.create({
 
   // ── Add / Edit note modal sheet ────────────────────────────────────────────
   addNoteSheet: {
-    borderTopLeftRadius: BorderRadius.xl,
-    borderTopRightRadius: BorderRadius.xl,
+    borderTopLeftRadius: BorderRadius.xxl,
+    borderTopRightRadius: BorderRadius.xxl,
     paddingTop: Spacing.sm,
     paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.lg,
@@ -1123,7 +1101,7 @@ const styles = StyleSheet.create({
   },
   inputWrapper: {
     borderRadius: BorderRadius.lg,
-    borderWidth: 1.5,
+    borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
     marginBottom: Spacing.xs,

@@ -1,30 +1,51 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   View,
   StyleSheet,
   Alert,
   TouchableWithoutFeedback,
-  TouchableOpacity,
   ScrollView,
+  StatusBar,
+  BackHandler,
 } from 'react-native';
-import { Text, FAB } from 'react-native-paper';
-import { useNavigation } from '@react-navigation/native';
+import { Text } from 'react-native-paper';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import Animated, { FadeInDown, LinearTransition } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+import { FontAwesome5 } from '@expo/vector-icons';
+import dayjs from 'dayjs';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { useAttendanceStore } from '../store/attendanceStore';
-import { Colors, Typography, Spacing, BorderRadius } from '../constants';
+import {
+  Typography,
+  Spacing,
+  BorderRadius,
+  ScreenPadding,
+  stagger,
+} from '../constants';
 import { ActivityCard } from '../components/ActivityCard';
 import { ActivityFormModal } from '../components/ActivityFormModal';
-import { FontAwesome5 } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
-import dayjs from 'dayjs';
+import { todayStr } from '../utils/dateUtils';
+import { haptics } from '../utils/haptics';
+import {
+  Card,
+  EmptyState,
+  IconButton,
+  PressableScale,
+  ScreenHeader,
+  SegmentedControl,
+} from '../components/ui';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'Activities'>;
 
+const TRAIL_DAYS = 7;
+
 export const ActivitiesScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
-  const { colors, isDark } = useTheme();
+  const { colors, isDark, elevation } = useTheme();
+  const insets = useSafeAreaInsets();
 
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [activeTab, setActiveTab] = useState<'active' | 'completed'>('active');
@@ -32,7 +53,16 @@ export const ActivitiesScreen: React.FC = () => {
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editingItemName, setEditingItemName] = useState<string>('');
 
-  const { activities, createActivity, editActivity, deleteActivity, selectActivity, getActivityStats } = useAttendanceStore();
+  const {
+    activities,
+    logs,
+    createActivity,
+    editActivity,
+    deleteActivity,
+    selectActivity,
+    getActivityStats,
+  } = useAttendanceStore();
+
   const [editingRequiresNote, setEditingRequiresNote] = useState<boolean>(false);
   const [editingWeeklyGoal, setEditingWeeklyGoal] = useState<number | undefined>(undefined);
   const [editingTaskSequence, setEditingTaskSequence] = useState<string[]>([]);
@@ -46,6 +76,23 @@ export const ActivitiesScreen: React.FC = () => {
   // Split active vs completed
   const activeActivities = activities.filter(a => !a.completedAt);
   const completedActivities = activities.filter(a => !!a.completedAt);
+
+  /**
+   * Last N days per activity, oldest → newest. Drives the trail on each card so
+   * recent consistency is legible without opening the habit.
+   */
+  const trails = useMemo(() => {
+    const today = dayjs(todayStr());
+    const window = Array.from({ length: TRAIL_DAYS }, (_, i) =>
+      today.subtract(TRAIL_DAYS - 1 - i, 'day').format('YYYY-MM-DD'),
+    );
+    const map: Record<string, boolean[]> = {};
+    for (const activity of activities) {
+      const dates = new Set((logs[activity.id] ?? []).map(e => e.date));
+      map[activity.id] = window.map(d => dates.has(d));
+    }
+    return map;
+  }, [activities, logs]);
 
   const handleSaveActivity = (
     name: string,
@@ -68,6 +115,7 @@ export const ActivitiesScreen: React.FC = () => {
   };
 
   const openAddModal = () => {
+    haptics.medium();
     setEditingItemId(null);
     setEditingItemName('');
     setSelectedItemId(null);
@@ -108,10 +156,7 @@ export const ActivitiesScreen: React.FC = () => {
   };
 
   const handleSelectActivity = (id: string) => {
-    if (selectedItemId === id) {
-      setSelectedItemId(null);
-      return;
-    }
+    // A revealed action rail swallows the next tap — that tap dismisses it.
     if (selectedItemId) {
       setSelectedItemId(null);
       return;
@@ -126,10 +171,33 @@ export const ActivitiesScreen: React.FC = () => {
     setSelectedItemId(id);
   };
 
+  /**
+   * Android back on the Completed tab returns to Active rather than leaving the
+   * app. Active is the home state of this screen, so backing out of a tab should
+   * undo that switch first — exiting straight to the launcher loses the user's
+   * place for no reason.
+   *
+   * Scoped to focus so it stops applying once a habit is opened, and registered
+   * before any sheet's handler so an open sheet still wins.
+   */
+  useFocusEffect(
+    useCallback(() => {
+      const onBack = () => {
+        if (activeTab === 'completed') {
+          setActiveTab('active');
+          return true;
+        }
+        return false; // fall through to the default (leave the app)
+      };
+      const sub = BackHandler.addEventListener('hardwareBackPress', onBack);
+      return () => sub.remove();
+    }, [activeTab]),
+  );
+
   const confirmDelete = (id: string, name: string) => {
     Alert.alert(
-      'Delete Habit',
-      `Are you sure you want to delete "${name}"?`,
+      'Delete habit',
+      `"${name}" and all of its logged days will be permanently removed. This can't be undone.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -140,183 +208,191 @@ export const ActivitiesScreen: React.FC = () => {
             setSelectedItemId(null);
           },
         },
-      ]
+      ],
     );
   };
 
-  return (
-    <TouchableWithoutFeedback onPress={() => setSelectedItemId(null)}>
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
+  // Today's completion count across active habits — a one-glance daily summary.
+  const doneToday = activeActivities.filter(a => {
+    const s = getActivityStats(a.id);
+    return s.unit === 'week' ? s.isThisWeekGoalMet : s.isTodayLogged;
+  }).length;
 
-        {/* Header */}
-        <Animated.View entering={FadeInDown.delay(0).springify()} style={styles.header}>
-          <View style={styles.headerLeft}>
-            <Text style={[styles.title, { color: colors.textPrimary }]}>Your Habits</Text>
-            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-              {activities.length === 0
-                ? 'Tap + to add your first habit'
-                : 'Hold a card to edit or delete'}
-            </Text>
-          </View>
-          <TouchableOpacity
-            onPress={() => navigation.navigate('Settings')}
-            style={[styles.themeToggle, { backgroundColor: colors.surfaceVariant }]}
-            activeOpacity={0.7}
-          >
-            <FontAwesome5 name="cog" size={20} color={colors.textPrimary} />
-          </TouchableOpacity>
-        </Animated.View>
+  return (
+    <TouchableWithoutFeedback onPress={() => setSelectedItemId(null)} accessible={false}>
+      <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top + Spacing.md }]}>
+        <StatusBar
+          barStyle={isDark ? 'light-content' : 'dark-content'}
+          backgroundColor={colors.background}
+        />
+
+        <View style={styles.gutter}>
+          <ScreenHeader
+            eyebrow="Streaks"
+            title="Your habits"
+            subtitle={
+              activeActivities.length === 0
+                ? 'Add your first habit to get started'
+                : `${doneToday} of ${activeActivities.length} done today`
+            }
+            action={
+              <IconButton
+                icon="cog"
+                onPress={() => navigation.navigate('Settings')}
+                accessibilityLabel="Open settings"
+              />
+            }
+          />
+        </View>
 
         {/* Tabs */}
-        <Animated.View entering={FadeInDown.delay(20).springify()} style={styles.tabContainer}>
-          <TouchableOpacity
-            style={[
-              styles.tabButton,
-              { backgroundColor: activeTab === 'active' ? colors.primaryContainer : 'transparent' }
+        <Animated.View
+          entering={FadeInDown.delay(40).springify()}
+          style={[styles.gutter, styles.tabs]}
+        >
+          <SegmentedControl
+            value={activeTab}
+            onChange={setActiveTab}
+            options={[
+              { value: 'active', label: 'Active', icon: 'fire', count: activeActivities.length },
+              { value: 'completed', label: 'Completed', icon: 'trophy', count: completedActivities.length },
             ]}
-            onPress={() => setActiveTab('active')}
-            activeOpacity={0.7}
-          >
-            <FontAwesome5 name="fire" size={14} color={activeTab === 'active' ? Colors.primary : colors.textSecondary} />
-            <Text style={[
-              styles.tabText,
-              { color: activeTab === 'active' ? Colors.primary : colors.textSecondary, fontWeight: activeTab === 'active' ? '700' : '600' }
-            ]}>
-              Active ({activeActivities.length})
-            </Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[
-              styles.tabButton,
-              { backgroundColor: activeTab === 'completed' ? (isDark ? '#1A2A1A' : Colors.successLight) : 'transparent' }
-            ]}
-            onPress={() => setActiveTab('completed')}
-            activeOpacity={0.7}
-          >
-            <FontAwesome5 name="trophy" size={14} color={activeTab === 'completed' ? Colors.success : colors.textSecondary} />
-            <Text style={[
-              styles.tabText,
-              { color: activeTab === 'completed' ? Colors.success : colors.textSecondary, fontWeight: activeTab === 'completed' ? '700' : '600' }
-            ]}>
-              Completed ({completedActivities.length})
-            </Text>
-          </TouchableOpacity>
+          />
         </Animated.View>
 
         <ScrollView
           style={styles.scroll}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: Spacing.xxxl + insets.bottom + 40 },
+          ]}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
-          {/* Active Activities Section */}
-          {activeTab === 'active' && (
-            <>
-
-              <Animated.FlatList
-                data={activeActivities}
-                keyExtractor={(item) => item.id}
-                scrollEnabled={false}
-                itemLayoutAnimation={LinearTransition.springify()}
-                renderItem={({ item, index }) => {
-                  const stats = getActivityStats(item.id);
-                  const isSelectedForAction = selectedItemId === item.id;
-                  return (
-                    <ActivityCard
-                      id={item.id}
-                      name={item.name}
-                      stats={stats}
-                      index={index}
-                      isSelectedForAction={isSelectedForAction}
-                      onSelect={handleSelectActivity}
-                      onLongPress={handleLongPress}
-                      onEdit={openEditModal}
-                      onDelete={confirmDelete}
-                    />
-                  );
-                }}
-              />
-            </>
-          )}
-
-          {/* Empty state when no active activities */}
-          {activeTab === 'active' && activeActivities.length === 0 && (
-            <Animated.View entering={FadeInDown.delay(100).springify()} style={styles.emptyContainer}>
-              <FontAwesome5 name="seedling" size={48} color={colors.textSecondary} style={{ marginBottom: Spacing.md }} />
-              <Text style={[styles.emptyText, { color: colors.textPrimary }]}>No active habits</Text>
-              <Text style={[styles.emptySubText, { color: colors.textSecondary }]}>
-                Tap the + button to add your first habit and start building your streak!
-              </Text>
-            </Animated.View>
-          )}
-
-          {/* Completed Activities Section */}
-          {activeTab === 'completed' && completedActivities.length > 0 && (
-            <>
-              {completedActivities.map((item, index) => {
-                const stats = getActivityStats(item.id);
-                return (
-                  <Animated.View
+          {activeTab === 'active' ? (
+            activeActivities.length > 0 ? (
+              <>
+                {/*
+                  A plain map, not a FlatList. A FlatList is a ScrollView
+                  internally and clips its children to its own bounds — which sit
+                  inside the screen gutter, exactly flush with the card edges — so
+                  every card's shadow was sliced off down both sides. (Nesting a
+                  VirtualizedList inside a ScrollView also disables virtualization
+                  and warns, so it was buying nothing here.)
+                */}
+                {activeActivities.map((item, index) => (
+                  <ActivityCard
                     key={item.id}
-                    entering={FadeInDown.delay(120 + index * 40).springify()}
+                    id={item.id}
+                    name={item.name}
+                    stats={getActivityStats(item.id)}
+                    index={index}
+                    recentDays={trails[item.id]}
+                    isSelectedForAction={selectedItemId === item.id}
+                    onSelect={handleSelectActivity}
+                    onLongPress={handleLongPress}
+                    onEdit={openEditModal}
+                    onDelete={confirmDelete}
+                  />
+                ))}
+                <Text style={[styles.hint, { color: colors.textDisabled }]}>
+                  Press and hold a habit to edit or delete it
+                </Text>
+              </>
+            ) : (
+              <EmptyState
+                icon="seedling"
+                title="No habits yet"
+                description="Start with one small thing you can do every day. Consistency beats intensity."
+                actionLabel="Add your first habit"
+                onAction={openAddModal}
+              />
+            )
+          ) : completedActivities.length > 0 ? (
+            completedActivities.map((item, index) => {
+              const stats = getActivityStats(item.id);
+              return (
+                <Animated.View
+                  key={item.id}
+                  entering={FadeInDown.delay(stagger(index)).springify()}
+                  style={styles.completedWrapper}
+                >
+                  <PressableScale
+                    onPress={() => {
+                      selectActivity(item.id);
+                      navigation.navigate('ActivityDetail');
+                    }}
+                    scaleTo={0.985}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${item.name}, completed`}
                   >
-                    <TouchableOpacity
-                      style={[styles.completedCard, { backgroundColor: colors.surface }]}
-                      onPress={() => {
-                        selectActivity(item.id);
-                        navigation.navigate('ActivityDetail');
-                      }}
-                      activeOpacity={0.75}
-                    >
-                      {/* Trophy badge */}
-                      <View style={[styles.completedBadgeWrap, { backgroundColor: isDark ? '#1A2A1A' : Colors.successLight }]}>
-                        <FontAwesome5 name="trophy" size={18} color={Colors.success} />
-                      </View>
+                    <Card elevation="low" padding={Spacing.md}>
+                      <View style={styles.completedRow}>
+                        <View
+                          style={[
+                            styles.trophy,
+                            { backgroundColor: colors.warningMuted },
+                          ]}
+                        >
+                          <FontAwesome5 name="trophy" size={16} color={colors.warning} />
+                        </View>
 
-                      <View style={styles.completedInfo}>
-                        <Text style={[styles.completedName, { color: colors.textPrimary }]} numberOfLines={1}>
-                          {item.name}
-                        </Text>
-                        <View style={styles.completedMeta}>
-                          <FontAwesome5 name="fire" size={10} color={colors.textSecondary} style={{ marginRight: 2 }} />
-                          <Text style={[styles.completedMetaText, { color: colors.textSecondary }]} numberOfLines={1}>
-                            Best: {stats.longestStreak} {stats.unit === 'week' ? 'wks' : 'days'}
+                        <View style={styles.completedInfo}>
+                          <Text
+                            style={[styles.completedName, { color: colors.textPrimary }]}
+                            numberOfLines={1}
+                          >
+                            {item.name}
                           </Text>
-                          <View style={[styles.completedDot, { backgroundColor: colors.textSecondary }]} />
-                          <Text style={[styles.completedMetaText, { color: colors.textSecondary, flex: 1 }]} numberOfLines={1}>
-                            Completed {dayjs(item.completedAt).format('MMM D, YYYY')}
+                          <Text
+                            style={[styles.completedMeta, { color: colors.textTertiary }]}
+                            numberOfLines={1}
+                          >
+                            Best {stats.longestStreak}{' '}
+                            {stats.unit === 'week' ? 'wks' : 'days'} · Finished{' '}
+                            {dayjs(item.completedAt).format('MMM D, YYYY')}
                           </Text>
                         </View>
-                      </View>
-                    </TouchableOpacity>
-                  </Animated.View>
-                );
-              })}
-            </>
-          )}
-          
-          {/* Empty state when no completed activities */}
-          {activeTab === 'completed' && completedActivities.length === 0 && (
-            <Animated.View entering={FadeInDown.delay(100).springify()} style={styles.emptyContainer}>
-              <FontAwesome5 name="trophy" size={48} color={colors.surfaceVariant} style={{ marginBottom: Spacing.md }} />
-              <Text style={[styles.emptyText, { color: colors.textPrimary }]}>No completed habits</Text>
-              <Text style={[styles.emptySubText, { color: colors.textSecondary }]}>
-                You haven't completed any habits yet. Keep working towards your goals!
-              </Text>
-            </Animated.View>
-          )}
 
-          <View style={{ height: Spacing.xxl * 3 }} />
+                        <FontAwesome5
+                          name="chevron-right"
+                          size={12}
+                          color={colors.textDisabled}
+                        />
+                      </View>
+                    </Card>
+                  </PressableScale>
+                </Animated.View>
+              );
+            })
+          ) : (
+            <EmptyState
+              icon="trophy"
+              title="Nothing finished yet"
+              description="Habits you complete will be archived here with their final numbers intact."
+            />
+          )}
         </ScrollView>
 
-        {/* Floating Action Button */}
-        <FAB
-          icon="plus"
-          style={[styles.fab, { backgroundColor: Colors.primary }]}
+        {/* Extended FAB — a labelled action is far clearer than a bare plus */}
+        <PressableScale
           onPress={openAddModal}
-          color="#FFFFFF"
-          customSize={58}
-        />
+          haptic={false}
+          scaleTo={0.94}
+          style={[
+            styles.fab,
+            elevation.brandGlow(colors.primary),
+            {
+              backgroundColor: colors.primary,
+              bottom: Spacing.lg + insets.bottom,
+            },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Add a new habit"
+        >
+          <FontAwesome5 name="plus" size={14} color={colors.onPrimary} />
+          <Text style={[styles.fabLabel, { color: colors.onPrimary }]}>New habit</Text>
+        </PressableScale>
 
         {/* Add/Edit Modal */}
         <ActivityFormModal
@@ -343,99 +419,37 @@ export const ActivitiesScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: Spacing.xl,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: Spacing.sm,
-    paddingHorizontal: Spacing.lg,
+  gutter: {
+    paddingHorizontal: ScreenPadding,
   },
-  headerLeft: {
-    flex: 1,
-  },
-  title: {
-    ...Typography.headlineLarge,
-  },
-  subtitle: {
-    ...Typography.bodyMedium,
-    marginTop: 4,
-  },
-  themeToggle: {
-    width: 44,
-    height: 44,
-    borderRadius: BorderRadius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: Spacing.md,
+  tabs: {
+    marginTop: Spacing.md + 2,
   },
   scroll: {
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.sm,
+    paddingHorizontal: ScreenPadding,
+    paddingTop: Spacing.md,
   },
-  tabContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: Spacing.lg,
-    marginBottom: Spacing.sm,
-    gap: Spacing.sm,
-  },
-  tabButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: Spacing.sm,
-    borderRadius: BorderRadius.lg,
-    gap: Spacing.sm,
-    borderWidth: 1.5,
-    borderColor: 'transparent', // Added for potential future borders if needed
-  },
-  tabText: {
-    ...Typography.bodyMedium,
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: Spacing.xxl,
-    paddingHorizontal: Spacing.xl,
-  },
-  emptyText: {
-    ...Typography.titleLarge,
-    marginBottom: Spacing.sm,
+  hint: {
+    ...Typography.caption,
     textAlign: 'center',
+    marginTop: Spacing.md,
   },
-  emptySubText: {
-    ...Typography.bodyMedium,
-    textAlign: 'center',
-    lineHeight: 22,
+  completedWrapper: {
+    marginBottom: Spacing.sm + 2,
   },
-  fab: {
-    position: 'absolute',
-    right: Spacing.lg,
-    bottom: Spacing.xl,
-    borderRadius: BorderRadius.full,
-  },
-  // Completed card
-  completedCard: {
+  completedRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.md,
-    marginBottom: Spacing.sm,
-    gap: Spacing.md,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
+    gap: Spacing.md - 2,
   },
-  completedBadgeWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  trophy: {
+    width: 42,
+    height: 42,
+    borderRadius: BorderRadius.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -444,23 +458,24 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   completedName: {
-    ...Typography.bodyLarge,
+    ...Typography.titleLarge,
     fontWeight: '700',
   },
   completedMeta: {
+    ...Typography.caption,
+  },
+  fab: {
+    position: 'absolute',
+    right: ScreenPadding,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginTop: 2,
-    flexWrap: 'nowrap',
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.md + 2,
+    paddingVertical: Spacing.md - 2,
+    borderRadius: BorderRadius.full,
   },
-  completedMetaText: {
-    ...Typography.bodySmall,
-  },
-  completedDot: {
-    width: 3,
-    height: 3,
-    borderRadius: 2,
-    opacity: 0.5,
+  fabLabel: {
+    ...Typography.labelLarge,
+    fontWeight: '700',
   },
 });

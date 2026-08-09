@@ -1,19 +1,25 @@
-import React from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import React, { useMemo } from 'react';
+import {
+  NavigationContainer,
+  DefaultTheme,
+  DarkTheme,
+  Theme,
+} from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { TouchableOpacity } from 'react-native';
+import { View, StyleSheet } from 'react-native';
+import { Text } from 'react-native-paper';
 import { DashboardScreen } from '../screens/DashboardScreen';
 import { CalendarScreen } from '../screens/CalendarScreen';
 import { StatsScreen } from '../screens/StatsScreen';
 import { ActivitiesScreen } from '../screens/ActivitiesScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { ActivitySettingsScreen } from '../screens/ActivitySettingsScreen';
-import { Colors, Typography } from '../constants';
-import { Text } from 'react-native';
+import { Typography, Spacing } from '../constants';
 import { useAttendanceStore } from '../store/attendanceStore';
 import { useTheme } from '../hooks/useTheme';
-import { FontAwesome5 } from '@expo/vector-icons';
+import { TabBar } from './TabBar';
+import { IconButton } from '../components/ui';
 
 export type RootStackParamList = {
   Activities: undefined;
@@ -31,82 +37,78 @@ export type TabParamList = {
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<TabParamList>();
 
-const ICON_SIZE = 22;
-const TabIcon: React.FC<{ name: string; color: string }> = ({ name, color }) => (
-  <FontAwesome5 name={name} size={ICON_SIZE} color={color} />
-);
+/**
+ * Two-line header title: the habit's name reads as the subject, with a quiet
+ * label above it so the user always knows which habit they are inside.
+ */
+const HabitTitle: React.FC<{ name?: string }> = ({ name }) => {
+  const { colors } = useTheme();
+  return (
+    <View style={styles.headerTitle}>
+      <Text style={[styles.headerEyebrow, { color: colors.textTertiary }]}>Habit</Text>
+      <Text
+        style={[styles.headerName, { color: colors.textPrimary }]}
+        numberOfLines={1}
+      >
+        {name ?? 'Activity'}
+      </Text>
+    </View>
+  );
+};
 
 const ActivityTabNavigator = () => {
   const { activities, selectedActivityId } = useAttendanceStore();
   const selectedActivity = activities.find(a => a.id === selectedActivityId);
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
 
   return (
     <Tab.Navigator
+      tabBar={props => <TabBar {...props} />}
       screenOptions={({ navigation }) => ({
         headerStyle: {
           backgroundColor: colors.background,
-          elevation: 0,
-          shadowOpacity: 0,
-          borderBottomWidth: 0,
         },
+        headerShadowVisible: false,
+        headerTitleAlign: 'left' as const,
         headerTitleStyle: {
           ...Typography.headlineMedium,
           color: colors.textPrimary,
         },
-        headerTintColor: Colors.primary,
+        headerTintColor: colors.primary,
+        headerRightContainerStyle: { paddingRight: Spacing.md },
+        headerLeftContainerStyle: { paddingLeft: Spacing.sm },
         headerRight: () => (
-          <TouchableOpacity
+          <IconButton
+            icon="sliders-h"
             onPress={() => navigation.navigate('ActivitySettings' as never)}
-            style={{ marginRight: 16, padding: 4 }}
-            hitSlop={8}
-          >
-            <FontAwesome5 name="cog" size={19} color={colors.textSecondary} />
-          </TouchableOpacity>
+            accessibilityLabel="Habit settings"
+          />
         ),
-        tabBarStyle: {
-          backgroundColor: colors.surface,
-          borderTopWidth: 0,
-          elevation: 12,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: -2 },
-          shadowOpacity: isDark ? 0.3 : 0.08,
-          shadowRadius: 12,
-          height: 64,
-          paddingBottom: 8,
-          paddingTop: 8,
-        },
-        tabBarActiveTintColor: Colors.primary,
-        tabBarInactiveTintColor: colors.textSecondary,
-        tabBarLabelStyle: {
-          ...Typography.labelMedium,
-          marginTop: 2,
-        },
+        sceneStyle: { backgroundColor: colors.background },
       })}
     >
       <Tab.Screen
         name="Dashboard"
         component={DashboardScreen}
         options={{
-          headerTitle: selectedActivity ? selectedActivity.name : 'Activity',
-          tabBarLabel: 'Home',
-          tabBarIcon: ({ color }) => <TabIcon name="home" color={color} />,
+          headerTitle: () => <HabitTitle name={selectedActivity?.name} />,
+          tabBarLabel: 'Today',
         }}
       />
       <Tab.Screen
         name="Calendar"
         component={CalendarScreen}
         options={{
-          title: 'Calendar',
-          tabBarIcon: ({ color }) => <TabIcon name="calendar-alt" color={color} />,
+          headerTitle: () => <HabitTitle name={selectedActivity?.name} />,
+          tabBarLabel: 'Calendar',
         }}
       />
       <Tab.Screen
         name="Stats"
         component={StatsScreen}
         options={{
-          title: 'Stats',
-          tabBarIcon: ({ color }) => <TabIcon name="chart-bar" color={color} />,
+          headerTitle: () => <HabitTitle name={selectedActivity?.name} />,
+          tabBarLabel: 'Stats',
         }}
       />
     </Tab.Navigator>
@@ -114,22 +116,40 @@ const ActivityTabNavigator = () => {
 };
 
 export const AppNavigator: React.FC = () => {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+
+  // Give React Navigation the same palette so screen transitions never flash a
+  // stock white or black frame between routes.
+  const navTheme: Theme = useMemo(() => {
+    const base = isDark ? DarkTheme : DefaultTheme;
+    return {
+      ...base,
+      dark: isDark,
+      colors: {
+        ...base.colors,
+        primary: colors.primary,
+        background: colors.background,
+        card: colors.background,
+        text: colors.textPrimary,
+        border: colors.border,
+        notification: colors.accent,
+      },
+    };
+  }, [isDark, colors]);
 
   return (
-    <NavigationContainer>
+    <NavigationContainer theme={navTheme}>
       <Stack.Navigator
         initialRouteName="Activities"
         screenOptions={{
-          headerStyle: {
-            backgroundColor: colors.background,
-          },
+          headerStyle: { backgroundColor: colors.background },
           headerTitleStyle: {
             ...Typography.headlineMedium,
             color: colors.textPrimary,
           },
-          headerTintColor: Colors.primary,
+          headerTintColor: colors.primary,
           headerShadowVisible: false,
+          headerBackButtonDisplayMode: 'minimal',
           contentStyle: { backgroundColor: colors.background },
         }}
       >
@@ -151,9 +171,24 @@ export const AppNavigator: React.FC = () => {
         <Stack.Screen
           name="ActivitySettings"
           component={ActivitySettingsScreen}
-          options={{ title: 'Activity Settings' }}
+          options={{ title: 'Habit settings' }}
         />
       </Stack.Navigator>
     </NavigationContainer>
   );
 };
+
+const styles = StyleSheet.create({
+  headerTitle: {
+    justifyContent: 'center',
+  },
+  headerEyebrow: {
+    ...Typography.overline,
+    fontSize: 9.5,
+    marginBottom: 2,
+  },
+  headerName: {
+    ...Typography.headlineMedium,
+    maxWidth: 220,
+  },
+});

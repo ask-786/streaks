@@ -1,25 +1,31 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Text } from 'react-native-paper';
-import { Colors, Spacing, Typography } from '../constants';
+import { Spacing, Typography, BorderRadius } from '../constants';
 import { useTheme } from '../hooks/useTheme';
 
 /**
- * CalendarLegend — Shows the meaning of calendar day markers.
+ * CalendarLegend — decodes the day markers.
+ *
+ * Each swatch is rendered at the same size and radius as a real calendar cell
+ * so the mapping is literal rather than a dot the user has to translate.
  */
 export const CalendarLegend: React.FC = () => {
-  const { colors } = useTheme();
+  const { colors, calendar } = useTheme();
+
   const items = [
-    { color: Colors.calendarLogged, label: 'Logged' },
-    { color: Colors.calendarMissed, label: 'Missed' },
-    { color: Colors.calendarToday, label: 'Today' },
+    { bg: calendar.logged, fg: calendar.loggedText, label: 'Logged', sample: '1' },
+    { bg: calendar.missed, fg: calendar.missedText, label: 'Missed', sample: '2' },
+    { bg: calendar.today, fg: calendar.todayText, label: 'Today', sample: '3' },
   ];
 
   return (
     <View style={styles.row}>
-      {items.map(({ color, label }) => (
+      {items.map(({ bg, fg, label, sample }) => (
         <View key={label} style={styles.item}>
-          <View style={[styles.dot, { backgroundColor: color }]} />
+          <View style={[styles.swatch, { backgroundColor: bg }]}>
+            <Text style={[styles.swatchText, { color: fg }]}>{sample}</Text>
+          </View>
           <Text style={[styles.label, { color: colors.textSecondary }]}>{label}</Text>
         </View>
       ))}
@@ -38,14 +44,20 @@ const styles = StyleSheet.create({
   item: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.xs,
+    gap: Spacing.sm,
   },
-  dot: {
-    width: 12,
-    height: 12,
-    borderRadius: 4,
+  swatch: {
+    width: 24,
+    height: 24,
+    borderRadius: BorderRadius.xs,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  swatchText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
   label: {
-    ...Typography.bodySmall,
+    ...Typography.caption,
   },
 });

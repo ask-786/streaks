@@ -1,37 +1,52 @@
 import React, { useEffect } from 'react';
-import {
-  View,
-  StyleSheet,
-  ScrollView,
-  StatusBar,
-  TouchableOpacity,
-} from 'react-native';
+import { View, StyleSheet, ScrollView, StatusBar } from 'react-native';
 import dayjs from 'dayjs';
 import { Text } from 'react-native-paper';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-  FadeInDown,
-} from 'react-native-reanimated';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { useAttendanceStore, getTaskForDate } from '../store/attendanceStore';
 import { LogButton } from '../components/LogButton';
-import { StreakBadge } from '../components/StreakBadge';
 import { NoteInputModal } from '../components/NoteInputModal';
-import { Colors, Spacing, Typography, BorderRadius } from '../constants';
+import {
+  Spacing,
+  Typography,
+  BorderRadius,
+  ScreenPadding,
+  alpha,
+} from '../constants';
 import { formatDisplayDate, todayStr, formatTime12h } from '../utils/dateUtils';
 import { useTheme } from '../hooks/useTheme';
 import ConfettiCannon from 'react-native-confetti-cannon';
+import { Card, Chip, ProgressBar, PressableScale, StatTile } from '../components/ui';
 
 export const DashboardScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
-  const { selectedActivityId, activities, logs: allLogs, notes, getActivityStats, logToday, logTodayWithSequenceSkip, sequenceSkips, isLoading, isConfettiEnabled } = useAttendanceStore();
+  const {
+    selectedActivityId,
+    activities,
+    logs: allLogs,
+    notes,
+    getActivityStats,
+    logToday,
+    logTodayWithSequenceSkip,
+    sequenceSkips,
+    isLoading,
+    isConfettiEnabled,
+  } = useAttendanceStore();
+
   const selectedActivity = activities.find(a => a.id === selectedActivityId);
   const isCompleted = !!selectedActivity?.completedAt;
   const stats = selectedActivityId
     ? getActivityStats(selectedActivityId)
-    : { isTodayLogged: false, currentStreak: 0, longestStreak: 0, unit: 'day' as const, isThisWeekGoalMet: false, thisWeekCount: 0, weeklyGoal: undefined };
+    : {
+        isTodayLogged: false,
+        currentStreak: 0,
+        longestStreak: 0,
+        unit: 'day' as const,
+        isThisWeekGoalMet: false,
+        thisWeekCount: 0,
+        weeklyGoal: undefined,
+      };
   const { isTodayLogged, currentStreak, longestStreak, unit, isThisWeekGoalMet } = stats;
   const isWeekly = unit === 'week';
 
@@ -91,7 +106,11 @@ export const DashboardScreen: React.FC = () => {
     return { isDisabled: false, reason: undefined, kind: undefined };
   };
 
-  const { isDisabled: isTimeBoundDisabled, reason: timeBoundDisabledReason, kind: timeBoundKind } = computeTimeBoundState();
+  const {
+    isDisabled: isTimeBoundDisabled,
+    reason: timeBoundDisabledReason,
+    kind: timeBoundKind,
+  } = computeTimeBoundState();
 
   const handleLogToday = () => {
     if (!selectedActivityId || !selectedActivity) return;
@@ -125,16 +144,6 @@ export const DashboardScreen: React.FC = () => {
     triggerConfetti();
   };
 
-  const headerScale = useSharedValue(0.9);
-  const headerStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: headerScale.value }],
-    opacity: headerScale.value,
-  }));
-
-  useEffect(() => {
-    headerScale.value = withSpring(1, { damping: 12, stiffness: 100 });
-  }, []);
-
   const today = todayStr();
 
   // Sequence skips for this activity
@@ -144,303 +153,368 @@ export const DashboardScreen: React.FC = () => {
   const isTodaySequenceSkipped = activitySequenceSkips.includes(today);
 
   // Compute today's task for the selected activity (accounting for skips)
-  const todayTask = selectedActivity && selectedActivityId
-    ? getTaskForDate(
-        selectedActivity,
-        today,
-        (allLogs[selectedActivityId] ?? []).map(e => e.date),
-        activitySequenceSkips,
-      )
-    : null;
-  const totalTasks = selectedActivity?.taskSequence?.length ?? 0;
-  // Which slot is today? (recompute index for display)
-  const todayTaskIndex = todayTask && selectedActivity?.taskSequence
-    ? (selectedActivity.taskSequence.indexOf(todayTask) + 1)
-    : 0;
+  const todayTask =
+    selectedActivity && selectedActivityId
+      ? getTaskForDate(
+          selectedActivity,
+          today,
+          (allLogs[selectedActivityId] ?? []).map(e => e.date),
+          activitySequenceSkips,
+        )
+      : null;
 
   // Today's skip note (first note entry on today, if logged-with-skip)
-  const todaySkipNote = isTodaySequenceSkipped && selectedActivityId
-    ? notes[selectedActivityId]?.[today]?.[0]?.text
-    : undefined;
+  const todaySkipNote =
+    isTodaySequenceSkipped && selectedActivityId
+      ? notes[selectedActivityId]?.[today]?.[0]?.text
+      : undefined;
+
+  // ── Presentation ───────────────────────────────────────────────────────────
+  const unitLabel = isWeekly
+    ? currentStreak === 1
+      ? 'week'
+      : 'weeks'
+    : currentStreak === 1
+      ? 'day'
+      : 'days';
+
+  // Streak runs cold → brand → ember as it grows.
+  const streakTint =
+    currentStreak === 0
+      ? colors.textTertiary
+      : currentStreak >= (isWeekly ? 4 : 7)
+        ? colors.accent
+        : colors.primary;
+
+  const goalTarget = selectedActivity?.streakGoal;
+  // Something to climb toward: the explicit goal if set, else your own record.
+  const climbTarget = goalTarget ?? (longestStreak > currentStreak ? longestStreak : 0);
+  const climbLabel = goalTarget ? 'to goal' : 'to your record';
+
+  const greeting = isCompleted
+    ? 'Goal achieved'
+    : isTodayLogged
+      ? "Today's locked in"
+      : isWeekly && isThisWeekGoalMet
+        ? 'Weekly goal met'
+        : 'Ready to check in?';
+
+  const statusLine = isCompleted
+    ? `Completed on ${dayjs(selectedActivity?.completedAt).format('MMMM D, YYYY')}.`
+    : isWeekly
+      ? isThisWeekGoalMet
+        ? "You've hit this week's goal — anything more is a bonus."
+        : `Log ${stats.weeklyGoal ?? ''} times this week to keep the streak alive.`
+      : isTodayLogged
+        ? 'Your attendance is recorded. Come back tomorrow.'
+        : 'One tap keeps the streak going.';
+
+  const motivation = (() => {
+    if (isCompleted) return 'Incredible dedication. Take a moment to enjoy it.';
+    const n = currentStreak;
+    if (isWeekly) {
+      if (n === 0) return 'Every streak starts with a single week.';
+      if (n < 4) return `${n} week${n > 1 ? 's' : ''} in. The habit is forming.`;
+      if (n < 12) return `${n} weeks. This is genuinely consistent now.`;
+      return `${n} weeks. That is remarkable staying power.`;
+    }
+    if (n === 0) return 'Every streak starts with a single day.';
+    if (n < 7) return `${n} day${n > 1 ? 's' : ''} in. The hardest part is behind you.`;
+    if (n < 30) return `${n} days. You are past the point where most people stop.`;
+    return `${n} days. That is a habit, not an effort.`;
+  })();
 
   return (
-    <View style={{ flex: 1 }}>
-    <ScrollView
-      style={[styles.scrollView, { backgroundColor: colors.background }]}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-    >
-      <StatusBar
-        barStyle={isDark ? 'light-content' : 'dark-content'}
-        backgroundColor={colors.background}
-      />
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        <StatusBar
+          barStyle={isDark ? 'light-content' : 'dark-content'}
+          backgroundColor={colors.background}
+        />
 
-      {/* Header row: greeting + dark mode toggle */}
-      <Animated.View entering={FadeInDown.delay(0).springify()} style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={[styles.greeting, { color: colors.textPrimary }]}>
-            {isCompleted ? (
-               <>Goal Achieved! <FontAwesome5 name="trophy" size={24} color={Colors.success} /></>
-            ) : isTodayLogged ? (
-               <>Great job! <FontAwesome5 name="glass-cheers" size={24} color={Colors.primary} /></>
-            ) : isWeekly && isThisWeekGoalMet ? (
-               <>Goal met! <FontAwesome5 name="glass-cheers" size={24} color={Colors.primary} /></>
-            ) : (
-               <>Ready to check in? <FontAwesome5 name="hand-paper" size={24} color={Colors.primary} /></>
-            )}
-          </Text>
-          <Text style={[styles.date, { color: colors.textSecondary }]}>
+        {/* Header */}
+        <Animated.View entering={FadeInDown.springify()} style={styles.header}>
+          <Text style={[styles.eyebrow, { color: colors.textTertiary }]}>
             {formatDisplayDate(today)}
           </Text>
-        </View>
-      </Animated.View>
+          <Text style={[styles.greeting, { color: colors.textPrimary }]}>{greeting}</Text>
+        </Animated.View>
 
-      {/* Status Card */}
-      <Animated.View
-        entering={FadeInDown.delay(100).springify()}
-        style={[styles.statusCard, { backgroundColor: colors.surface }]}
-      >
-        <View style={[styles.statusIconWrap, { backgroundColor: colors.surfaceVariant }]}>
-          <FontAwesome5
-            name={isCompleted ? 'trophy' : isTodayLogged ? 'check-circle' : 'hourglass-half'}
-            size={24}
-            color={isCompleted ? Colors.success : isTodayLogged ? Colors.success : Colors.warning}
-          />
-        </View>
-        <View style={styles.statusText}>
-          <Text style={[styles.statusTitle, { color: colors.textPrimary }]}>
-            {isCompleted
-              ? 'Activity Conquered'
-              : isWeekly
-              ? isThisWeekGoalMet
-                ? 'Goal Met This Week'
-                : 'Goal In Progress'
-              : isTodayLogged
-              ? 'Logged In Today'
-              : 'Not Yet Logged'}
-          </Text>
-          <Text style={[styles.statusSubtitle, { color: colors.textSecondary }]}>
-            {isCompleted
-              ? `You completed this on ${dayjs(selectedActivity?.completedAt).format('MMMM D, YYYY')}. Outstanding work!`
-              : isWeekly
-              ? isThisWeekGoalMet
-                ? "You've hit your weekly goal — great work!"
-                : `Log ${stats.weeklyGoal ?? ''} times this week to grow your streak.`
-              : isTodayLogged
-              ? 'Your attendance is recorded for today.'
-              : 'Tap the button below to log your attendance.'}
-          </Text>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
-            {!isTodayLogged && !isCompleted && selectedActivity?.timeBoundType && (
-              <View style={[
-                styles.timeBoundChip,
-                isTimeBoundDisabled
-                  ? { backgroundColor: colors.surfaceVariant, borderColor: Colors.textDisabled }
-                  : { backgroundColor: isDark ? '#1A2F1A' : '#F0FDF4', borderColor: Colors.success },
-              ]}>
-                <FontAwesome5
-                  name="clock"
-                  size={11}
-                  color={isTimeBoundDisabled ? Colors.textDisabled : Colors.success}
-                />
-                <Text style={[styles.timeBoundChipText, { color: isTimeBoundDisabled ? Colors.textDisabled : Colors.success }]}>
-                  {selectedActivity.timeBoundType === 'between'
-                    ? `${formatTime12h(selectedActivity.timeBoundStartTime ?? '')} – ${formatTime12h(selectedActivity.timeBoundEndTime ?? '')}`
-                    : `${selectedActivity.timeBoundType} ${formatTime12h(selectedActivity.timeBoundStartTime ?? '')}`}
+        {/* ── Hero: streak + the one action that matters ────────────────────── */}
+        <Animated.View entering={FadeInDown.delay(70).springify()}>
+          <Card elevation="medium" padding={0} radius={BorderRadius.xl}>
+            {/* Streak readout */}
+            <View style={styles.heroTop}>
+              <View style={styles.heroStreak}>
+                <Text style={[styles.heroLabel, { color: colors.textTertiary }]}>
+                  {isWeekly ? 'Week streak' : 'Current streak'}
                 </Text>
-                {isTimeBoundDisabled && (
-                  <Text style={[styles.timeBoundChipBadge, { color: Colors.textDisabled }]}>Locked</Text>
-                )}
+                <View style={styles.heroValueRow}>
+                  <Text style={[styles.heroValue, { color: streakTint }]}>
+                    {currentStreak}
+                  </Text>
+                  <Text style={[styles.heroUnit, { color: colors.textTertiary }]}>
+                    {unitLabel}
+                  </Text>
+                  {currentStreak >= (isWeekly ? 4 : 7) ? (
+                    <FontAwesome5
+                      name="fire"
+                      size={18}
+                      color={colors.accent}
+                      style={styles.heroFlame}
+                    />
+                  ) : null}
+                </View>
               </View>
-            )}
 
-            {selectedActivity?.activityType === 'goal' && selectedActivity?.streakGoal && !isCompleted && (
-              <View style={[
-                styles.timeBoundChip,
-                { backgroundColor: colors.primaryContainer, borderColor: Colors.primary }
-              ]}>
-                <FontAwesome5 name="bullseye" size={11} color={Colors.primary} />
-                <Text style={[styles.timeBoundChipText, { color: Colors.primary }]}>
-                  Target: {selectedActivity.streakGoal} {isWeekly ? (selectedActivity.streakGoal === 1 ? 'Week' : 'Weeks') : (selectedActivity.streakGoal === 1 ? 'Day' : 'Days')}
+              <View style={[styles.heroBest, { borderLeftColor: colors.divider }]}>
+                <Text style={[styles.heroLabel, { color: colors.textTertiary }]}>Best</Text>
+                <Text style={[styles.heroBestValue, { color: colors.textSecondary }]}>
+                  {longestStreak}
                 </Text>
               </View>
-            )}
-          </View>
-        </View>
-      </Animated.View>
-
-      {/* Today's Task Card */}
-      {todayTask ? (
-        <Animated.View
-          entering={FadeInDown.delay(150).springify()}
-          style={[styles.taskCard, { backgroundColor: colors.surface }]}
-        >
-          <View style={styles.taskCardHeader}>
-            <View style={[styles.taskCardIconWrap, { backgroundColor: isDark ? Colors.dark?.primaryContainer ?? '#1E1B4B' : Colors.primaryContainer }]}>
-              <FontAwesome5 name="list-ol" size={14} color={Colors.primary} />
             </View>
-            <Text style={[styles.taskCardLabel, { color: colors.textSecondary }]}>Today's Task</Text>
-            {/* Skip Sequence pill — only shown when not yet logged and not completed */}
-            {!isTodayLogged && !isCompleted && !isTodaySequenceSkipped && (
-              <TouchableOpacity
-                onPress={handleSkipSequence}
-                style={[styles.skipPill, { borderColor: Colors.warning }]}
-                activeOpacity={0.7}
-              >
-                <FontAwesome5 name="forward" size={10} color={Colors.warning} />
-                <Text style={[styles.skipPillText, { color: Colors.warning }]}>Skip Sequence</Text>
-              </TouchableOpacity>
-            )}
-            {/* Skipped chip — shown after logging with sequence skip */}
-            {isTodaySequenceSkipped && (
-              <View style={[styles.skippedChip, { backgroundColor: isDark ? '#3A2500' : '#FFF7E6', borderColor: Colors.warning }]}>
-                <FontAwesome5 name="forward" size={10} color={Colors.warning} />
-                <Text style={[styles.skippedChipText, { color: Colors.warning }]}>Skipped</Text>
+
+            {/* Climb toward record or goal */}
+            {climbTarget > 0 && !isCompleted ? (
+              <View style={styles.climb}>
+                <ProgressBar
+                  value={currentStreak / climbTarget}
+                  color={streakTint}
+                  height={6}
+                />
+                <Text style={[styles.climbLabel, { color: colors.textTertiary }]}>
+                  {Math.max(0, climbTarget - currentStreak)} more {climbLabel}
+                </Text>
               </View>
-            )}
-          </View>
-          <Text style={[
-            styles.taskCardText,
-            { color: isTodaySequenceSkipped ? colors.textSecondary : colors.textPrimary },
-          ]}>
-            {todayTask}
-          </Text>
-          {/* Skip note */}
-          {isTodaySequenceSkipped && todaySkipNote ? (
-            <Text style={[styles.skipNoteText, { color: colors.textSecondary }]}>
-              📝 {todaySkipNote}
-            </Text>
-          ) : null}
-          {/* Hint when skipped but no note */}
-          {isTodaySequenceSkipped && !todaySkipNote ? (
-            <Text style={[styles.skipNoteText, { color: colors.textSecondary }]}>
-              Logged today — sequence task deferred to next day.
-            </Text>
-          ) : null}
-        </Animated.View>
-      ) : null}
+            ) : null}
 
-      {/* Weekly Progress Card */}
-      {isWeekly && stats.weeklyGoal && (
-        <Animated.View
-          entering={FadeInDown.delay(150).springify()}
-          style={[styles.progressCard, { backgroundColor: colors.surface }]}
-        >
-          <View style={styles.progressHeader}>
-            <Text style={[styles.progressLabel, { color: colors.textSecondary }]}>This Week's Progress</Text>
-            <Text style={[styles.progressText, { color: colors.textPrimary }]}>
-              {stats.thisWeekCount} / {stats.weeklyGoal}
-            </Text>
-          </View>
-          <View style={[styles.progressBarBg, { backgroundColor: colors.surfaceVariant }]}>
-            <Animated.View 
-              style={[
-                styles.progressBarFill, 
-                { 
-                  backgroundColor: stats.isThisWeekGoalMet ? Colors.success : Colors.primary, 
-                  width: `${Math.min(100, (stats.thisWeekCount / stats.weeklyGoal) * 100)}%` 
+            {/* Constraints & targets */}
+            {(!isTodayLogged && !isCompleted && selectedActivity?.timeBoundType) ||
+            (selectedActivity?.activityType === 'goal' &&
+              selectedActivity?.streakGoal &&
+              !isCompleted) ? (
+              <View style={styles.chipRow}>
+                {!isTodayLogged && !isCompleted && selectedActivity?.timeBoundType ? (
+                  <Chip
+                    icon={isTimeBoundDisabled ? 'lock' : 'clock'}
+                    tone={isTimeBoundDisabled ? 'neutral' : 'success'}
+                    variant="soft"
+                    label={
+                      selectedActivity.timeBoundType === 'between'
+                        ? `${formatTime12h(selectedActivity.timeBoundStartTime ?? '')} – ${formatTime12h(
+                            selectedActivity.timeBoundEndTime ?? '',
+                          )}`
+                        : `${selectedActivity.timeBoundType} ${formatTime12h(
+                            selectedActivity.timeBoundStartTime ?? '',
+                          )}`
+                    }
+                    trailing={isTimeBoundDisabled ? 'Locked' : undefined}
+                  />
+                ) : null}
+
+                {selectedActivity?.activityType === 'goal' &&
+                selectedActivity?.streakGoal &&
+                !isCompleted ? (
+                  <Chip
+                    icon="bullseye"
+                    tone="brand"
+                    label={`Target ${selectedActivity.streakGoal} ${
+                      isWeekly
+                        ? selectedActivity.streakGoal === 1
+                          ? 'week'
+                          : 'weeks'
+                        : selectedActivity.streakGoal === 1
+                          ? 'day'
+                          : 'days'
+                    }`}
+                  />
+                ) : null}
+              </View>
+            ) : null}
+
+            {/* Action */}
+            <View style={[styles.heroAction, { borderTopColor: colors.divider }]}>
+              <LogButton
+                onPress={handleLogToday}
+                isLogged={isTodayLogged}
+                isCompleted={isCompleted}
+                isLoading={isLoading}
+                disabled={isTimeBoundDisabled || isCompleted}
+                disabledReason={
+                  isCompleted ? "You've conquered this one" : timeBoundDisabledReason
                 }
-              ]} 
-            />
-          </View>
+                disabledKind={isCompleted ? undefined : timeBoundKind}
+              />
+              <Text style={[styles.statusLine, { color: colors.textTertiary }]}>
+                {statusLine}
+              </Text>
+            </View>
+          </Card>
         </Animated.View>
-      )}
 
-      {/* Streak Badges */}
-      <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.badgeRow}>
-        <StreakBadge
-          label={isWeekly ? 'Week Streak' : 'Current Streak'}
-          count={currentStreak}
-          icon="fire"
-          accent={Colors.primary}
-          accentLight={colors.primaryContainer}
-        />
-        <View style={styles.badgeDivider} />
-        <StreakBadge
-          label={isWeekly ? 'Best Week Streak' : 'Longest Streak'}
-          count={longestStreak}
-          icon="bolt"
-          accent={Colors.warning}
-          accentLight={isDark ? '#3A2B0A' : Colors.warningLight}
-        />
-      </Animated.View>
+        {/* ── Today's task ──────────────────────────────────────────────────── */}
+        {todayTask ? (
+          <Animated.View entering={FadeInDown.delay(140).springify()} style={styles.block}>
+            <Card elevation="low">
+              <View style={styles.taskHeader}>
+                <View
+                  style={[
+                    styles.taskIcon,
+                    { backgroundColor: alpha(colors.primary, 0.12) },
+                  ]}
+                >
+                  <FontAwesome5 name="list-ol" size={12} color={colors.primary} />
+                </View>
+                <Text style={[styles.taskLabel, { color: colors.textTertiary }]}>
+                  Today's task
+                </Text>
 
-      {/* Log Button */}
-      <Animated.View entering={FadeInDown.delay(300).springify()} style={styles.buttonWrapper}>
-        <LogButton
-          onPress={handleLogToday}
-          isLogged={isTodayLogged}
-          isCompleted={isCompleted}
-          isLoading={isLoading}
-          disabled={isTimeBoundDisabled || isCompleted}
-          disabledReason={isCompleted ? "You've conquered this activity!" : timeBoundDisabledReason}
-          disabledKind={isCompleted ? undefined : timeBoundKind}
-        />
-      </Animated.View>
+                {!isTodayLogged && !isCompleted && !isTodaySequenceSkipped ? (
+                  <PressableScale
+                    onPress={handleSkipSequence}
+                    scaleTo={0.94}
+                    style={[
+                      styles.skipBtn,
+                      { borderColor: colors.warningBorder, backgroundColor: colors.warningMuted },
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Skip today's sequence task"
+                  >
+                    <FontAwesome5 name="forward" size={9} color={colors.warning} />
+                    <Text style={[styles.skipBtnText, { color: colors.warning }]}>
+                      Skip
+                    </Text>
+                  </PressableScale>
+                ) : null}
 
-      {/* Motivational Footer */}
-      <Animated.View entering={FadeInDown.delay(400).springify()}>
-        <Text style={[styles.motivationText, { color: colors.textSecondary }]}>
-          {isCompleted ? (
-            <>Incredible dedication! Take a moment to celebrate your success. <FontAwesome5 name="star" size={16} color={Colors.warning} /></>
-          ) : isWeekly ? (
-            currentStreak === 0
-              ? (
-                <>Start your weekly streak! Hit your goal this week. <FontAwesome5 name="dumbbell" size={16} /></>
-              ) : currentStreak < 4
-              ? (
-                <>{currentStreak} week{currentStreak > 1 ? 's' : ''} strong! Keep it up! <FontAwesome5 name="dumbbell" size={16} /></>
-              ) : currentStreak < 12
-              ? (
-                <>{currentStreak} weeks! You're on fire! <FontAwesome5 name="fire" size={16} /></>
-              ) : (
-                <>{currentStreak} weeks! Absolutely legendary! <FontAwesome5 name="trophy" size={16} /></>
-              )
-          ) : (
-            currentStreak === 0
-              ? (
-                <>Start your streak today! Every journey begins with a single step. <FontAwesome5 name="dumbbell" size={16} /></>
-              )
-              : currentStreak < 7
-              ? (
-                <>{currentStreak} day{currentStreak > 1 ? 's' : ''} strong! Keep it up! <FontAwesome5 name="dumbbell" size={16} /></>
-              )
-              : currentStreak < 30
-              ? (
-                <>{currentStreak} days! You're on fire! <FontAwesome5 name="fire" size={16} /></>
-              )
-              : (
-                <>{currentStreak} days! Absolutely legendary! <FontAwesome5 name="trophy" size={16} /></>
-              )
-          )}
-        </Text>
-      </Animated.View>
+                {isTodaySequenceSkipped ? (
+                  <Chip label="Skipped" icon="forward" tone="warning" />
+                ) : null}
+              </View>
 
-    </ScrollView>
-    <ConfettiCannon
-      count={150}
-      origin={{ x: -10, y: 0 }}
-      autoStart={false}
-      ref={confettiRef}
-      fadeOut={true}
-    />
-    <NoteInputModal
-      visible={noteModalVisible}
-      activityName={selectedActivity?.name}
-      onClose={() => setNoteModalVisible(false)}
-      onSubmit={handleNoteSubmit}
-    />
-    {/* Skip Sequence modal — note is required */}
-    <NoteInputModal
-      visible={skipModalVisible}
-      activityName={selectedActivity?.name}
-      title="Skip Today's Sequence?"
-      subtitle={todayTask ? `"${todayTask}" will be deferred to your next session. Add a note explaining why.` : undefined}
-      submitLabel="Log & Skip Sequence"
-      noteRequired={true}
-      onClose={() => setSkipModalVisible(false)}
-      onSubmit={handleSkipSubmit}
-    />
+              <Text
+                style={[
+                  styles.taskText,
+                  {
+                    color: isTodaySequenceSkipped
+                      ? colors.textTertiary
+                      : colors.textPrimary,
+                    textDecorationLine: isTodaySequenceSkipped ? 'line-through' : 'none',
+                  },
+                ]}
+              >
+                {todayTask}
+              </Text>
+
+              {isTodaySequenceSkipped ? (
+                <View
+                  style={[
+                    styles.skipNote,
+                    { backgroundColor: colors.surfaceVariant },
+                  ]}
+                >
+                  <FontAwesome5
+                    name={todaySkipNote ? 'sticky-note' : 'info-circle'}
+                    size={11}
+                    color={colors.textTertiary}
+                  />
+                  <Text style={[styles.skipNoteText, { color: colors.textSecondary }]}>
+                    {todaySkipNote ?? 'Logged today — this task moves to your next session.'}
+                  </Text>
+                </View>
+              ) : null}
+            </Card>
+          </Animated.View>
+        ) : null}
+
+        {/* ── Weekly goal ───────────────────────────────────────────────────── */}
+        {isWeekly && stats.weeklyGoal ? (
+          <Animated.View entering={FadeInDown.delay(180).springify()} style={styles.block}>
+            <Card elevation="low">
+              <View style={styles.weekHeader}>
+                <Text style={[styles.taskLabel, { color: colors.textTertiary }]}>
+                  This week
+                </Text>
+                <Text style={[styles.weekValue, { color: colors.textPrimary }]}>
+                  {stats.thisWeekCount}
+                  <Text style={{ color: colors.textTertiary }}> / {stats.weeklyGoal}</Text>
+                </Text>
+              </View>
+              <ProgressBar
+                value={stats.thisWeekCount / stats.weeklyGoal}
+                color={isThisWeekGoalMet ? colors.success : colors.primary}
+                segments={stats.weeklyGoal}
+                height={8}
+              />
+            </Card>
+          </Animated.View>
+        ) : null}
+
+        {/* ── Secondary stats ───────────────────────────────────────────────── */}
+        <Animated.View entering={FadeInDown.delay(220).springify()} style={styles.statRow}>
+          <StatTile
+            label={isWeekly ? 'Best run' : 'Longest streak'}
+            value={longestStreak}
+            unit={isWeekly ? 'wks' : 'days'}
+            icon="trophy"
+            accent={colors.warning}
+            accentMuted={colors.warningMuted}
+            delay={240}
+          />
+          <StatTile
+            label="Total logged"
+            value={selectedActivityId ? (allLogs[selectedActivityId]?.length ?? 0) : 0}
+            unit="days"
+            icon="check-double"
+            accent={colors.success}
+            accentMuted={colors.successMuted}
+            delay={300}
+          />
+        </Animated.View>
+
+        {/* ── Motivation ────────────────────────────────────────────────────── */}
+        <Animated.View entering={FadeInDown.delay(280).springify()}>
+          <Text style={[styles.motivation, { color: colors.textTertiary }]}>
+            {motivation}
+          </Text>
+        </Animated.View>
+      </ScrollView>
+
+      <ConfettiCannon
+        count={120}
+        origin={{ x: -10, y: 0 }}
+        autoStart={false}
+        ref={confettiRef}
+        fadeOut
+      />
+
+      <NoteInputModal
+        visible={noteModalVisible}
+        activityName={selectedActivity?.name}
+        onClose={() => setNoteModalVisible(false)}
+        onSubmit={handleNoteSubmit}
+      />
+
+      {/* Skip Sequence modal — note is required */}
+      <NoteInputModal
+        visible={skipModalVisible}
+        activityName={selectedActivity?.name}
+        title="Skip Today's Sequence?"
+        subtitle={
+          todayTask
+            ? `"${todayTask}" will be deferred to your next session. Add a note explaining why.`
+            : undefined
+        }
+        submitLabel="Log & Skip Sequence"
+        noteRequired
+        onClose={() => setSkipModalVisible(false)}
+        onSubmit={handleSkipSubmit}
+      />
     </View>
   );
 };
@@ -450,216 +524,157 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.lg,
-    paddingBottom: Spacing.xxl,
-    alignItems: 'center',
+    paddingHorizontal: ScreenPadding,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.xl,
   },
   header: {
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.md + 2,
   },
-  headerLeft: {
-    flex: 1,
+  eyebrow: {
+    ...Typography.overline,
+    marginBottom: 6,
   },
   greeting: {
     ...Typography.headlineLarge,
-    marginBottom: 4,
   },
-  date: {
-    ...Typography.bodyMedium,
-  },
-  statusCard: {
-    width: '100%',
+
+  // Hero
+  heroTop: {
     flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.md,
-    marginBottom: Spacing.md,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
+    alignItems: 'flex-start',
+    paddingHorizontal: Spacing.lg - 4,
+    paddingTop: Spacing.lg - 4,
   },
-  statusIconWrap: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: Spacing.md,
-  },
-  statusEmoji: {
-    fontSize: 24,
-  },
-  statusText: {
+  heroStreak: {
     flex: 1,
   },
-  statusTitle: {
+  heroLabel: {
+    ...Typography.overline,
+  },
+  heroValueRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 6,
+    marginTop: 4,
+  },
+  heroValue: {
+    ...Typography.numeralLarge,
+    fontSize: 52,
+    lineHeight: 56,
+  },
+  heroUnit: {
     ...Typography.titleLarge,
-    marginBottom: 2,
   },
-  statusSubtitle: {
-    ...Typography.bodySmall,
-    lineHeight: 18,
+  heroFlame: {
+    marginLeft: 2,
   },
-  progressCard: {
-    width: '100%',
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.md,
-    marginBottom: Spacing.md,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
+  heroBest: {
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    paddingLeft: Spacing.md,
+    minWidth: 74,
+    paddingTop: 2,
   },
-  progressHeader: {
+  heroBestValue: {
+    ...Typography.numeralMedium,
+    marginTop: 4,
+  },
+  climb: {
+    paddingHorizontal: Spacing.lg - 4,
+    marginTop: Spacing.md,
+  },
+  climbLabel: {
+    ...Typography.caption,
+    marginTop: 6,
+  },
+  chipRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: Spacing.sm,
+    flexWrap: 'wrap',
+    gap: Spacing.sm - 2,
+    paddingHorizontal: Spacing.lg - 4,
+    marginTop: Spacing.md,
   },
-  progressLabel: {
-    ...Typography.bodySmall,
-    fontWeight: '600',
-    textTransform: 'uppercase',
+  heroAction: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    marginTop: Spacing.lg - 4,
+    paddingHorizontal: Spacing.lg - 4,
+    paddingTop: Spacing.md + 2,
+    paddingBottom: Spacing.md + 2,
   },
-  progressText: {
-    ...Typography.bodyMedium,
-    fontWeight: '700',
+  statusLine: {
+    ...Typography.caption,
+    textAlign: 'center',
+    marginTop: Spacing.sm + 2,
   },
-  progressBarBg: {
-    height: 8,
-    borderRadius: 4,
-    overflow: 'hidden',
+
+  // Blocks
+  block: {
+    marginTop: Spacing.md - 2,
   },
-  progressBarFill: {
-    height: '100%',
-    borderRadius: 4,
-  },
-  badgeRow: {
+  taskHeader: {
     flexDirection: 'row',
-    width: '100%',
-    marginBottom: Spacing.xl,
-  },
-  badgeDivider: {
-    width: Spacing.sm,
-  },
-  buttonWrapper: {
-    width: '100%',
     alignItems: 'center',
-    marginBottom: Spacing.xl,
+    gap: Spacing.sm,
+    marginBottom: Spacing.sm + 2,
   },
-  timeBoundChip: {
+  taskIcon: {
+    width: 26,
+    height: 26,
+    borderRadius: BorderRadius.xs,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  taskLabel: {
+    ...Typography.overline,
+    flex: 1,
+  },
+  taskText: {
+    ...Typography.bodyLarge,
+    fontWeight: '500',
+  },
+  skipBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    marginTop: 8,
-    alignSelf: 'flex-start',
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderRadius: BorderRadius.full,
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
-  timeBoundChipText: {
-    ...Typography.labelMedium,
-    fontWeight: '600',
-  },
-  timeBoundChipBadge: {
+  skipBtnText: {
     ...Typography.labelMedium,
     fontWeight: '700',
-    opacity: 0.6,
-    marginLeft: 2,
   },
-  motivationText: {
-    ...Typography.bodyMedium,
-    textAlign: 'center',
-    paddingHorizontal: Spacing.lg,
-    lineHeight: 22,
-  },
-  // ── Today's Task card ────────────────────────────────────────────────────────
-  taskCard: {
-    width: '100%',
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.md,
-    marginBottom: Spacing.md,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
+  skipNote: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     gap: Spacing.sm,
-  },
-  taskCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
-  taskCardIconWrap: {
-    width: 30,
-    height: 30,
-    borderRadius: BorderRadius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  taskCardLabel: {
-    ...Typography.labelMedium,
-    fontWeight: '600',
-    flex: 1,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  taskIndexPill: {
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 3,
-    borderRadius: BorderRadius.full,
-  },
-  taskIndexText: {
-    ...Typography.labelMedium,
-    fontWeight: '700',
-  },
-  taskCardText: {
-    ...Typography.bodyMedium,
-    lineHeight: 22,
-  },
-  // ── Skip Sequence pill & chip ─────────────────────────────────────────────
-  skipPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    borderWidth: 1,
-    borderRadius: BorderRadius.full,
-    paddingHorizontal: 9,
-    paddingVertical: 3,
-    marginLeft: 'auto',
-  },
-  skipPillText: {
-    ...Typography.labelMedium,
-    fontWeight: '600',
-  },
-  skippedChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    borderWidth: 1,
-    borderRadius: BorderRadius.full,
-    paddingHorizontal: 9,
-    paddingVertical: 3,
-    marginLeft: 'auto',
-  },
-  skippedChipText: {
-    ...Typography.labelMedium,
-    fontWeight: '700',
+    marginTop: Spacing.sm + 2,
+    padding: Spacing.sm + 2,
+    borderRadius: BorderRadius.sm,
   },
   skipNoteText: {
     ...Typography.bodySmall,
-    lineHeight: 18,
-    fontStyle: 'italic',
-    marginTop: 2,
+    flex: 1,
+  },
+  weekHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.sm + 2,
+  },
+  weekValue: {
+    ...Typography.numeralSmall,
+  },
+  statRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm + 2,
+    marginTop: Spacing.md - 2,
+  },
+  motivation: {
+    ...Typography.bodyMedium,
+    textAlign: 'center',
+    marginTop: Spacing.lg,
+    paddingHorizontal: Spacing.md,
   },
 });

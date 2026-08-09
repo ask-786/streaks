@@ -5,21 +5,65 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import dayjs from 'dayjs';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { useAttendanceStore } from '../store/attendanceStore';
-import { StreakBadge } from '../components/StreakBadge';
 import { MonthlyProgress } from '../components/MonthlyProgress';
-import { Colors, Spacing, Typography, BorderRadius } from '../constants';
+import {
+  Spacing,
+  Typography,
+  BorderRadius,
+  ScreenPadding,
+  alpha,
+} from '../constants';
 import { useTheme } from '../hooks/useTheme';
-import { loggedDaysThisMonth, totalDaysPassedThisMonth, todayStr } from '../utils/dateUtils';
+import {
+  loggedDaysThisMonth,
+  totalDaysPassedThisMonth,
+  todayStr,
+} from '../utils/dateUtils';
+import { Card, EmptyState, ProgressBar, StatTile } from '../components/ui';
+
+interface DetailRowProps {
+  icon: string;
+  label: string;
+  value: string;
+  tint: string;
+  isLast?: boolean;
+}
+
+const DetailRow: React.FC<DetailRowProps> = ({ icon, label, value, tint, isLast }) => {
+  const { colors } = useTheme();
+  return (
+    <View
+      style={[
+        styles.detailRow,
+        !isLast && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.divider },
+      ]}
+    >
+      <View style={[styles.detailIcon, { backgroundColor: alpha(tint, 0.12) }]}>
+        <FontAwesome5 name={icon} size={12} color={tint} />
+      </View>
+      <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>{label}</Text>
+      <Text style={[styles.detailValue, { color: colors.textPrimary }]}>{value}</Text>
+    </View>
+  );
+};
 
 export const StatsScreen: React.FC = () => {
-  const { colors, isDark } = useTheme();
-  const { logs, selectedActivityId, getActivityStats } = useAttendanceStore();
+  const { colors } = useTheme();
+  const { logs, selectedActivityId, activities, getActivityStats } = useAttendanceStore();
+
+  const selectedActivity = activities.find(a => a.id === selectedActivityId);
   const logEntries = selectedActivityId ? logs[selectedActivityId] || [] : [];
   // Extract the locked local date strings for all stats/display purposes
   const logDateStrings = logEntries.map(e => e.date);
   const stats = selectedActivityId
     ? getActivityStats(selectedActivityId)
-    : { currentStreak: 0, longestStreak: 0, unit: 'day' as const, isThisWeekGoalMet: false, weeklyGoal: undefined };
+    : {
+        currentStreak: 0,
+        longestStreak: 0,
+        unit: 'day' as const,
+        isThisWeekGoalMet: false,
+        weeklyGoal: undefined,
+      };
   const { currentStreak, longestStreak, unit, weeklyGoal } = stats;
   const isWeekly = unit === 'week';
 
@@ -27,10 +71,42 @@ export const StatsScreen: React.FC = () => {
   const thisMonthTotal = totalDaysPassedThisMonth();
   const totalLogged = logDateStrings.length;
 
-  const firstLoggedDate =
-    logDateStrings.length > 0
-      ? dayjs([...logDateStrings].sort()[0]).format('MMMM D, YYYY')
-      : null;
+  const sortedDates = [...logDateStrings].sort();
+  const firstLoggedDate = sortedDates.length > 0 ? sortedDates[0] : null;
+
+  // Lifetime hit rate: logged days over days the habit has existed.
+  const daysSinceStart = selectedActivity
+    ? Math.max(1, dayjs(todayStr()).diff(dayjs(selectedActivity.createdAt), 'day') + 1)
+    : 0;
+  const lifetimeRate =
+    daysSinceStart > 0 ? Math.min(1, totalLogged / daysSinceStart) : 0;
+
+  const thisWeekCount = (() => {
+    const d = dayjs(todayStr());
+    const weekStart = d.subtract((d.day() + 6) % 7, 'day').format('YYYY-MM-DD');
+    const weekEnd = dayjs(weekStart).add(6, 'day').format('YYYY-MM-DD');
+    return new Set(logDateStrings.filter(dt => dt >= weekStart && dt <= weekEnd)).size;
+  })();
+
+  if (totalLogged === 0) {
+    return (
+      <ScrollView
+        style={[styles.scrollView, { backgroundColor: colors.background }]}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        <Animated.View entering={FadeInDown.springify()} style={styles.header}>
+          <Text style={[styles.eyebrow, { color: colors.textTertiary }]}>Insights</Text>
+          <Text style={[styles.title, { color: colors.textPrimary }]}>Your stats</Text>
+        </Animated.View>
+        <EmptyState
+          icon="chart-line"
+          title="No data yet"
+          description="Log this habit at least once and your streaks, monthly consistency and history will appear here."
+        />
+      </ScrollView>
+    );
+  }
 
   return (
     <ScrollView
@@ -39,94 +115,134 @@ export const StatsScreen: React.FC = () => {
       showsVerticalScrollIndicator={false}
     >
       {/* Header */}
-      <Animated.View entering={FadeInDown.delay(0).springify()} style={styles.header}>
-        <Text style={[styles.title, { color: colors.textPrimary }]}>Your Stats</Text>
+      <Animated.View entering={FadeInDown.springify()} style={styles.header}>
+        <Text style={[styles.eyebrow, { color: colors.textTertiary }]}>Insights</Text>
+        <Text style={[styles.title, { color: colors.textPrimary }]}>Your stats</Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          Track your consistency over time
+          Consistency over time, not just today
         </Text>
       </Animated.View>
 
-      {/* Streak Badges */}
-      <Animated.View entering={FadeInDown.delay(100).springify()} style={styles.badgeRow}>
-        <StreakBadge
-          label={isWeekly ? 'Week Streak' : 'Current Streak'}
-          count={currentStreak}
+      {/* Headline streaks */}
+      <Animated.View entering={FadeInDown.delay(70).springify()} style={styles.statRow}>
+        <StatTile
+          label={isWeekly ? 'Week streak' : 'Current streak'}
+          value={currentStreak}
+          unit={isWeekly ? 'wks' : 'days'}
           icon="fire"
-          accent={Colors.primary}
-          accentLight={colors.primaryContainer}
+          accent={currentStreak >= (isWeekly ? 4 : 7) ? colors.accent : colors.primary}
+          delay={90}
         />
-        <View style={styles.badgeDivider} />
-        <StreakBadge
-          label={isWeekly ? 'Best Week Streak' : 'Best Streak'}
-          count={longestStreak}
+        <StatTile
+          label={isWeekly ? 'Best run' : 'Best streak'}
+          value={longestStreak}
+          unit={isWeekly ? 'wks' : 'days'}
           icon="trophy"
-          accent={Colors.warning}
-          accentLight={isDark ? '#3A2B0A' : Colors.warningLight}
+          accent={colors.warning}
+          accentMuted={colors.warningMuted}
+          delay={150}
         />
       </Animated.View>
 
-      {/* Monthly Progress */}
-      <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.section}>
-        <MonthlyProgress
-          loggedDays={thisMonthLogged}
-          totalDays={thisMonthTotal}
-        />
+      {/* Monthly consistency */}
+      <Animated.View entering={FadeInDown.delay(130).springify()} style={styles.block}>
+        <MonthlyProgress loggedDays={thisMonthLogged} totalDays={thisMonthTotal} />
       </Animated.View>
 
-      {/* Weekly Progress Card — only for weekly-goal activities */}
-      {isWeekly && weeklyGoal && (
-        <Animated.View entering={FadeInDown.delay(290).springify()} style={[styles.weeklyCard, { backgroundColor: colors.surface }]}>
-          <FontAwesome5 name="calendar-check" size={22} color={Colors.primary} style={{ marginRight: Spacing.md }} />
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.weeklyCardLabel, { color: colors.textSecondary }]}>This Week's Progress</Text>
-            <Text style={[styles.weeklyCardValue, { color: colors.textPrimary }]}>
-              {(() => {
-                const today = todayStr();
-                const d = dayjs(today);
-                const weekStart = d.subtract((d.day() + 6) % 7, 'day').format('YYYY-MM-DD');
-                const weekEnd = dayjs(weekStart).add(6, 'day').format('YYYY-MM-DD');
-                const thisWeekLogs = logDateStrings.filter(dt => dt >= weekStart && dt <= weekEnd);
-                const uniqueThisWeek = new Set(thisWeekLogs).size;
-                return `${uniqueThisWeek} / ${weeklyGoal} sessions`;
-              })()}
+      {/* Weekly goal */}
+      {isWeekly && weeklyGoal ? (
+        <Animated.View entering={FadeInDown.delay(180).springify()} style={styles.block}>
+          <Card elevation="low">
+            <View style={styles.weekHeader}>
+              <View
+                style={[styles.detailIcon, { backgroundColor: alpha(colors.primary, 0.12) }]}
+              >
+                <FontAwesome5 name="calendar-check" size={12} color={colors.primary} />
+              </View>
+              <Text style={[styles.weekLabel, { color: colors.textTertiary }]}>
+                This week's goal
+              </Text>
+              <Text style={[styles.weekValue, { color: colors.textPrimary }]}>
+                {thisWeekCount}
+                <Text style={{ color: colors.textTertiary }}> / {weeklyGoal}</Text>
+              </Text>
+            </View>
+            <ProgressBar
+              value={thisWeekCount / weeklyGoal}
+              color={thisWeekCount >= weeklyGoal ? colors.success : colors.primary}
+              segments={weeklyGoal}
+              height={8}
+              style={{ marginTop: Spacing.md }}
+            />
+          </Card>
+        </Animated.View>
+      ) : null}
+
+      {/* Lifetime hit rate */}
+      <Animated.View entering={FadeInDown.delay(220).springify()} style={styles.block}>
+        <Card elevation="low">
+          <View style={styles.weekHeader}>
+            <View
+              style={[styles.detailIcon, { backgroundColor: alpha(colors.success, 0.12) }]}
+            >
+              <FontAwesome5 name="bullseye" size={12} color={colors.success} />
+            </View>
+            <Text style={[styles.weekLabel, { color: colors.textTertiary }]}>
+              Lifetime hit rate
+            </Text>
+            <Text style={[styles.weekValue, { color: colors.textPrimary }]}>
+              {Math.round(lifetimeRate * 100)}%
             </Text>
           </View>
-        </Animated.View>
-      )}
-
-      {/* Summary Cards */}
-      <Animated.View entering={FadeInDown.delay(300).springify()} style={styles.summaryGrid}>
-        <View style={[styles.summaryCard, { backgroundColor: colors.surface }]}>
-          <Text style={[styles.summaryValue, { color: Colors.primary }]}>{totalLogged}</Text>
-          <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>
-            Total Days Logged
+          <ProgressBar
+            value={lifetimeRate}
+            color={colors.success}
+            height={8}
+            style={{ marginTop: Spacing.md }}
+          />
+          <Text style={[styles.weekCaption, { color: colors.textTertiary }]}>
+            {totalLogged} logged of {daysSinceStart} day{daysSinceStart === 1 ? '' : 's'} tracked
           </Text>
-        </View>
-        <View style={[styles.summaryCard, { backgroundColor: colors.surface }]}>
-          <Text style={[styles.summaryValue, { color: Colors.primary }]}>{thisMonthLogged}</Text>
-          <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>This Month</Text>
-        </View>
+        </Card>
       </Animated.View>
 
-      {/* First Login */}
-      {firstLoggedDate && (
-        <Animated.View
-          entering={FadeInDown.delay(400).springify()}
-          style={[styles.infoCard, { backgroundColor: colors.surface }]}
-        >
-          <Text style={styles.infoEmoji}><FontAwesome5 name="calendar-alt" size={28} color={Colors.primary} /></Text>
-          <View>
-            <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>
-              Journey Started
-            </Text>
-            <Text style={[styles.infoValue, { color: colors.textPrimary }]}>
-              {firstLoggedDate}
-            </Text>
-          </View>
-        </Animated.View>
-      )}
-
-
+      {/* Detail list */}
+      <Animated.View entering={FadeInDown.delay(260).springify()} style={styles.block}>
+        <Text style={[styles.sectionLabel, { color: colors.textTertiary }]}>History</Text>
+        <Card elevation="low" padding={0}>
+          <DetailRow
+            icon="check-double"
+            label="Total days logged"
+            value={String(totalLogged)}
+            tint={colors.success}
+          />
+          <DetailRow
+            icon="calendar-day"
+            label="This month"
+            value={`${thisMonthLogged} of ${thisMonthTotal}`}
+            tint={colors.primary}
+          />
+          {firstLoggedDate ? (
+            <DetailRow
+              icon="flag"
+              label="First logged"
+              value={dayjs(firstLoggedDate).format('MMM D, YYYY')}
+              tint={colors.accent}
+            />
+          ) : null}
+          <DetailRow
+            icon="seedling"
+            label="Tracking since"
+            value={
+              selectedActivity
+                ? dayjs(selectedActivity.createdAt).format('MMM D, YYYY')
+                : '—'
+            }
+            tint={colors.warning}
+            isLast
+          />
+        </Card>
+      </Animated.View>
     </ScrollView>
   );
 };
@@ -136,96 +252,72 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.xl,
-    paddingBottom: Spacing.xxl,
+    paddingHorizontal: ScreenPadding,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.xl,
   },
   header: {
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.md + 2,
+  },
+  eyebrow: {
+    ...Typography.overline,
+    marginBottom: 6,
   },
   title: {
     ...Typography.headlineLarge,
   },
   subtitle: {
     ...Typography.bodyMedium,
-    marginTop: Spacing.xs,
+    marginTop: 3,
   },
-  badgeRow: {
+  statRow: {
     flexDirection: 'row',
-    marginBottom: Spacing.lg,
+    gap: Spacing.sm + 2,
   },
-  badgeDivider: {
-    width: Spacing.sm,
+  block: {
+    marginTop: Spacing.md - 2,
   },
-  section: {
-    marginBottom: Spacing.lg,
+  sectionLabel: {
+    ...Typography.overline,
+    marginBottom: Spacing.sm,
+    marginLeft: 2,
   },
-
-  summaryGrid: {
+  weekHeader: {
     flexDirection: 'row',
-    gap: Spacing.sm,
-    marginBottom: Spacing.lg,
+    alignItems: 'center',
+    gap: Spacing.sm + 2,
   },
-  summaryCard: {
+  weekLabel: {
+    ...Typography.overline,
     flex: 1,
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.md,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
   },
-  summaryValue: {
-    ...Typography.displayMedium,
+  weekValue: {
+    ...Typography.numeralSmall,
   },
-  summaryLabel: {
-    ...Typography.bodySmall,
-    marginTop: Spacing.xs,
-    textAlign: 'center',
+  weekCaption: {
+    ...Typography.caption,
+    marginTop: Spacing.sm,
   },
-  weeklyCard: {
+  detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.md,
-    marginBottom: Spacing.lg,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
+    gap: Spacing.sm + 2,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.md - 2,
   },
-  weeklyCardLabel: {
-    ...Typography.bodySmall,
+  detailIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: BorderRadius.xs,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  weeklyCardValue: {
-    ...Typography.titleMedium,
+  detailLabel: {
+    ...Typography.bodyMedium,
+    flex: 1,
+  },
+  detailValue: {
+    ...Typography.labelLarge,
     fontWeight: '700',
-    marginTop: 2,
-  },
-  infoCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.md,
-    marginBottom: Spacing.lg,
-    gap: Spacing.md,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  infoEmoji: {
-    fontSize: 28,
-  },
-  infoLabel: {
-    ...Typography.bodySmall,
-  },
-  infoValue: {
-    ...Typography.titleMedium,
-    marginTop: 2,
   },
 });

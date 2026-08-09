@@ -1,5 +1,7 @@
 import dayjs from 'dayjs';
-import { Colors, BorderRadius } from '../constants';
+import { BorderRadius, CalendarColors } from '../constants';
+
+export type CalendarPalette = typeof CalendarColors.light;
 
 export type MarkedDates = {
   [date: string]: {
@@ -15,16 +17,23 @@ export type MarkedDates = {
 
 /**
  * Builds the markedDates object for react-native-calendars.
- * - Logged days: green selected background
- * - Missed days (past, not logged, within active period): red background
- * - Today: orange ring with bold text — ONLY if the activity is not yet completed
- * - Days after the activity's completedAt date are left unmarked
+ *
+ * - Logged days: solid success fill, white numeral.
+ * - Missed days: soft tinted fill with a coloured numeral. A wall of solid red
+ *   reads as an error state; a tint reads as information.
+ * - Today: solid brand fill — only while the activity is still active.
+ * - Days after `completedAt` are left unmarked.
+ *
+ * The palette is passed in so day cells follow the active theme; previously the
+ * numerals were hard-coded to the light-mode ink and went unreadable in dark
+ * mode.
  */
 export const buildMarkedDates = (
   loggedDates: string[],
   today: string,
   activityCreatedAt?: number,
-  completedAt?: number
+  completedAt?: number,
+  palette: CalendarPalette = CalendarColors.light,
 ): MarkedDates => {
   // The last day we should evaluate as "active". For completed activities this
   // is the calendar-date of completion; for ongoing activities it is yesterday
@@ -34,20 +43,22 @@ export const buildMarkedDates = (
   // loggedDates are pre-sanitized YYYY-MM-DD strings (extracted from LogEntry.date by callers)
   const loggedSet = new Set(loggedDates);
 
-  // Mark all logged dates
-  loggedDates.forEach((date) => {
-    marked[date] = {
-      customStyles: {
-        container: {
-          backgroundColor: Colors.calendarLogged,
-          borderRadius: BorderRadius.sm,
-        },
-        text: {
-          color: Colors.textPrimary,
-          fontWeight: '600',
-        },
+  const cell = (background: string, text: string, weight: '600' | '700') => ({
+    customStyles: {
+      container: {
+        backgroundColor: background,
+        borderRadius: BorderRadius.xs,
       },
-    };
+      text: {
+        color: text,
+        fontWeight: weight,
+      },
+    },
+  });
+
+  // Mark all logged dates
+  loggedDates.forEach(date => {
+    marked[date] = cell(palette.logged, palette.loggedText, '700');
   });
 
   // Mark missed days (from activity creation date up to the end of the active period)
@@ -63,18 +74,7 @@ export const buildMarkedDates = (
   while (cursor.isBefore(upperBound, 'day')) {
     const dateStr = cursor.format('YYYY-MM-DD');
     if (!loggedSet.has(dateStr)) {
-      marked[dateStr] = {
-        customStyles: {
-          container: {
-            backgroundColor: Colors.calendarMissed,
-            borderRadius: BorderRadius.sm,
-          },
-          text: {
-            color: Colors.textPrimary,
-            fontWeight: '600',
-          },
-        },
-      };
+      marked[dateStr] = cell(palette.missed, palette.missedText, '600');
     }
     cursor = cursor.add(1, 'day');
   }
@@ -83,33 +83,9 @@ export const buildMarkedDates = (
   // For a completed activity we skip this entirely — the completion date was
   // already evaluated in the missed-days loop above, so nothing extra is needed.
   if (!completionDateStr) {
-    if (loggedSet.has(today)) {
-      marked[today] = {
-        customStyles: {
-          container: {
-            backgroundColor: Colors.calendarLogged,
-            borderRadius: BorderRadius.sm,
-          },
-          text: {
-            color: Colors.textPrimary,
-            fontWeight: 'bold',
-          },
-        },
-      };
-    } else {
-      marked[today] = {
-        customStyles: {
-          container: {
-            backgroundColor: Colors.calendarToday,
-            borderRadius: BorderRadius.sm,
-          },
-          text: {
-            color: Colors.textPrimary,
-            fontWeight: 'bold',
-          },
-        },
-      };
-    }
+    marked[today] = loggedSet.has(today)
+      ? cell(palette.logged, palette.loggedText, '700')
+      : cell(palette.today, palette.todayText, '700');
   }
 
   return marked;
