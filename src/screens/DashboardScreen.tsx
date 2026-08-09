@@ -18,6 +18,7 @@ import { formatDisplayDate, todayStr, formatTime12h } from '../utils/dateUtils';
 import { useTheme } from '../hooks/useTheme';
 import ConfettiCannon from 'react-native-confetti-cannon';
 import { Card, Chip, ProgressBar, PressableScale, StatTile } from '../components/ui';
+import { haptics } from '../utils/haptics';
 
 export const DashboardScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
@@ -117,8 +118,10 @@ export const DashboardScreen: React.FC = () => {
     if (isTimeBoundDisabled || isCompleted) return;
 
     if (selectedActivity.requiresNote) {
+      haptics.medium(); // committing to the flow, not finishing it
       setNoteModalVisible(true);
     } else {
+      haptics.success();
       logToday(selectedActivityId);
       triggerConfetti();
     }
@@ -127,6 +130,7 @@ export const DashboardScreen: React.FC = () => {
   const handleNoteSubmit = (note: string) => {
     if (!selectedActivityId) return;
     setNoteModalVisible(false);
+    haptics.success();
     logToday(selectedActivityId, note);
     triggerConfetti();
   };
@@ -134,12 +138,14 @@ export const DashboardScreen: React.FC = () => {
   const handleSkipSequence = () => {
     if (!selectedActivityId || !selectedActivity) return;
     if (isTodayLogged || isCompleted) return;
+    haptics.medium();
     setSkipModalVisible(true);
   };
 
   const handleSkipSubmit = (note: string) => {
     if (!selectedActivityId) return;
     setSkipModalVisible(false);
+    haptics.success();
     logTodayWithSequenceSkip(selectedActivityId, note || undefined);
     triggerConfetti();
   };

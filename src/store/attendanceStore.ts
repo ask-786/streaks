@@ -10,6 +10,7 @@ import {
   getThisWeekLogCount,
 } from '../utils/streakUtils';
 import { todayStr, getCurrentTz } from '../utils/dateUtils';
+import { setHapticsEnabled as applyHapticsPreference } from '../utils/haptics';
 
 interface ActivityStats {
   currentStreak: number;
@@ -35,6 +36,7 @@ interface AttendanceState {
   isLoading: boolean;
   isConfettiEnabled: boolean;
   isHideExtraDaysEnabled: boolean;
+  isHapticsEnabled: boolean;
 
   // Actions
   hydrate: () => Promise<void>;
@@ -68,6 +70,7 @@ interface AttendanceState {
   completeActivity: (id: string) => Promise<void>;
   setConfettiEnabled: (enabled: boolean) => Promise<void>;
   setHideExtraDaysEnabled: (enabled: boolean) => Promise<void>;
+  setHapticsEnabled: (enabled: boolean) => Promise<void>;
   logToday: (activityId: string, note?: string) => Promise<void>;
   /** Logs today AND marks the sequence task as skipped. Streak is maintained but sequence does not advance. */
   logTodayWithSequenceSkip: (activityId: string, note?: string) => Promise<void>;
@@ -97,6 +100,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
   isLoading: false,
   isConfettiEnabled: true,
   isHideExtraDaysEnabled: true,
+  isHapticsEnabled: true,
 
   hydrate: async () => {
     set({ isLoading: true });
@@ -115,10 +119,16 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       
       const hideExtraDaysStr = await AsyncStorage.getItem(StorageKeys.HIDE_EXTRA_DAYS);
       const isHideExtraDaysEnabled = hideExtraDaysStr ? JSON.parse(hideExtraDaysStr) : true;
-      
-      set({ activities, logs, notes, taskHistory, sequenceSkips, isConfettiEnabled, isHideExtraDaysEnabled, isLoading: false });
+
+      const hapticsStr = await AsyncStorage.getItem(StorageKeys.HAPTICS);
+      const isHapticsEnabled = hapticsStr ? JSON.parse(hapticsStr) : true;
+      // The haptics util is called from plain callbacks, so it keeps its own
+      // mirror of this flag rather than subscribing to the store.
+      applyHapticsPreference(isHapticsEnabled);
+
+      set({ activities, logs, notes, taskHistory, sequenceSkips, isConfettiEnabled, isHideExtraDaysEnabled, isHapticsEnabled, isLoading: false });
     } catch {
-      set({ activities, logs, notes, taskHistory, sequenceSkips, isConfettiEnabled: true, isHideExtraDaysEnabled: true, isLoading: false });
+      set({ activities, logs, notes, taskHistory, sequenceSkips, isConfettiEnabled: true, isHideExtraDaysEnabled: true, isHapticsEnabled: true, isLoading: false });
     }
   },
 
@@ -286,6 +296,18 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       await AsyncStorage.setItem(StorageKeys.HIDE_EXTRA_DAYS, JSON.stringify(enabled));
     } catch {}
     set({ isHideExtraDaysEnabled: enabled });
+  },
+
+  setHapticsEnabled: async (enabled: boolean) => {
+    // Mirror into the util first, so the confirming tap of *this* toggle is
+    // already silenced (or audible) when it fires.
+    applyHapticsPreference(enabled);
+    try {
+      const { default: AsyncStorage } = await import('@react-native-async-storage/async-storage');
+      const { StorageKeys } = await import('../constants/storage');
+      await AsyncStorage.setItem(StorageKeys.HAPTICS, JSON.stringify(enabled));
+    } catch {}
+    set({ isHapticsEnabled: enabled });
   },
 
   logToday: async (activityId: string, note?: string) => {

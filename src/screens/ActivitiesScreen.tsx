@@ -204,6 +204,7 @@ export const ActivitiesScreen: React.FC = () => {
           text: 'Delete',
           style: 'destructive',
           onPress: () => {
+            haptics.error(); // permanent removal — distinct from an ordinary tap
             deleteActivity(id);
             setSelectedItemId(null);
           },

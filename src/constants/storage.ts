@@ -8,5 +8,6 @@ export const StorageKeys = {
   THEME:        '@streak_counter_theme',
   CONFETTI:     '@streak_counter_confetti',
   HIDE_EXTRA_DAYS: '@streak_counter_hide_extra_days',
+  HAPTICS:      '@streak_counter_haptics',
   SEQUENCE_SKIPS: 'streak_sequence_skips',
 } as const;

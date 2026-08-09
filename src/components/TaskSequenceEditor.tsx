@@ -60,6 +60,7 @@ export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
 
   // ── Edit ────────────────────────────────────────────────────────────────────
   const startEdit = (index: number, text: string) => {
+    haptics.light();
     setEditingIndex(index);
     setEditingText(text);
   };
@@ -67,11 +68,13 @@ export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
   const commitEdit = (index: number) => {
     const t = editingText.trim();
     if (!t) {
+      haptics.warning();
       setEditingIndex(null);
       return;
     }
     const next = [...tasks];
     next[index] = t;
+    haptics.medium();
     onChange(next);
     setEditingIndex(null);
   };
@@ -80,9 +83,11 @@ export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
   const commitAdd = () => {
     const t = addingText.trim();
     if (!t) {
+      haptics.warning();
       setIsAdding(false);
       return;
     }
+    haptics.medium();
     onChange([...tasks, t]);
     setAddingText('');
     setIsAdding(false);
@@ -90,6 +95,7 @@ export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
 
   // ── Delete ───────────────────────────────────────────────────────────────────
   const deleteTask = (index: number) => {
+    haptics.warning();
     const next = tasks.filter((_, i) => i !== index);
     onChange(next);
   };
@@ -122,6 +128,7 @@ export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
           (v): v is string => typeof v === 'string' && v.trim().length > 0,
         );
       } else {
+        haptics.error();
         Alert.alert(
           'Invalid format',
           'The JSON file must be an array of task strings, or an object with a "taskSequence" array.',
@@ -130,13 +137,16 @@ export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
       }
 
       if (imported.length === 0) {
+        haptics.error();
         Alert.alert('No tasks found', 'The file did not contain any valid task strings.');
         return;
       }
 
       // Merge: append imported tasks to existing list
+      haptics.success();
       onChange([...tasks, ...imported.map(s => s.trim())]);
     } catch (error: any) {
+      haptics.error();
       Alert.alert(
         'Import failed', 
         `Could not read or parse the selected file. \n\n${error?.message || error}`
@@ -177,7 +187,10 @@ export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
                 multiline
               />
               <TouchableOpacity
-                onPress={() => setEditingIndex(null)}
+                onPress={() => {
+                  haptics.light();
+                  setEditingIndex(null);
+                }}
                 hitSlop={HitSlop.md}
                 style={styles.actionIconBtn}
                 accessibilityRole="button"
@@ -230,7 +243,7 @@ export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
               {/* Drag handle */}
               <TouchableOpacity
                 onLongPress={() => {
-                  haptics.selection();
+                  haptics.longPress();
                   drag();
                 }}
                 onPressIn={drag}
@@ -299,7 +312,11 @@ export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
           />
           <View style={styles.addInputActions}>
             <TouchableOpacity
-              onPress={() => { setIsAdding(false); setAddingText(''); }}
+              onPress={() => {
+                haptics.light();
+                setIsAdding(false);
+                setAddingText('');
+              }}
               hitSlop={HitSlop.md}
               accessibilityRole="button"
               accessibilityLabel="Cancel adding task"
@@ -340,7 +357,10 @@ export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
             styles.actionBtn,
             { backgroundColor: colors.surfaceVariant, borderColor: colors.border },
           ]}
-          onPress={handleImport}
+          onPress={() => {
+            haptics.light();
+            handleImport();
+          }}
           activeOpacity={0.75}
           accessibilityRole="button"
           accessibilityLabel="Import tasks from a JSON file"
