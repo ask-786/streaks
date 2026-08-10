@@ -9,4 +9,6 @@ export * from './PressableScale';
 export * from './ProgressBar';
 export * from './ScreenHeader';
 export * from './SegmentedControl';
+export * from './SelectionActionBar';
+export * from './SelectionCheck';
 export * from './StatTile';

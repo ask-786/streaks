@@ -1,18 +1,15 @@
 import React from 'react';
-import { View, StyleSheet, Pressable } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { Text } from 'react-native-paper';
-import Animated, { FadeInDown, FadeIn, FadeOut } from 'react-native-reanimated';
-import { FontAwesome5 } from '@expo/vector-icons';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import {
   Typography,
   Spacing,
   BorderRadius,
-  HitSlop,
   stagger,
 } from '../constants';
 import { useTheme } from '../hooks/useTheme';
-import { haptics } from '../utils/haptics';
-import { Card, Chip, ProgressBar, PressableScale } from './ui';
+import { Card, Chip, ProgressBar, PressableScale, SelectionCheck } from './ui';
 
 export interface ActivityStats {
   currentStreak: number;
@@ -29,13 +26,13 @@ export interface ActivityCardProps {
   name: string;
   stats: ActivityStats;
   index: number;
-  isSelectedForAction: boolean;
+  /** The list is in multi-select mode: a tap picks instead of opening. */
+  selectionMode: boolean;
+  isSelected: boolean;
   /** Oldest → newest. `true` = logged that day. Length drives the trail width. */
   recentDays?: boolean[];
   onSelect: (id: string) => void;
   onLongPress: (id: string) => void;
-  onEdit: (id: string, name: string) => void;
-  onDelete: (id: string, name: string) => void;
 }
 
 const DAY_INITIALS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
@@ -45,12 +42,11 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
   name,
   stats,
   index,
-  isSelectedForAction,
+  selectionMode,
+  isSelected,
   recentDays,
   onSelect,
   onLongPress,
-  onEdit,
-  onDelete,
 }) => {
   const { colors } = useTheme();
 
@@ -78,21 +74,39 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
         onLongPress={() => onLongPress(id)}
         delayLongPress={320}
         scaleTo={0.985}
-        accessibilityRole="button"
+        // While selecting, the tick belongs to the selection itself — the screen
+        // fires it — so the press-in tap tick would just double up.
+        haptic={!selectionMode}
+        accessibilityRole={selectionMode ? 'checkbox' : 'button'}
+        accessibilityState={selectionMode ? { checked: isSelected } : undefined}
         accessibilityLabel={`${name}. ${stats.currentStreak} ${stats.unit} streak. ${
           done ? 'Logged' : 'Not logged yet'
         }.`}
-        accessibilityHint="Opens this habit. Long press for edit and delete."
+        accessibilityHint={
+          selectionMode
+            ? 'Double tap to select or deselect this habit.'
+            : 'Opens this habit. Long press to select habits for editing or deleting.'
+        }
       >
         <Card
           elevation="low"
           padding={0}
           radius={BorderRadius.lg}
-          style={isSelectedForAction ? { borderColor: colors.primaryBorder } : undefined}
+          style={
+            isSelected
+              ? {
+                  borderColor: colors.primary,
+                  borderWidth: 1.5,
+                  backgroundColor: colors.primarySubtle,
+                }
+              : undefined
+          }
         >
           <View style={styles.body}>
             {/* Title row */}
             <View style={styles.titleRow}>
+              {selectionMode ? <SelectionCheck selected={isSelected} /> : null}
+
               <Text
                 style={[styles.name, { color: colors.textPrimary }]}
                 numberOfLines={1}
@@ -100,12 +114,6 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
                 {name}
               </Text>
 
-              {/*
-                Always mounted. Unmounting it on long-press collapsed the title
-                row to the height of the bare text, so the whole card shrank and
-                the list jumped. The action rail is opaque and sits directly over
-                it, so there is nothing to hide.
-              */}
               <Chip
                 label={done ? 'Done' : 'Pending'}
                 icon={done ? 'check' : 'circle-notch'}
@@ -196,54 +204,6 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
               </View>
             ) : null}
           </View>
-
-          {/* Action rail — revealed by long press */}
-          {isSelectedForAction ? (
-            <Animated.View
-              entering={FadeIn.duration(160)}
-              exiting={FadeOut.duration(120)}
-              style={[
-                styles.actions,
-                {
-                  backgroundColor: colors.surface,
-                  borderLeftColor: colors.border,
-                },
-              ]}
-            >
-              <Pressable
-                onPress={() => onEdit(id, name)}
-                onPressIn={() => haptics.light()}
-                hitSlop={HitSlop.sm}
-                style={({ pressed }) => [
-                  styles.actionBtn,
-                  {
-                    backgroundColor: colors.primaryMuted,
-                    opacity: pressed ? 0.7 : 1,
-                  },
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel={`Edit ${name}`}
-              >
-                <FontAwesome5 name="pen" size={14} color={colors.primary} />
-              </Pressable>
-              <Pressable
-                onPress={() => onDelete(id, name)}
-                onPressIn={() => haptics.warning()}
-                hitSlop={HitSlop.sm}
-                style={({ pressed }) => [
-                  styles.actionBtn,
-                  {
-                    backgroundColor: colors.dangerMuted,
-                    opacity: pressed ? 0.7 : 1,
-                  },
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel={`Delete ${name}`}
-              >
-                <FontAwesome5 name="trash-alt" size={14} color={colors.danger} />
-              </Pressable>
-            </Animated.View>
-          ) : null}
         </Card>
       </PressableScale>
     </Animated.View>
@@ -326,25 +286,5 @@ const styles = StyleSheet.create({
   progressValue: {
     ...Typography.labelMedium,
     fontWeight: '700',
-  },
-  actions: {
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    bottom: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    paddingHorizontal: Spacing.md,
-    borderLeftWidth: StyleSheet.hairlineWidth,
-    borderTopRightRadius: BorderRadius.lg,
-    borderBottomRightRadius: BorderRadius.lg,
-  },
-  actionBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: BorderRadius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 });

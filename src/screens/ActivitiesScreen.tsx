@@ -3,7 +3,6 @@ import {
   View,
   StyleSheet,
   Alert,
-  TouchableWithoutFeedback,
   ScrollView,
   StatusBar,
   BackHandler,
@@ -12,7 +11,7 @@ import { Text } from 'react-native-paper';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInDown, FadeOut } from 'react-native-reanimated';
 import { FontAwesome5 } from '@expo/vector-icons';
 import dayjs from 'dayjs';
 import { RootStackParamList } from '../navigation/AppNavigator';
@@ -36,6 +35,9 @@ import {
   PressableScale,
   ScreenHeader,
   SegmentedControl,
+  SelectionAction,
+  SelectionActionBar,
+  SelectionCheck,
 } from '../components/ui';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'Activities'>;
@@ -49,7 +51,8 @@ export const ActivitiesScreen: React.FC = () => {
 
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [activeTab, setActiveTab] = useState<'active' | 'completed'>('active');
-  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  /** Ids picked in multi-select mode. Non-empty ⇒ the list is in that mode. */
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editingItemName, setEditingItemName] = useState<string>('');
 
@@ -58,7 +61,8 @@ export const ActivitiesScreen: React.FC = () => {
     logs,
     createActivity,
     editActivity,
-    deleteActivity,
+    deleteActivities,
+    completeActivities,
     selectActivity,
     getActivityStats,
   } = useAttendanceStore();
@@ -76,6 +80,13 @@ export const ActivitiesScreen: React.FC = () => {
   // Split active vs completed
   const activeActivities = activities.filter(a => !a.completedAt);
   const completedActivities = activities.filter(a => !!a.completedAt);
+
+  // Selection never spans the two tabs — the actions that apply to a finished
+  // habit are not the ones that apply to a running one.
+  const visibleActivities = activeTab === 'active' ? activeActivities : completedActivities;
+  const isSelecting = selectedIds.length > 0;
+  const allSelected =
+    visibleActivities.length > 0 && selectedIds.length === visibleActivities.length;
 
   /**
    * Last N days per activity, oldest → newest. Drives the trail on each card so
@@ -118,15 +129,15 @@ export const ActivitiesScreen: React.FC = () => {
     haptics.medium();
     setEditingItemId(null);
     setEditingItemName('');
-    setSelectedItemId(null);
+    setSelectedIds([]);
     setIsModalVisible(true);
   };
 
-  const openEditModal = (id: string, currentName: string) => {
+  const openEditModal = (id: string) => {
     const activity = activities.find(a => a.id === id);
-    if (activity?.completedAt) return; // Don't allow editing completed activities
+    if (!activity || activity.completedAt) return; // Completed habits are read-only
     setEditingItemId(id);
-    setEditingItemName(currentName);
+    setEditingItemName(activity.name);
     setEditingRequiresNote(activity?.requiresNote ?? false);
     setEditingWeeklyGoal(activity?.weeklyGoal);
     setEditingTaskSequence(activity?.taskSequence ?? []);
@@ -136,7 +147,7 @@ export const ActivitiesScreen: React.FC = () => {
     setEditingTimeBoundEndTime(activity?.timeBoundEndTime);
     setEditingActivityType(activity?.activityType);
     setEditingStreakGoal(activity?.streakGoal);
-    setSelectedItemId(null);
+    setSelectedIds([]);
     setIsModalVisible(true);
   };
 
@@ -155,27 +166,45 @@ export const ActivitiesScreen: React.FC = () => {
     setEditingStreakGoal(undefined);
   };
 
+  const clearSelection = () => setSelectedIds([]);
+
+  const toggleSelection = (id: string) => {
+    haptics.selection();
+    setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(existing => existing !== id) : [...prev, id],
+    );
+  };
+
+  /**
+   * One tap does one thing, and which thing depends on the mode the list is
+   * already in: open the habit normally, pick it while selecting. Nothing is
+   * ever swallowed to dismiss a hidden control.
+   */
   const handleSelectActivity = (id: string) => {
-    // A revealed action rail swallows the next tap — that tap dismisses it.
-    if (selectedItemId) {
-      setSelectedItemId(null);
+    if (isSelecting) {
+      toggleSelection(id);
       return;
     }
     selectActivity(id);
     navigation.navigate('ActivityDetail');
   };
 
+  /** Long press is the way in to selection mode, from either tab. */
   const handleLongPress = (id: string) => {
-    const activity = activities.find(a => a.id === id);
-    if (activity?.completedAt) return; // No action menu for completed
-    setSelectedItemId(id);
+    if (selectedIds.includes(id)) return; // already picked — leave it picked
+    setSelectedIds(prev => [...prev, id]);
   };
 
+  const handleTabChange = (tab: 'active' | 'completed') => {
+    clearSelection();
+    setActiveTab(tab);
+  };
+
+  const selectAll = () => setSelectedIds(visibleActivities.map(a => a.id));
+
   /**
-   * Android back on the Completed tab returns to Active rather than leaving the
-   * app. Active is the home state of this screen, so backing out of a tab should
-   * undo that switch first — exiting straight to the launcher loses the user's
-   * place for no reason.
+   * Android back unwinds the screen's states in the order the user entered
+   * them: selection first, then the Completed tab, and only then out of the app.
    *
    * Scoped to focus so it stops applying once a habit is opened, and registered
    * before any sheet's handler so an open sheet still wins.
@@ -183,6 +212,10 @@ export const ActivitiesScreen: React.FC = () => {
   useFocusEffect(
     useCallback(() => {
       const onBack = () => {
+        if (isSelecting) {
+          clearSelection();
+          return true;
+        }
         if (activeTab === 'completed') {
           setActiveTab('active');
           return true;
@@ -191,13 +224,24 @@ export const ActivitiesScreen: React.FC = () => {
       };
       const sub = BackHandler.addEventListener('hardwareBackPress', onBack);
       return () => sub.remove();
-    }, [activeTab]),
+    }, [activeTab, isSelecting]),
   );
 
-  const confirmDelete = (id: string, name: string) => {
+  /** Names the current selection the way a sentence would. */
+  const describeSelection = () => {
+    if (selectedIds.length === 1) {
+      const only = activities.find(a => a.id === selectedIds[0]);
+      return `"${only?.name ?? 'This habit'}"`;
+    }
+    return `${selectedIds.length} habits`;
+  };
+
+  const confirmDelete = () => {
+    const ids = [...selectedIds];
+    const many = ids.length > 1;
     Alert.alert(
-      'Delete habit',
-      `"${name}" and all of its logged days will be permanently removed. This can't be undone.`,
+      many ? `Delete ${ids.length} habits` : 'Delete habit',
+      `${describeSelection()} and all of ${many ? 'their' : 'its'} logged days will be permanently removed. This can't be undone.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -205,13 +249,54 @@ export const ActivitiesScreen: React.FC = () => {
           style: 'destructive',
           onPress: () => {
             haptics.error(); // permanent removal — distinct from an ordinary tap
-            deleteActivity(id);
-            setSelectedItemId(null);
+            deleteActivities(ids);
+            clearSelection();
           },
         },
       ],
     );
   };
+
+  const confirmComplete = () => {
+    const ids = [...selectedIds];
+    const many = ids.length > 1;
+    Alert.alert(
+      many ? `Complete ${ids.length} habits` : 'Mark as completed',
+      `${describeSelection()} will move to your completed list. You won't be able to log new check-ins, but every day you logged is preserved.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Complete',
+          style: 'default',
+          onPress: () => {
+            haptics.success();
+            completeActivities(ids);
+            clearSelection();
+          },
+        },
+      ],
+    );
+  };
+
+  /**
+   * Edit stays a single-habit action — the form is one habit's settings — so it
+   * is offered but disabled while more than one is picked, rather than
+   * disappearing and leaving the user wondering where it went.
+   */
+  const selectionActions: SelectionAction[] =
+    activeTab === 'active'
+      ? [
+          {
+            icon: 'pen',
+            label: 'Edit',
+            tone: 'brand',
+            disabled: selectedIds.length !== 1,
+            onPress: () => openEditModal(selectedIds[0]),
+          },
+          { icon: 'trophy', label: 'Complete', onPress: confirmComplete },
+          { icon: 'trash-alt', label: 'Delete', tone: 'danger', onPress: confirmDelete },
+        ]
+      : [{ icon: 'trash-alt', label: 'Delete', tone: 'danger', onPress: confirmDelete }];
 
   // Today's completion count across active habits — a one-glance daily summary.
   const doneToday = activeActivities.filter(a => {
@@ -220,14 +305,49 @@ export const ActivitiesScreen: React.FC = () => {
   }).length;
 
   return (
-    <TouchableWithoutFeedback onPress={() => setSelectedItemId(null)} accessible={false}>
-      <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top + Spacing.md }]}>
-        <StatusBar
-          barStyle={isDark ? 'light-content' : 'dark-content'}
-          backgroundColor={colors.background}
-        />
+    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top + Spacing.md }]}>
+      <StatusBar
+        barStyle={isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={colors.background}
+      />
 
-        <View style={styles.gutter}>
+      <View style={[styles.gutter, styles.header]}>
+        {isSelecting ? (
+          /* Selection takes over the masthead, so the count and the way out are
+             the first things in the user's eye line. */
+          <Animated.View
+            entering={FadeIn.duration(160)}
+            exiting={FadeOut.duration(120)}
+            style={styles.selectionHeader}
+          >
+            <IconButton
+              icon="times"
+              onPress={clearSelection}
+              accessibilityLabel="Cancel selection"
+            />
+
+            <View style={styles.selectionText}>
+              <Text style={[styles.selectionCount, { color: colors.textPrimary }]}>
+                {selectedIds.length} selected
+              </Text>
+              <Text style={[styles.selectionHint, { color: colors.textTertiary }]}>
+                Tap habits to add or remove
+              </Text>
+            </View>
+
+            <PressableScale
+              onPress={allSelected ? clearSelection : selectAll}
+              scaleTo={0.94}
+              style={[styles.selectAll, { backgroundColor: colors.primaryMuted }]}
+              accessibilityRole="button"
+              accessibilityLabel={allSelected ? 'Deselect all habits' : 'Select all habits'}
+            >
+              <Text style={[styles.selectAllLabel, { color: colors.primary }]}>
+                {allSelected ? 'Clear' : 'Select all'}
+              </Text>
+            </PressableScale>
+          </Animated.View>
+        ) : (
           <ScreenHeader
             eyebrow="Streaks"
             title="Your habits"
@@ -244,74 +364,81 @@ export const ActivitiesScreen: React.FC = () => {
               />
             }
           />
-        </View>
+        )}
+      </View>
 
-        {/* Tabs */}
-        <Animated.View
-          entering={FadeInDown.delay(40).springify()}
-          style={[styles.gutter, styles.tabs]}
-        >
-          <SegmentedControl
-            value={activeTab}
-            onChange={setActiveTab}
-            options={[
-              { value: 'active', label: 'Active', icon: 'fire', count: activeActivities.length },
-              { value: 'completed', label: 'Completed', icon: 'trophy', count: completedActivities.length },
-            ]}
-          />
-        </Animated.View>
-
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={[
-            styles.scrollContent,
-            { paddingBottom: Spacing.xxxl + insets.bottom + 40 },
+      {/* Tabs */}
+      <Animated.View
+        entering={FadeInDown.delay(40).springify()}
+        style={[styles.gutter, styles.tabs]}
+      >
+        <SegmentedControl
+          value={activeTab}
+          onChange={handleTabChange}
+          options={[
+            { value: 'active', label: 'Active', icon: 'fire', count: activeActivities.length },
+            { value: 'completed', label: 'Completed', icon: 'trophy', count: completedActivities.length },
           ]}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          {activeTab === 'active' ? (
-            activeActivities.length > 0 ? (
-              <>
-                {/*
-                  A plain map, not a FlatList. A FlatList is a ScrollView
-                  internally and clips its children to its own bounds — which sit
-                  inside the screen gutter, exactly flush with the card edges — so
-                  every card's shadow was sliced off down both sides. (Nesting a
-                  VirtualizedList inside a ScrollView also disables virtualization
-                  and warns, so it was buying nothing here.)
-                */}
-                {activeActivities.map((item, index) => (
-                  <ActivityCard
-                    key={item.id}
-                    id={item.id}
-                    name={item.name}
-                    stats={getActivityStats(item.id)}
-                    index={index}
-                    recentDays={trails[item.id]}
-                    isSelectedForAction={selectedItemId === item.id}
-                    onSelect={handleSelectActivity}
-                    onLongPress={handleLongPress}
-                    onEdit={openEditModal}
-                    onDelete={confirmDelete}
-                  />
-                ))}
+        />
+      </Animated.View>
+
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            // Leave room for whichever floating control is on screen.
+            paddingBottom: Spacing.xxxl + insets.bottom + (isSelecting ? 80 : 40),
+          },
+        ]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {activeTab === 'active' ? (
+          activeActivities.length > 0 ? (
+            <>
+              {/*
+                A plain map, not a FlatList. A FlatList is a ScrollView
+                internally and clips its children to its own bounds — which sit
+                inside the screen gutter, exactly flush with the card edges — so
+                every card's shadow was sliced off down both sides. (Nesting a
+                VirtualizedList inside a ScrollView also disables virtualization
+                and warns, so it was buying nothing here.)
+              */}
+              {activeActivities.map((item, index) => (
+                <ActivityCard
+                  key={item.id}
+                  id={item.id}
+                  name={item.name}
+                  stats={getActivityStats(item.id)}
+                  index={index}
+                  recentDays={trails[item.id]}
+                  selectionMode={isSelecting}
+                  isSelected={selectedIds.includes(item.id)}
+                  onSelect={handleSelectActivity}
+                  onLongPress={handleLongPress}
+                />
+              ))}
+              {!isSelecting ? (
                 <Text style={[styles.hint, { color: colors.textDisabled }]}>
-                  Press and hold a habit to edit or delete it
+                  Press and hold to select · tap to open
                 </Text>
-              </>
-            ) : (
-              <EmptyState
-                icon="seedling"
-                title="No habits yet"
-                description="Start with one small thing you can do every day. Consistency beats intensity."
-                actionLabel="Add your first habit"
-                onAction={openAddModal}
-              />
-            )
-          ) : completedActivities.length > 0 ? (
-            completedActivities.map((item, index) => {
+              ) : null}
+            </>
+          ) : (
+            <EmptyState
+              icon="seedling"
+              title="No habits yet"
+              description="Start with one small thing you can do every day. Consistency beats intensity."
+              actionLabel="Add your first habit"
+              onAction={openAddModal}
+            />
+          )
+        ) : completedActivities.length > 0 ? (
+          <>
+            {completedActivities.map((item, index) => {
               const stats = getActivityStats(item.id);
+              const isSelected = selectedIds.includes(item.id);
               return (
                 <Animated.View
                   key={item.id}
@@ -320,23 +447,52 @@ export const ActivitiesScreen: React.FC = () => {
                 >
                   <PressableScale
                     onPress={() => {
+                      if (isSelecting) {
+                        toggleSelection(item.id);
+                        return;
+                      }
                       selectActivity(item.id);
                       navigation.navigate('ActivityDetail');
                     }}
+                    onLongPress={() => handleLongPress(item.id)}
+                    delayLongPress={320}
                     scaleTo={0.985}
-                    accessibilityRole="button"
+                    haptic={!isSelecting}
+                    accessibilityRole={isSelecting ? 'checkbox' : 'button'}
+                    accessibilityState={isSelecting ? { checked: isSelected } : undefined}
                     accessibilityLabel={`${item.name}, completed`}
+                    accessibilityHint={
+                      isSelecting
+                        ? 'Double tap to select or deselect this habit.'
+                        : 'Opens this habit. Long press to select habits for deleting.'
+                    }
                   >
-                    <Card elevation="low" padding={Spacing.md}>
+                    <Card
+                      elevation="low"
+                      padding={Spacing.md}
+                      style={
+                        isSelected
+                          ? {
+                              borderColor: colors.primary,
+                              borderWidth: 1.5,
+                              backgroundColor: colors.primarySubtle,
+                            }
+                          : undefined
+                      }
+                    >
                       <View style={styles.completedRow}>
-                        <View
-                          style={[
-                            styles.trophy,
-                            { backgroundColor: colors.warningMuted },
-                          ]}
-                        >
-                          <FontAwesome5 name="trophy" size={16} color={colors.warning} />
-                        </View>
+                        {isSelecting ? (
+                          <SelectionCheck selected={isSelected} />
+                        ) : (
+                          <View
+                            style={[
+                              styles.trophy,
+                              { backgroundColor: colors.warningMuted },
+                            ]}
+                          >
+                            <FontAwesome5 name="trophy" size={16} color={colors.warning} />
+                          </View>
+                        )}
 
                         <View style={styles.completedInfo}>
                           <Text
@@ -355,65 +511,79 @@ export const ActivitiesScreen: React.FC = () => {
                           </Text>
                         </View>
 
-                        <FontAwesome5
-                          name="chevron-right"
-                          size={12}
-                          color={colors.textDisabled}
-                        />
+                        {!isSelecting ? (
+                          <FontAwesome5
+                            name="chevron-right"
+                            size={12}
+                            color={colors.textDisabled}
+                          />
+                        ) : null}
                       </View>
                     </Card>
                   </PressableScale>
                 </Animated.View>
               );
-            })
-          ) : (
-            <EmptyState
-              icon="trophy"
-              title="Nothing finished yet"
-              description="Habits you complete will be archived here with their final numbers intact."
-            />
-          )}
-        </ScrollView>
+            })}
+            {!isSelecting ? (
+              <Text style={[styles.hint, { color: colors.textDisabled }]}>
+                Press and hold to select · tap to open
+              </Text>
+            ) : null}
+          </>
+        ) : (
+          <EmptyState
+            icon="trophy"
+            title="Nothing finished yet"
+            description="Habits you complete will be archived here with their final numbers intact."
+          />
+        )}
+      </ScrollView>
 
-        {/* Extended FAB — a labelled action is far clearer than a bare plus */}
-        <PressableScale
-          onPress={openAddModal}
-          haptic={false}
-          scaleTo={0.94}
-          style={[
-            styles.fab,
-            elevation.brandGlow(colors.primary),
-            {
-              backgroundColor: colors.primary,
-              bottom: Spacing.lg + insets.bottom,
-            },
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel="Add a new habit"
+      {isSelecting ? (
+        <SelectionActionBar actions={selectionActions} bottomInset={insets.bottom} />
+      ) : (
+        /* Extended FAB — a labelled action is far clearer than a bare plus */
+        <Animated.View
+          entering={FadeIn.duration(160)}
+          exiting={FadeOut.duration(120)}
+          style={[styles.fabWrapper, { bottom: Spacing.lg + insets.bottom }]}
         >
-          <FontAwesome5 name="plus" size={14} color={colors.onPrimary} />
-          <Text style={[styles.fabLabel, { color: colors.onPrimary }]}>New habit</Text>
-        </PressableScale>
+          <PressableScale
+            onPress={openAddModal}
+            haptic={false}
+            scaleTo={0.94}
+            style={[
+              styles.fab,
+              elevation.brandGlow(colors.primary),
+              { backgroundColor: colors.primary },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Add a new habit"
+          >
+            <FontAwesome5 name="plus" size={14} color={colors.onPrimary} />
+            <Text style={[styles.fabLabel, { color: colors.onPrimary }]}>New habit</Text>
+          </PressableScale>
+        </Animated.View>
+      )}
 
-        {/* Add/Edit Modal */}
-        <ActivityFormModal
-          visible={isModalVisible}
-          editingItemId={editingItemId}
-          initialName={editingItemName}
-          initialRequiresNote={editingRequiresNote}
-          initialWeeklyGoal={editingWeeklyGoal}
-          initialTaskSequence={editingTaskSequence}
-          initialSequenceMode={editingSequenceMode}
-          initialTimeBoundType={editingTimeBoundType}
-          initialTimeBoundStartTime={editingTimeBoundStartTime}
-          initialTimeBoundEndTime={editingTimeBoundEndTime}
-          initialActivityType={editingActivityType}
-          initialStreakGoal={editingStreakGoal}
-          onClose={closeModal}
-          onSave={handleSaveActivity}
-        />
-      </View>
-    </TouchableWithoutFeedback>
+      {/* Add/Edit Modal */}
+      <ActivityFormModal
+        visible={isModalVisible}
+        editingItemId={editingItemId}
+        initialName={editingItemName}
+        initialRequiresNote={editingRequiresNote}
+        initialWeeklyGoal={editingWeeklyGoal}
+        initialTaskSequence={editingTaskSequence}
+        initialSequenceMode={editingSequenceMode}
+        initialTimeBoundType={editingTimeBoundType}
+        initialTimeBoundStartTime={editingTimeBoundStartTime}
+        initialTimeBoundEndTime={editingTimeBoundEndTime}
+        initialActivityType={editingActivityType}
+        initialStreakGoal={editingStreakGoal}
+        onClose={closeModal}
+        onSave={handleSaveActivity}
+      />
+    </View>
   );
 };
 
@@ -423,6 +593,37 @@ const styles = StyleSheet.create({
   },
   gutter: {
     paddingHorizontal: ScreenPadding,
+  },
+  header: {
+    // Both mastheads reserve the same block, so entering selection mode swaps
+    // the content without shunting the list up and down.
+    minHeight: 72,
+    justifyContent: 'center',
+  },
+  selectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm + 2,
+  },
+  selectionText: {
+    flex: 1,
+  },
+  selectionCount: {
+    ...Typography.titleLarge,
+    fontWeight: '700',
+  },
+  selectionHint: {
+    ...Typography.caption,
+    marginTop: 2,
+  },
+  selectAll: {
+    paddingHorizontal: Spacing.md - 2,
+    paddingVertical: Spacing.sm + 2,
+    borderRadius: BorderRadius.full,
+  },
+  selectAllLabel: {
+    ...Typography.labelMedium,
+    fontWeight: '700',
   },
   tabs: {
     marginTop: Spacing.md + 2,
@@ -465,9 +666,11 @@ const styles = StyleSheet.create({
   completedMeta: {
     ...Typography.caption,
   },
-  fab: {
+  fabWrapper: {
     position: 'absolute',
     right: ScreenPadding,
+  },
+  fab: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
