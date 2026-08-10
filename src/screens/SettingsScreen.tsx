@@ -23,6 +23,7 @@ import {
   BorderRadius,
   ScreenPadding,
   HitSlop,
+  PressInDelay,
   alpha,
 } from '../constants';
 import { haptics } from '../utils/haptics';
@@ -108,6 +109,9 @@ const Row: React.FC<RowProps> = ({
     <Pressable
       onPress={onPress}
       onPressIn={() => haptics.light()}
+      // Same reason as PressableScale: rows live in a ScrollView, and without
+      // this every scrolling finger fires the row's tick on touch-down.
+      unstable_pressDelay={PressInDelay}
       hitSlop={HitSlop.sm}
       android_ripple={{ color: alpha(colors.primary, 0.1) }}
       style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}

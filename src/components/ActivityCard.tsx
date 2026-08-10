@@ -6,6 +6,7 @@ import {
   Typography,
   Spacing,
   BorderRadius,
+  LongPressDelay,
   stagger,
 } from '../constants';
 import { useTheme } from '../hooks/useTheme';
@@ -72,7 +73,7 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
       <PressableScale
         onPress={() => onSelect(id)}
         onLongPress={() => onLongPress(id)}
-        delayLongPress={320}
+        delayLongPress={LongPressDelay}
         scaleTo={0.985}
         // While selecting, the tick belongs to the selection itself — the screen
         // fires it — so the press-in tap tick would just double up.

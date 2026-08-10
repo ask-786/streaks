@@ -20,6 +20,7 @@ import {
   Typography,
   Spacing,
   BorderRadius,
+  LongPressDelay,
   ScreenPadding,
   stagger,
 } from '../constants';
@@ -455,7 +456,7 @@ export const ActivitiesScreen: React.FC = () => {
                       navigation.navigate('ActivityDetail');
                     }}
                     onLongPress={() => handleLongPress(item.id)}
-                    delayLongPress={320}
+                    delayLongPress={LongPressDelay}
                     scaleTo={0.985}
                     haptic={!isSelecting}
                     accessibilityRole={isSelecting ? 'checkbox' : 'button'}
