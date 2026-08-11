@@ -66,8 +66,12 @@ interface AttendanceState {
     timeBoundEndTime?: string | null,
   ) => Promise<void>;
   deleteActivity: (id: string) => Promise<void>;
+  /** Bulk delete. One persistence pass, so selecting ten habits is one write. */
+  deleteActivities: (ids: string[]) => Promise<void>;
   selectActivity: (id: string) => void;
   completeActivity: (id: string) => Promise<void>;
+  /** Bulk complete. Same single-pass guarantee as `deleteActivities`. */
+  completeActivities: (ids: string[]) => Promise<void>;
   setConfettiEnabled: (enabled: boolean) => Promise<void>;
   setHideExtraDaysEnabled: (enabled: boolean) => Promise<void>;
   setHapticsEnabled: (enabled: boolean) => Promise<void>;
@@ -236,25 +240,32 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
   },
 
   deleteActivity: async (id: string) => {
+    await get().deleteActivities([id]);
+  },
+
+  deleteActivities: async (ids: string[]) => {
+    if (ids.length === 0) return;
+    const doomed = new Set(ids);
     const { activities, logs, notes, taskHistory, sequenceSkips, selectedActivityId } = get();
 
-    const updatedActivities = activities.filter(a => a.id !== id);
+    // Every per-activity map is keyed the same way, so one helper drops all of
+    // the doomed ids from each of them in a single copy.
+    const without = <T,>(map: Record<string, T>): Record<string, T> => {
+      const next = { ...map };
+      for (const id of doomed) delete next[id];
+      return next;
+    };
+
+    const updatedActivities = activities.filter(a => !doomed.has(a.id));
+    const updatedLogs = without(logs);
+    const updatedNotes = without(notes);
+    const updatedTaskHistory = without(taskHistory);
+    const updatedSequenceSkips = without(sequenceSkips);
+
     await attendanceService.saveActivities(updatedActivities);
-
-    const updatedLogs = { ...logs };
-    delete updatedLogs[id];
     await attendanceService.saveLogs(updatedLogs);
-
-    const updatedNotes = { ...notes };
-    delete updatedNotes[id];
     await attendanceService.saveNotes(updatedNotes);
-
-    const updatedTaskHistory = { ...taskHistory };
-    delete updatedTaskHistory[id];
     await attendanceService.saveTaskHistory(updatedTaskHistory);
-
-    const updatedSequenceSkips = { ...sequenceSkips };
-    delete updatedSequenceSkips[id];
     await attendanceService.saveSequenceSkips(updatedSequenceSkips);
 
     set({
@@ -263,7 +274,8 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       notes: updatedNotes,
       taskHistory: updatedTaskHistory,
       sequenceSkips: updatedSequenceSkips,
-      selectedActivityId: selectedActivityId === id ? null : selectedActivityId,
+      selectedActivityId:
+        selectedActivityId && doomed.has(selectedActivityId) ? null : selectedActivityId,
     });
   },
 
@@ -272,9 +284,16 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
   },
 
   completeActivity: async (id: string) => {
+    await get().completeActivities([id]);
+  },
+
+  completeActivities: async (ids: string[]) => {
+    if (ids.length === 0) return;
+    const target = new Set(ids);
+    const completedAt = Date.now();
     const { activities } = get();
     const updatedActivities = activities.map(a =>
-      a.id === id ? { ...a, completedAt: Date.now() } : a
+      target.has(a.id) && !a.completedAt ? { ...a, completedAt } : a
     );
     await attendanceService.saveActivities(updatedActivities);
     set({ activities: updatedActivities });

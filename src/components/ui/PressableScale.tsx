@@ -5,7 +5,7 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
 } from 'react-native-reanimated';
-import { Spring } from '../../constants';
+import { PressInDelay, Spring } from '../../constants';
 import { haptics } from '../../utils/haptics';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -17,6 +17,13 @@ export interface PressableScaleProps extends Omit<PressableProps, 'style'> {
   scaleTo?: number;
   /** Fires a light tick on press-in. Off for anything that repeats rapidly. */
   haptic?: boolean;
+  /**
+   * How long the touch must hold still before it reads as a press. Defaults to
+   * `PressInDelay`, which is what keeps a scrolling finger from triggering
+   * press-in feedback. Pass 0 for a control outside any scrollable area that
+   * wants its feedback on contact.
+   */
+  pressDelay?: number;
 }
 
 /**
@@ -31,6 +38,7 @@ export const PressableScale: React.FC<PressableScaleProps> = ({
   style,
   scaleTo = 0.97,
   haptic = true,
+  pressDelay = PressInDelay,
   onPressIn,
   onLongPress,
   disabled,
@@ -68,6 +76,7 @@ export const PressableScale: React.FC<PressableScaleProps> = ({
   return (
     <AnimatedPressable
       style={[animatedStyle, style]}
+      unstable_pressDelay={pressDelay}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
       onLongPress={onLongPress ? handleLongPress : undefined}
