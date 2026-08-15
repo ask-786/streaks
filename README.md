@@ -5,7 +5,7 @@ A beautiful and intuitive React Native application for tracking your daily habit
 ## 🌟 Features
 
 - **Activity Dashboard:** Quickly log your daily activities and view your current progress.
-- **Calendar View:** A detailed monthly calendar that highlights your logged days, missed days, and current streaks.
+- **Calendar View:** A detailed monthly calendar that highlights your logged days, missed days, and current streaks. Swipe between months and the calendar follows your finger, height and all.
 - **Interactive Logs:** Long-press on calendar dates to view exact log details, including the time of the activity.
 - **Multi-Select:** Long-press any habit on the home screen to enter selection mode, then edit, complete or delete habits in bulk from one contextual action bar.
 - **Dark/Light Mode:** Full support for both dark and light themes, ensuring a comfortable viewing experience at any time of day.

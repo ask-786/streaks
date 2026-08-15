@@ -1,11 +1,11 @@
 import React from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text } from 'react-native-paper';
-import { Calendar } from 'react-native-calendars';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import dayjs from 'dayjs';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { buildMarkedDates } from '../utils/calendarUtils';
+import { CalendarMonthPager } from '../components/CalendarMonthPager';
 import { useAttendanceStore, getTaskForDate } from '../store/attendanceStore';
 import { CalendarLegend } from '../components/CalendarLegend';
 import { LogDetailsModal } from '../components/LogDetailsModal';
@@ -141,16 +141,23 @@ export const CalendarScreen: React.FC = () => {
         {/* Calendar */}
         <Animated.View entering={FadeInDown.delay(100).springify()}>
           <Card elevation="medium" padding={Spacing.sm} radius={BorderRadius.xl}>
-            <Calendar
-              key={`${currentMonth}-${colors.surface}`}
-              current={currentMonth}
+            <CalendarMonthPager
+              // The library builds its stylesheet once per mount, so a theme
+              // change has to remount it. The month survives — it lives here.
+              key={colors.surface}
+              month={currentMonth}
+              onMonthChange={setCurrentMonth}
               markedDates={markedDates}
               markingType={'custom'}
               maxDate={today}
-              enableSwipeMonths
               hideExtraDays={isHideExtraDaysEnabled}
               onDayPress={(day) => {
                 haptics.light();
+                // Tapping a trailing day from a neighbouring month follows it
+                // there, the way it did when the calendar owned its own month.
+                if (!dayjs(day.dateString).isSame(dayjs(currentMonth), 'month')) {
+                  setCurrentMonth(day.dateString);
+                }
                 // Use .date field (locked local date) instead of parsing the UTC timestamp,
                 // so the calendar day never shifts when the device's timezone changes.
                 const rawEntry = selectedActivityId
