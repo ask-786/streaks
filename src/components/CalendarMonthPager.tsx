@@ -26,6 +26,76 @@ const SwipeVelocity = 420;
  */
 const EstimatedHeight = 290;
 
+type PageProps = {
+  index: number;
+  month: string;
+  width: number;
+  isCurrent: boolean;
+  onNavigate: (index: number) => void;
+  onPageLayout: (index: number, height: number) => void;
+  calendarProps: Record<string, unknown>;
+};
+
+/**
+ * One month in the strip.
+ *
+ * Memoized, and it earns it: the library's `Day` is itself memoized, so a page
+ * that re-renders with equal props costs an element tree and nothing more —
+ * but a page that re-renders with *new* props re-renders all ~40 day cells.
+ * Three mounted months make that the difference between a month change costing
+ * one grid and costing four.
+ */
+const MonthPage = React.memo<PageProps>(
+  ({ index, month, width, isCurrent, onNavigate, onPageLayout, calendarProps }) => {
+    const goPrev = React.useCallback(() => onNavigate(index - 1), [onNavigate, index]);
+    const goNext = React.useCallback(() => onNavigate(index + 1), [onNavigate, index]);
+    const handleLayout = React.useCallback(
+      (event: LayoutChangeEvent) => onPageLayout(index, event.nativeEvent.layout.height),
+      [onPageLayout, index],
+    );
+
+    return (
+      <View
+        style={[styles.page, { width, transform: [{ translateX: index * width }] }]}
+        onLayout={handleLayout}
+        // Only the month in view should be reachable by a screen reader or by a
+        // stray tap on a half-visible neighbour.
+        pointerEvents={isCurrent ? 'auto' : 'none'}
+        accessibilityElementsHidden={!isCurrent}
+        importantForAccessibility={isCurrent ? 'auto' : 'no-hide-descendants'}
+      >
+        <Calendar
+          {...calendarProps}
+          current={month}
+          // The pager owns the month: without this, tapping a day from an
+          // adjacent month would move a page's internal month and desync it
+          // from its position in the strip.
+          disableMonthChange
+          onPressArrowLeft={goPrev}
+          onPressArrowRight={goNext}
+        />
+      </View>
+    );
+  },
+);
+MonthPage.displayName = 'MonthPage';
+
+/**
+ * Holds an object's identity steady while its contents are unchanged, so the
+ * props spread below does not defeat `MonthPage`'s memoization on every render
+ * of the screen above.
+ */
+const useStableProps = (value: Record<string, unknown>): Record<string, unknown> => {
+  const ref = React.useRef(value);
+  const previous = ref.current;
+  const keys = Object.keys(value);
+  const unchanged =
+    keys.length === Object.keys(previous).length &&
+    keys.every((key) => previous[key] === value[key]);
+  if (!unchanged) ref.current = value;
+  return ref.current;
+};
+
 export interface CalendarMonthPagerProps
   extends Omit<
     CalendarProps,
@@ -77,12 +147,20 @@ export const CalendarMonthPager: React.FC<CalendarMonthPagerProps> = ({
 
   const [pageIndex, setPageIndex] = React.useState(targetIndex);
   const [width, setWidth] = React.useState(0);
+  /**
+   * Three months is three grids to build. Opening the screen only needs the one
+   * being looked at, so the neighbours wait a frame and the tab paints on a
+   * third of the work.
+   */
+  const [neighboursMounted, setNeighboursMounted] = React.useState(false);
 
   const offset = useSharedValue(0);
   const opacity = useSharedValue(1);
   const dragStart = useSharedValue(0);
   /** True while a jump is faded out and the page underneath is being swapped. */
   const jumping = useSharedValue(false);
+  /** True while a released swipe is still travelling to the month it picked. */
+  const settling = useSharedValue(false);
   const widthValue = useSharedValue(0);
   const indexValue = useSharedValue(targetIndex);
 
@@ -119,17 +197,17 @@ export const CalendarMonthPager: React.FC<CalendarMonthPagerProps> = ({
     offset.value = -indexRef.current * next;
   };
 
-  const onPageLayout = (index: number) => (event: LayoutChangeEvent) => {
-    const height = Math.round(event.nativeEvent.layout.height);
+  const onPageLayout = React.useCallback((index: number, measured: number) => {
+    const height = Math.round(measured);
     if (!height || heights.get(index) === height) return;
     heights.set(index, height);
     syncHeights(indexRef.current);
-  };
+  }, [syncHeights]);
 
-  const goToIndex = (index: number) => {
+  const goToIndex = React.useCallback((index: number) => {
     haptics.selection();
     changeRef.current(monthAt(index));
-  };
+  }, [monthAt]);
 
   /** Runs on the JS thread once a released swipe has finished travelling. */
   const commitSwipe = React.useCallback((delta: number) => {
@@ -159,6 +237,7 @@ export const CalendarMonthPager: React.FC<CalendarMonthPagerProps> = ({
           // started now would fight it over the same offset.
           if (jumping.value) return;
           cancelAnimation(offset);
+          settling.value = false;
           dragStart.value = offset.value;
         })
         .onUpdate((event) => {
@@ -186,13 +265,21 @@ export const CalendarMonthPager: React.FC<CalendarMonthPagerProps> = ({
             delta = -1;
           }
 
+          // Commit at release rather than on arrival. The spring runs on the UI
+          // thread, so mounting the month that just came into range overlaps it
+          // instead of landing as a stall the moment it settles.
+          if (delta !== 0) {
+            settling.value = true;
+            runOnJS(commitSwipe)(delta);
+          }
+
           offset.value = withSpring(
             base - delta * w,
             // Clamped: an overshoot would expose the unrendered page beyond the
             // one being settled on.
             { ...Spring.gentle, velocity: event.velocityX, overshootClamping: true },
-            (finished) => {
-              if (finished && delta !== 0) runOnJS(commitSwipe)(delta);
+            () => {
+              settling.value = false;
             },
           );
         }),
@@ -213,6 +300,9 @@ export const CalendarMonthPager: React.FC<CalendarMonthPagerProps> = ({
       // The outgoing month stays mounted as a neighbour of the new index, so it
       // can slide out under its replacement.
       setPageIndex(targetIndex);
+      // A released swipe is already carrying the strip there under its own
+      // spring; re-animating would swap that for a different curve mid-flight.
+      if (settling.value) return;
       const destination = -targetIndex * width;
       if (Math.abs(offset.value - destination) > 0.5) {
         offset.value = withTiming(destination, { duration: Duration.normal, easing: Ease.out });
@@ -231,6 +321,12 @@ export const CalendarMonthPager: React.FC<CalendarMonthPagerProps> = ({
       },
     );
   }, [targetIndex, pageIndex, width, finishJump]);
+
+  React.useEffect(() => {
+    if (!width || neighboursMounted) return;
+    const frame = requestAnimationFrame(() => setNeighboursMounted(true));
+    return () => cancelAnimationFrame(frame);
+  }, [width, neighboursMounted]);
 
   React.useEffect(() => {
     indexValue.value = pageIndex;
@@ -260,34 +356,25 @@ export const CalendarMonthPager: React.FC<CalendarMonthPagerProps> = ({
     };
   });
 
+  const pageProps = useStableProps(calendarProps as Record<string, unknown>);
+  const indices = width > 0 ? (neighboursMounted ? [pageIndex - 1, pageIndex, pageIndex + 1] : [pageIndex]) : [];
+
   return (
     <GestureDetector gesture={pan}>
       <Animated.View style={[styles.container, containerStyle]} onLayout={onContainerLayout}>
         <Animated.View style={[styles.strip, stripStyle]}>
-          {width > 0 &&
-            [pageIndex - 1, pageIndex, pageIndex + 1].map((index) => (
-              <View
-                key={index}
-                style={[styles.page, { width, transform: [{ translateX: index * width }] }]}
-                onLayout={onPageLayout(index)}
-                // Only the month in view should be reachable by a screen reader
-                // or a stray tap on a half-visible neighbour.
-                pointerEvents={index === pageIndex ? 'auto' : 'none'}
-                accessibilityElementsHidden={index !== pageIndex}
-                importantForAccessibility={index === pageIndex ? 'auto' : 'no-hide-descendants'}
-              >
-                <Calendar
-                  {...calendarProps}
-                  current={monthAt(index)}
-                  // The pager owns the month: without this, tapping a day from
-                  // an adjacent month would move a page's internal month and
-                  // desync it from its position in the strip.
-                  disableMonthChange
-                  onPressArrowLeft={() => goToIndex(index - 1)}
-                  onPressArrowRight={() => goToIndex(index + 1)}
-                />
-              </View>
-            ))}
+          {indices.map((index) => (
+            <MonthPage
+              key={index}
+              index={index}
+              month={monthAt(index)}
+              width={width}
+              isCurrent={index === pageIndex}
+              onNavigate={goToIndex}
+              onPageLayout={onPageLayout}
+              calendarProps={pageProps}
+            />
+          ))}
         </Animated.View>
       </Animated.View>
     </GestureDetector>

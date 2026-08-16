@@ -4,6 +4,7 @@ import { Text } from 'react-native-paper';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import dayjs from 'dayjs';
 import { FontAwesome5 } from '@expo/vector-icons';
+import type { DateData } from 'react-native-calendars';
 import { buildMarkedDates } from '../utils/calendarUtils';
 import { CalendarMonthPager } from '../components/CalendarMonthPager';
 import { useAttendanceStore, getTaskForDate } from '../store/attendanceStore';
@@ -33,15 +34,35 @@ export const CalendarScreen: React.FC = () => {
 
   const { logs, notes, taskHistory, sequenceSkips, selectedActivityId, activities, appendNote, editNote, isHideExtraDaysEnabled } = useAttendanceStore();
   const selectedActivity = activities.find(a => a.id === selectedActivityId);
-  const loggedDates = selectedActivityId ? (logs[selectedActivityId] || []).map(e => e.date) : [];
-  const activitySequenceSkips: string[] = selectedActivityId ? (sequenceSkips[selectedActivityId] ?? []) : [];
+  const activityLogs = selectedActivityId ? logs[selectedActivityId] : undefined;
+  // `?? []` would hand out a fresh array on every render, which is enough to
+  // invalidate everything memoized below it.
+  const activitySequenceSkips = React.useMemo<string[]>(
+    () => (selectedActivityId ? sequenceSkips[selectedActivityId] ?? [] : []),
+    [selectedActivityId, sequenceSkips],
+  );
   const today = todayStr();
-  const markedDates = buildMarkedDates(
-    loggedDates,
-    today,
-    selectedActivity?.createdAt,
-    selectedActivity?.completedAt,
-    calendarColors,
+
+  const loggedDates = React.useMemo(
+    () => (activityLogs ?? []).map(e => e.date),
+    [activityLogs],
+  );
+
+  // Every day cell in the calendar reads its style out of this object, and the
+  // day component is memoized on it. Rebuilding it each render — it walks every
+  // date since the habit was created — would hand all of them a new object and
+  // re-render the entire grid on any unrelated state change, month changes and
+  // opening the log sheet included.
+  const markedDates = React.useMemo(
+    () =>
+      buildMarkedDates(
+        loggedDates,
+        today,
+        selectedActivity?.createdAt,
+        selectedActivity?.completedAt,
+        calendarColors,
+      ),
+    [loggedDates, today, selectedActivity?.createdAt, selectedActivity?.completedAt, calendarColors],
   );
 
   // Start / end date jump helpers
@@ -56,8 +77,35 @@ export const CalendarScreen: React.FC = () => {
 
   // Controlled month for the calendar — defaults to today's month
   const [currentMonth, setCurrentMonth] = React.useState(today);
+  // Read by the day handler, which must not be rebuilt on every month change:
+  // a new handler is a new prop on all ~40 day cells of every mounted month.
+  const currentMonthRef = React.useRef(currentMonth);
+  currentMonthRef.current = currentMonth;
 
   const isViewingCurrentMonth = dayjs(currentMonth).isSame(dayjs(today), 'month');
+
+  const calendarTheme = React.useMemo(
+    () => ({
+      backgroundColor: colors.surface,
+      calendarBackground: colors.surface,
+      selectedDayBackgroundColor: colors.primary,
+      selectedDayTextColor: colors.onPrimary,
+      todayTextColor: colors.primary,
+      dayTextColor: colors.textPrimary,
+      textDisabledColor: colors.textDisabled,
+      arrowColor: colors.primary,
+      monthTextColor: colors.textPrimary,
+      textSectionTitleColor: colors.textTertiary,
+      textMonthFontWeight: '700' as const,
+      textMonthFontSize: 17,
+      textDayFontSize: 14,
+      textDayFontWeight: '500' as const,
+      textDayHeaderFontSize: 11,
+      textDayHeaderFontWeight: '700' as const,
+      arrowStyle: { padding: Spacing.sm },
+    }),
+    [colors],
+  );
 
   // Derive note entries reactively from the store so they stay fresh after appending
   const logModalNotes =
@@ -69,6 +117,65 @@ export const CalendarScreen: React.FC = () => {
     haptics.light();
     setCurrentMonth(date);
   };
+
+  const handleDayPress = React.useCallback(
+    (day: DateData) => {
+      haptics.light();
+      // Tapping a trailing day from a neighbouring month follows it there, the
+      // way it did when the calendar owned its own month.
+      if (!dayjs(day.dateString).isSame(dayjs(currentMonthRef.current), 'month')) {
+        setCurrentMonth(day.dateString);
+      }
+      // Use .date field (locked local date) instead of parsing the UTC timestamp,
+      // so the calendar day never shifts when the device's timezone changes.
+      const rawEntry = selectedActivityId
+        ? (logs[selectedActivityId] || []).find(e => e.date === day.dateString)
+        : undefined;
+      const dateKey = day.dateString;
+      setLogModalDate(dayjs(day.dateString).format('MMMM D, YYYY'));
+      setLogModalDateKey(dateKey);
+      setLogModalIsLogged(!!rawEntry);
+      if (rawEntry) {
+        // Show time in the timezone where it was originally logged
+        setLogModalTime(rawEntry.ts.includes('T') ? formatTimeWithTz(rawEntry.ts, rawEntry.tz) : null);
+        // Compute which task was active on this day (accounting for skips)
+        let task: string | null = null;
+        if (selectedActivityId) {
+          task = taskHistory[selectedActivityId]?.[day.dateString] || null;
+          if (!task && selectedActivity) {
+            const actLogDates = (logs[selectedActivityId] || []).map(e => e.date);
+            task = getTaskForDate(selectedActivity, day.dateString, actLogDates, activitySequenceSkips);
+          }
+        }
+        setLogModalTask(task);
+        setLogModalIsSequenceSkipped(activitySequenceSkips.includes(day.dateString));
+        setLogModalTimeBoundKind(undefined);
+      } else {
+        setLogModalTime(null);
+        setLogModalTask(null);
+        setLogModalIsSequenceSkipped(false);
+        // Compute time-bound kind for unlogged today
+        if (day.dateString === today && selectedActivity?.timeBoundType) {
+          const currentTime = dayjs().format('HH:mm');
+          const { timeBoundType, timeBoundStartTime, timeBoundEndTime } = selectedActivity;
+          let kind: 'too_early' | 'too_late' | undefined;
+          if (timeBoundType === 'before' && timeBoundStartTime && currentTime >= timeBoundStartTime) {
+            kind = 'too_late';
+          } else if (timeBoundType === 'after' && timeBoundStartTime && currentTime < timeBoundStartTime) {
+            kind = 'too_early';
+          } else if (timeBoundType === 'between' && timeBoundStartTime && timeBoundEndTime) {
+            if (currentTime < timeBoundStartTime) kind = 'too_early';
+            else if (currentTime >= timeBoundEndTime) kind = 'too_late';
+          }
+          setLogModalTimeBoundKind(kind);
+        } else {
+          setLogModalTimeBoundKind(undefined);
+        }
+      }
+      setLogDetailsVisible(true);
+    },
+    [selectedActivityId, logs, taskHistory, selectedActivity, activitySequenceSkips, today],
+  );
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -151,80 +258,8 @@ export const CalendarScreen: React.FC = () => {
               markingType={'custom'}
               maxDate={today}
               hideExtraDays={isHideExtraDaysEnabled}
-              onDayPress={(day) => {
-                haptics.light();
-                // Tapping a trailing day from a neighbouring month follows it
-                // there, the way it did when the calendar owned its own month.
-                if (!dayjs(day.dateString).isSame(dayjs(currentMonth), 'month')) {
-                  setCurrentMonth(day.dateString);
-                }
-                // Use .date field (locked local date) instead of parsing the UTC timestamp,
-                // so the calendar day never shifts when the device's timezone changes.
-                const rawEntry = selectedActivityId
-                  ? (logs[selectedActivityId] || []).find(e => e.date === day.dateString)
-                  : undefined;
-                const dateKey = day.dateString;
-                setLogModalDate(dayjs(day.dateString).format('MMMM D, YYYY'));
-                setLogModalDateKey(dateKey);
-                setLogModalIsLogged(!!rawEntry);
-                if (rawEntry) {
-                  // Show time in the timezone where it was originally logged
-                  setLogModalTime(rawEntry.ts.includes('T') ? formatTimeWithTz(rawEntry.ts, rawEntry.tz) : null);
-                  // Compute which task was active on this day (accounting for skips)
-                  let task: string | null = null;
-                  if (selectedActivityId) {
-                    task = taskHistory[selectedActivityId]?.[day.dateString] || null;
-                    if (!task && selectedActivity) {
-                      const actLogDates = (logs[selectedActivityId] || []).map(e => e.date);
-                      task = getTaskForDate(selectedActivity, day.dateString, actLogDates, activitySequenceSkips);
-                    }
-                  }
-                  setLogModalTask(task);
-                  setLogModalIsSequenceSkipped(activitySequenceSkips.includes(day.dateString));
-                  setLogModalTimeBoundKind(undefined);
-                } else {
-                  setLogModalTime(null);
-                  setLogModalTask(null);
-                  setLogModalIsSequenceSkipped(false);
-                  // Compute time-bound kind for unlogged today
-                  if (day.dateString === today && selectedActivity?.timeBoundType) {
-                    const currentTime = dayjs().format('HH:mm');
-                    const { timeBoundType, timeBoundStartTime, timeBoundEndTime } = selectedActivity;
-                    let kind: 'too_early' | 'too_late' | undefined;
-                    if (timeBoundType === 'before' && timeBoundStartTime && currentTime >= timeBoundStartTime) {
-                      kind = 'too_late';
-                    } else if (timeBoundType === 'after' && timeBoundStartTime && currentTime < timeBoundStartTime) {
-                      kind = 'too_early';
-                    } else if (timeBoundType === 'between' && timeBoundStartTime && timeBoundEndTime) {
-                      if (currentTime < timeBoundStartTime) kind = 'too_early';
-                      else if (currentTime >= timeBoundEndTime) kind = 'too_late';
-                    }
-                    setLogModalTimeBoundKind(kind);
-                  } else {
-                    setLogModalTimeBoundKind(undefined);
-                  }
-                }
-                setLogDetailsVisible(true);
-              }}
-              theme={{
-                backgroundColor: colors.surface,
-                calendarBackground: colors.surface,
-                selectedDayBackgroundColor: colors.primary,
-                selectedDayTextColor: colors.onPrimary,
-                todayTextColor: colors.primary,
-                dayTextColor: colors.textPrimary,
-                textDisabledColor: colors.textDisabled,
-                arrowColor: colors.primary,
-                monthTextColor: colors.textPrimary,
-                textSectionTitleColor: colors.textTertiary,
-                textMonthFontWeight: '700',
-                textMonthFontSize: 17,
-                textDayFontSize: 14,
-                textDayFontWeight: '500',
-                textDayHeaderFontSize: 11,
-                textDayHeaderFontWeight: '700',
-                arrowStyle: { padding: Spacing.sm },
-              }}
+              onDayPress={handleDayPress}
+              theme={calendarTheme}
               style={styles.calendar}
             />
           </Card>
