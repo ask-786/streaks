@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import dayjs from 'dayjs';
-import { attendanceService, Activity, NotesMap, NoteEntry, LogEntry, getTaskForDate, TaskHistoryMap, SequenceSkipsMap } from '../features/attendance/attendanceService';
+import { attendanceService, Activity, NotesMap, NoteEntry, LogEntry, getTaskForDate, TaskHistoryMap, SequenceSkipsMap, SequenceTask } from '../features/attendance/attendanceService';
 import {
   calculateCurrentStreak,
   calculateLongestStreak,
@@ -44,7 +44,7 @@ interface AttendanceState {
     name: string,
     requiresNote?: boolean,
     weeklyGoal?: number,
-    taskSequence?: string[],
+    taskSequence?: SequenceTask[],
     sequenceStartDate?: string,
     sequenceMode?: 'calendar' | 'log',
     timeBoundType?: 'before' | 'after' | 'between' | null,
@@ -58,7 +58,7 @@ interface AttendanceState {
     name: string,
     requiresNote?: boolean,
     weeklyGoal?: number,
-    taskSequence?: string[],
+    taskSequence?: SequenceTask[],
     sequenceStartDate?: string,
     sequenceMode?: 'calendar' | 'log',
     timeBoundType?: 'before' | 'after' | 'between' | null,
@@ -92,7 +92,7 @@ interface AttendanceState {
 }
 
 export { NoteEntry, getTaskForDate };
-export type { LogEntry, SequenceSkipsMap };
+export type { LogEntry, SequenceSkipsMap, SequenceTask };
 
 export const useAttendanceStore = create<AttendanceState>((set, get) => ({
   activities: [],
@@ -140,7 +140,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     name: string,
     requiresNote?: boolean,
     weeklyGoal?: number,
-    taskSequence?: string[],
+    taskSequence?: SequenceTask[],
     sequenceStartDate?: string,
     sequenceMode?: 'calendar' | 'log',
     timeBoundType?: 'before' | 'after' | 'between' | null,
@@ -176,7 +176,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     name: string,
     requiresNote?: boolean,
     weeklyGoal?: number,
-    taskSequence?: string[],
+    taskSequence?: SequenceTask[],
     sequenceStartDate?: string,
     sequenceMode?: 'calendar' | 'log',
     timeBoundType?: 'before' | 'after' | 'between' | null,

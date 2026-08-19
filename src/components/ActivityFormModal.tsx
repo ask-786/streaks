@@ -26,6 +26,7 @@ import { Typography, Spacing, BorderRadius, HitSlop, alpha } from '../constants'
 import { FontAwesome5 } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 import { TaskSequenceEditor } from './TaskSequenceEditor';
+import { SequenceTask } from '../features/attendance/attendanceService';
 import { to12h, to24h, isValidTime12h } from '../utils/dateUtils';
 import { haptics } from '../utils/haptics';
 
@@ -35,7 +36,7 @@ export interface ActivityFormModalProps {
   initialName: string;
   initialRequiresNote?: boolean;
   initialWeeklyGoal?: number;
-  initialTaskSequence?: string[];
+  initialTaskSequence?: SequenceTask[];
   initialSequenceMode?: 'calendar' | 'log';
   initialTimeBoundType?: 'before' | 'after' | 'between';
   initialTimeBoundStartTime?: string;
@@ -47,7 +48,7 @@ export interface ActivityFormModalProps {
     name: string,
     requiresNote: boolean,
     weeklyGoal?: number,
-    taskSequence?: string[],
+    taskSequence?: SequenceTask[],
     sequenceMode?: 'calendar' | 'log',
     timeBoundType?: 'before' | 'after' | 'between' | null,
     timeBoundStartTime?: string | null,
@@ -83,7 +84,7 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
   const [weeklyModeEnabled, setWeeklyModeEnabled] = useState(false);
   const [weeklyGoal, setWeeklyGoal] = useState(3);
   const [taskSeqEnabled, setTaskSeqEnabled] = useState(false);
-  const [tasks, setTasks] = useState<string[]>([]);
+  const [tasks, setTasks] = useState<SequenceTask[]>([]);
   const [sequenceMode, setSequenceMode] = useState<'calendar' | 'log'>('calendar');
   const [activityType, setActivityType] = useState<'goal' | 'endless'>('endless');
   const [streakGoal, setStreakGoal] = useState(30);

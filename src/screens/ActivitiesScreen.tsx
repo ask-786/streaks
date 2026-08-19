@@ -15,7 +15,7 @@ import Animated, { FadeIn, FadeInDown, FadeOut } from 'react-native-reanimated';
 import { FontAwesome5 } from '@expo/vector-icons';
 import dayjs from 'dayjs';
 import { RootStackParamList } from '../navigation/AppNavigator';
-import { useAttendanceStore } from '../store/attendanceStore';
+import { useAttendanceStore, SequenceTask } from '../store/attendanceStore';
 import {
   Typography,
   Spacing,
@@ -70,7 +70,7 @@ export const ActivitiesScreen: React.FC = () => {
 
   const [editingRequiresNote, setEditingRequiresNote] = useState<boolean>(false);
   const [editingWeeklyGoal, setEditingWeeklyGoal] = useState<number | undefined>(undefined);
-  const [editingTaskSequence, setEditingTaskSequence] = useState<string[]>([]);
+  const [editingTaskSequence, setEditingTaskSequence] = useState<SequenceTask[]>([]);
   const [editingSequenceMode, setEditingSequenceMode] = useState<'calendar' | 'log' | undefined>(undefined);
   const [editingTimeBoundType, setEditingTimeBoundType] = useState<'before' | 'after' | 'between' | undefined>(undefined);
   const [editingTimeBoundStartTime, setEditingTimeBoundStartTime] = useState<string | undefined>(undefined);
@@ -110,7 +110,7 @@ export const ActivitiesScreen: React.FC = () => {
     name: string,
     requiresNote: boolean,
     weeklyGoal?: number,
-    taskSequence?: string[],
+    taskSequence?: SequenceTask[],
     sequenceMode?: 'calendar' | 'log',
     timeBoundType?: 'before' | 'after' | 'between' | null,
     timeBoundStartTime?: string | null,

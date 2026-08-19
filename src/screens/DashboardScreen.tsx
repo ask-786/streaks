@@ -414,8 +414,23 @@ export const DashboardScreen: React.FC = () => {
                   },
                 ]}
               >
-                {todayTask}
+                {todayTask.title}
               </Text>
+
+              {todayTask.description ? (
+                <Text
+                  style={[
+                    styles.taskDescription,
+                    {
+                      color: isTodaySequenceSkipped
+                        ? colors.textDisabled
+                        : colors.textSecondary,
+                    },
+                  ]}
+                >
+                  {todayTask.description}
+                </Text>
+              ) : null}
 
               {isTodaySequenceSkipped ? (
                 <View
@@ -513,7 +528,7 @@ export const DashboardScreen: React.FC = () => {
         title="Skip Today's Sequence?"
         subtitle={
           todayTask
-            ? `"${todayTask}" will be deferred to your next session. Add a note explaining why.`
+            ? `"${todayTask.title}" will be deferred to your next session. Add a note explaining why.`
             : undefined
         }
         submitLabel="Log & Skip Sequence"
@@ -637,6 +652,10 @@ const styles = StyleSheet.create({
   taskText: {
     ...Typography.bodyLarge,
     fontWeight: '500',
+  },
+  taskDescription: {
+    ...Typography.bodySmall,
+    marginTop: Spacing.xs,
   },
   skipBtn: {
     flexDirection: 'row',

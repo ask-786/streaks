@@ -17,80 +17,112 @@ import { FontAwesome5, Ionicons } from '@expo/vector-icons';
 import { Typography, Spacing, BorderRadius, HitSlop, alpha } from '../constants';
 import { useTheme } from '../hooks/useTheme';
 import { haptics } from '../utils/haptics';
+import {
+  SequenceTask,
+  normalizeSequenceTasks,
+} from '../features/attendance/attendanceService';
 
 export interface TaskSequenceEditorProps {
-  tasks: string[];
-  onChange: (tasks: string[]) => void;
+  tasks: SequenceTask[];
+  onChange: (tasks: SequenceTask[]) => void;
 }
 
-type TaskItem = { id: string; text: string };
+type TaskItem = { id: string; task: SequenceTask };
+
+/** Two tasks are the same content when both title and description match. */
+const sameTask = (a: SequenceTask, b: SequenceTask) =>
+  a.title === b.title && (a.description ?? '') === (b.description ?? '');
+
+/** Drops the description key entirely when it is blank, so stored rows stay lean. */
+const buildTask = (title: string, description: string): SequenceTask => {
+  const trimmed = description.trim();
+  return trimmed ? { title: title.trim(), description: trimmed } : { title: title.trim() };
+};
 
 export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
   tasks,
   onChange,
 }) => {
   const { colors } = useTheme();
-  const [addingText, setAddingText] = useState('');
+  const [addingTitle, setAddingTitle] = useState('');
+  const [addingDescription, setAddingDescription] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [editingText, setEditingText] = useState('');
+  const [editingTitle, setEditingTitle] = useState('');
+  const [editingDescription, setEditingDescription] = useState('');
 
-  const [items, setItems] = useState<TaskItem[]>(() => 
-    tasks.map((t, i) => ({ id: `init-${i}-${Math.random()}`, text: t }))
+  const [items, setItems] = useState<TaskItem[]>(() =>
+    tasks.map((t, i) => ({ id: `init-${i}-${Math.random()}`, task: t }))
   );
 
   React.useEffect(() => {
     setItems(prev => {
-      if (tasks.length === prev.length && tasks.every((t, i) => t === prev[i].text)) {
+      if (tasks.length === prev.length && tasks.every((t, i) => sameTask(t, prev[i].task))) {
         return prev;
       }
-      
+
       const prevItems = [...prev];
       return tasks.map((t, i) => {
-        const matchIdx = prevItems.findIndex(p => p.text === t);
+        const matchIdx = prevItems.findIndex(p => sameTask(p.task, t));
         if (matchIdx !== -1) {
           const matched = prevItems[matchIdx];
           prevItems.splice(matchIdx, 1);
-          return matched;
+          return { ...matched, task: t };
         }
-        return { id: `sync-${Date.now()}-${i}-${Math.random()}`, text: t };
+        return { id: `sync-${Date.now()}-${i}-${Math.random()}`, task: t };
       });
     });
   }, [tasks]);
 
   // ── Edit ────────────────────────────────────────────────────────────────────
-  const startEdit = (index: number, text: string) => {
+  const startEdit = (index: number, task: SequenceTask) => {
     haptics.light();
     setEditingIndex(index);
-    setEditingText(text);
+    setEditingTitle(task.title);
+    setEditingDescription(task.description ?? '');
   };
 
   const commitEdit = (index: number) => {
-    const t = editingText.trim();
-    if (!t) {
+    const title = editingTitle.trim();
+    if (!title) {
       haptics.warning();
       setEditingIndex(null);
       return;
     }
     const next = [...tasks];
-    next[index] = t;
+    next[index] = buildTask(title, editingDescription);
     haptics.medium();
     onChange(next);
     setEditingIndex(null);
   };
 
+  const cancelEdit = () => {
+    haptics.light();
+    setEditingIndex(null);
+    setEditingDescription('');
+  };
+
   // ── Add ─────────────────────────────────────────────────────────────────────
   const commitAdd = () => {
-    const t = addingText.trim();
-    if (!t) {
+    const title = addingTitle.trim();
+    if (!title) {
       haptics.warning();
       setIsAdding(false);
+      setAddingDescription('');
       return;
     }
     haptics.medium();
-    onChange([...tasks, t]);
-    setAddingText('');
+    onChange([...tasks, buildTask(title, addingDescription)]);
+    setAddingTitle('');
+    setAddingDescription('');
     setIsAdding(false);
+  };
+
+  const cancelAdd = () => {
+    haptics.light();
+    setIsAdding(false);
+    setAddingTitle('');
+    setAddingDescription('');
   };
 
   // ── Delete ───────────────────────────────────────────────────────────────────
@@ -117,34 +149,33 @@ export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
       const cleanRaw = raw.replace(/^\uFEFF/, '').trim();
       const parsed = JSON.parse(cleanRaw);
 
-      let imported: string[] = [];
+      // normalizeSequenceTasks takes both the bare-string form and
+      // { title, description } objects, so one call covers every accepted file.
+      let imported: SequenceTask[] = [];
 
       if (Array.isArray(parsed)) {
-        // Plain array of strings
-        imported = parsed.filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
+        imported = normalizeSequenceTasks(parsed);
       } else if (parsed && Array.isArray(parsed.taskSequence)) {
-        // { taskSequence: [...] } wrapper
-        imported = (parsed.taskSequence as unknown[]).filter(
-          (v): v is string => typeof v === 'string' && v.trim().length > 0,
-        );
+        imported = normalizeSequenceTasks(parsed.taskSequence);
       } else {
         haptics.error();
         Alert.alert(
           'Invalid format',
-          'The JSON file must be an array of task strings, or an object with a "taskSequence" array.',
+          'The JSON file must be an array of tasks, or an object with a "taskSequence" array. ' +
+            'Each task can be a plain string, or an object with a "title" and an optional "description".',
         );
         return;
       }
 
       if (imported.length === 0) {
         haptics.error();
-        Alert.alert('No tasks found', 'The file did not contain any valid task strings.');
+        Alert.alert('No tasks found', 'The file did not contain any valid tasks.');
         return;
       }
 
       // Merge: append imported tasks to existing list
       haptics.success();
-      onChange([...tasks, ...imported.map(s => s.trim())]);
+      onChange([...tasks, ...imported]);
     } catch (error: any) {
       haptics.error();
       Alert.alert(
@@ -157,70 +188,103 @@ export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
   // ── Render ───────────────────────────────────────────────────────────────────
   const renderItem = React.useCallback(({ item, getIndex, drag, isActive }: RenderItemParams<TaskItem>) => {
     const index = getIndex() ?? 0;
-    const text = item.text;
+    const task = item.task;
+    const isEditing = editingIndex === index;
     return (
       <ScaleDecorator activeScale={1.02}>
         <View
           style={[
             styles.taskRow,
+            isEditing && styles.taskRowEditing,
             {
               backgroundColor: isActive ? colors.primaryMuted : colors.surfaceSunken,
               borderColor: isActive ? colors.primaryBorder : colors.border,
             },
           ]}
         >
-          {/* Index pill */}
-          <View style={[styles.indexPill, { backgroundColor: alpha(colors.primary, 0.12) }]}>
-            <Text style={[styles.indexText, { color: colors.primary }]}>{index + 1}</Text>
-          </View>
-
-          {editingIndex === index ? (
+          {isEditing ? (
             <>
-              <TextInput
-                style={[styles.addInput, { flex: 1, color: colors.textPrimary }]}
-                value={editingText}
-                onChangeText={setEditingText}
-                autoFocus
-                maxLength={200}
-                onSubmitEditing={() => commitEdit(index)}
-                returnKeyType="done"
-                multiline
-              />
-              <TouchableOpacity
-                onPress={() => {
-                  haptics.light();
-                  setEditingIndex(null);
-                }}
-                hitSlop={HitSlop.md}
-                style={styles.actionIconBtn}
-                accessibilityRole="button"
-                accessibilityLabel="Cancel editing"
-              >
-                <Ionicons name="close" size={19} color={colors.textSecondary} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => commitEdit(index)}
-                hitSlop={HitSlop.md}
-                style={styles.actionIconBtn}
-                accessibilityRole="button"
-                accessibilityLabel="Save task"
-              >
-                <Ionicons name="checkmark" size={19} color={colors.primary} />
-              </TouchableOpacity>
+              <View style={styles.editRow}>
+                {/* Position stays visible while editing, so a long sequence
+                    never loses track of which step is open. */}
+                <View style={[styles.indexPill, { backgroundColor: alpha(colors.primary, 0.12) }]}>
+                  <Text style={[styles.indexText, { color: colors.primary }]}>{index + 1}</Text>
+                </View>
+                <View style={styles.editFields}>
+                  <TextInput
+                    style={[styles.titleInput, { color: colors.textPrimary }]}
+                    value={editingTitle}
+                    onChangeText={setEditingTitle}
+                    placeholder="Task"
+                    placeholderTextColor={colors.textDisabled}
+                    autoFocus
+                    maxLength={200}
+                    returnKeyType="next"
+                    multiline
+                    selectionColor={colors.primary}
+                  />
+                  <TextInput
+                    style={[styles.descriptionInput, { color: colors.textSecondary }]}
+                    value={editingDescription}
+                    onChangeText={setEditingDescription}
+                    placeholder="Description (optional)"
+                    placeholderTextColor={colors.textDisabled}
+                    maxLength={500}
+                    onSubmitEditing={() => commitEdit(index)}
+                    returnKeyType="done"
+                    multiline
+                    selectionColor={colors.primary}
+                  />
+                </View>
+              </View>
+              <View style={styles.editActions}>
+                <TouchableOpacity
+                  onPress={cancelEdit}
+                  hitSlop={HitSlop.md}
+                  accessibilityRole="button"
+                  accessibilityLabel="Cancel editing"
+                >
+                  <Ionicons name="close" size={19} color={colors.textSecondary} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => commitEdit(index)}
+                  hitSlop={HitSlop.md}
+                  style={[styles.addConfirmBtn, { backgroundColor: colors.primary }]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Save task"
+                >
+                  <Ionicons name="checkmark" size={18} color={colors.onPrimary} />
+                </TouchableOpacity>
+              </View>
             </>
           ) : (
-            <>
-              {/* Task text */}
-              <Text
-                style={[styles.taskText, { color: colors.textPrimary }]}
-                numberOfLines={2}
-              >
-                {text}
-              </Text>
+            <View style={styles.displayRow}>
+              {/* Index pill */}
+              <View style={[styles.indexPill, { backgroundColor: alpha(colors.primary, 0.12) }]}>
+                <Text style={[styles.indexText, { color: colors.primary }]}>{index + 1}</Text>
+              </View>
+
+              {/* Task title, with its description underneath */}
+              <View style={styles.taskTextWrap}>
+                <Text
+                  style={[styles.taskText, { color: colors.textPrimary }]}
+                  numberOfLines={2}
+                >
+                  {task.title}
+                </Text>
+                {task.description ? (
+                  <Text
+                    style={[styles.taskDescription, { color: colors.textTertiary }]}
+                    numberOfLines={3}
+                  >
+                    {task.description}
+                  </Text>
+                ) : null}
+              </View>
 
               {/* Edit */}
               <TouchableOpacity
-                onPress={() => startEdit(index, text)}
+                onPress={() => startEdit(index, task)}
                 hitSlop={HitSlop.md}
                 style={styles.actionIconBtn}
                 accessibilityRole="button"
@@ -253,12 +317,12 @@ export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
               >
                 <FontAwesome5 name="grip-lines" size={13} color={colors.textDisabled} />
               </TouchableOpacity>
-            </>
+            </View>
           )}
         </View>
       </ScaleDecorator>
     );
-  }, [editingIndex, editingText, colors, tasks, onChange]);
+  }, [editingIndex, editingTitle, editingDescription, colors, tasks, onChange]);
 
   return (
     <View style={styles.root}>
@@ -282,7 +346,7 @@ export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
           renderItem={renderItem}
           onDragEnd={({ data }) => {
             setItems(data);
-            onChange(data.map(d => d.text));
+            onChange(data.map(d => d.task));
           }}
           scrollEnabled={false}
           activationDistance={5}
@@ -298,13 +362,24 @@ export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
           ]}
         >
           <TextInput
-            style={[styles.addInput, { color: colors.textPrimary }]}
-            value={addingText}
-            onChangeText={setAddingText}
-            placeholder="Describe the task…"
+            style={[styles.titleInput, { color: colors.textPrimary }]}
+            value={addingTitle}
+            onChangeText={setAddingTitle}
+            placeholder="What does this session ask for?"
             placeholderTextColor={colors.textDisabled}
             autoFocus
             maxLength={200}
+            returnKeyType="next"
+            multiline
+            selectionColor={colors.primary}
+          />
+          <TextInput
+            style={[styles.descriptionInput, { color: colors.textSecondary }]}
+            value={addingDescription}
+            onChangeText={setAddingDescription}
+            placeholder="Description (optional) — sets, reps, anything worth remembering"
+            placeholderTextColor={colors.textDisabled}
+            maxLength={500}
             onSubmitEditing={commitAdd}
             returnKeyType="done"
             multiline
@@ -312,11 +387,7 @@ export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
           />
           <View style={styles.addInputActions}>
             <TouchableOpacity
-              onPress={() => {
-                haptics.light();
-                setIsAdding(false);
-                setAddingText('');
-              }}
+              onPress={cancelAdd}
               hitSlop={HitSlop.md}
               accessibilityRole="button"
               accessibilityLabel="Cancel adding task"
@@ -398,13 +469,18 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   taskRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
     borderRadius: BorderRadius.sm,
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: Spacing.sm + 2,
     paddingVertical: Spacing.sm + 2,
     marginBottom: Spacing.xs + 2,
+  },
+  taskRowEditing: {
+    gap: Spacing.sm,
+  },
+  displayRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: Spacing.sm,
   },
   indexPill: {
@@ -420,9 +496,30 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 10.5,
   },
+  taskTextWrap: {
+    flex: 1,
+    gap: 2,
+  },
   taskText: {
     ...Typography.bodyMedium,
+  },
+  taskDescription: {
+    ...Typography.caption,
+  },
+  editRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.sm,
+  },
+  editFields: {
     flex: 1,
+    gap: Spacing.xs,
+  },
+  editActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: Spacing.md,
   },
   actionIconBtn: {
     paddingHorizontal: 5,
@@ -436,12 +533,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.sm + 2,
     paddingVertical: Spacing.sm + 2,
     marginBottom: Spacing.xs,
-    gap: Spacing.sm,
+    gap: Spacing.xs,
   },
-  addInput: {
+  titleInput: {
     ...Typography.bodyMedium,
     minHeight: 38,
     maxHeight: 90,
+    padding: 0,
+  },
+  descriptionInput: {
+    ...Typography.bodySmall,
+    minHeight: 32,
+    maxHeight: 110,
     padding: 0,
   },
   addInputActions: {
