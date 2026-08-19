@@ -44,6 +44,16 @@ export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
   onChange,
 }) => {
   const { colors } = useTheme();
+  /**
+   * The list is read-only until the user asks to edit it. A sequence is easy to
+   * wreck by accident — one stray tap on a delete cross, or a drag started by a
+   * finger that was only scrolling — and the damage is silent. Starting locked
+   * makes every mutation deliberate.
+   *
+   * An empty sequence has nothing to protect and only one sensible next move,
+   * so it opens unlocked rather than dead-ending behind a button.
+   */
+  const [isEditMode, setIsEditMode] = useState(() => tasks.length === 0);
   const [addingTitle, setAddingTitle] = useState('');
   const [addingDescription, setAddingDescription] = useState('');
   const [isAdding, setIsAdding] = useState(false);
@@ -73,6 +83,21 @@ export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
       });
     });
   }, [tasks]);
+
+  const toggleEditMode = () => {
+    haptics.medium();
+    if (isEditMode) {
+      // Leaving: drop any in-progress add or row edit rather than committing it,
+      // so "Done" never saves something the user was still typing.
+      setIsAdding(false);
+      setAddingTitle('');
+      setAddingDescription('');
+      setEditingIndex(null);
+      setEditingTitle('');
+      setEditingDescription('');
+    }
+    setIsEditMode(v => !v);
+  };
 
   // ── Edit ────────────────────────────────────────────────────────────────────
   const startEdit = (index: number, task: SequenceTask) => {
@@ -189,7 +214,7 @@ export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
   const renderItem = React.useCallback(({ item, getIndex, drag, isActive }: RenderItemParams<TaskItem>) => {
     const index = getIndex() ?? 0;
     const task = item.task;
-    const isEditing = editingIndex === index;
+    const isEditing = isEditMode && editingIndex === index;
     return (
       <ScaleDecorator activeScale={1.02}>
         <View
@@ -282,50 +307,97 @@ export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
                 ) : null}
               </View>
 
-              {/* Edit */}
-              <TouchableOpacity
-                onPress={() => startEdit(index, task)}
-                hitSlop={HitSlop.md}
-                style={styles.actionIconBtn}
-                accessibilityRole="button"
-                accessibilityLabel={`Edit task ${index + 1}`}
-              >
-                <FontAwesome5 name="pen" size={13} color={colors.textTertiary} />
-              </TouchableOpacity>
+              {/* Row actions, including the drag handle, exist only while
+                  unlocked. With no handle rendered nothing calls `drag()`, so
+                  reordering is genuinely off rather than merely hidden. */}
+              {isEditMode ? (
+                <>
+                  {/* Edit */}
+                  <TouchableOpacity
+                    onPress={() => startEdit(index, task)}
+                    hitSlop={HitSlop.md}
+                    style={styles.actionIconBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Edit task ${index + 1}`}
+                  >
+                    <FontAwesome5 name="pen" size={13} color={colors.textTertiary} />
+                  </TouchableOpacity>
 
-              {/* Delete */}
-              <TouchableOpacity
-                onPress={() => deleteTask(index)}
-                hitSlop={HitSlop.md}
-                style={styles.actionIconBtn}
-                accessibilityRole="button"
-                accessibilityLabel={`Delete task ${index + 1}`}
-              >
-                <FontAwesome5 name="times" size={14} color={colors.danger} />
-              </TouchableOpacity>
+                  {/* Delete */}
+                  <TouchableOpacity
+                    onPress={() => deleteTask(index)}
+                    hitSlop={HitSlop.md}
+                    style={styles.actionIconBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Delete task ${index + 1}`}
+                  >
+                    <FontAwesome5 name="times" size={14} color={colors.danger} />
+                  </TouchableOpacity>
 
-              {/* Drag handle */}
-              <TouchableOpacity
-                onLongPress={() => {
-                  haptics.longPress();
-                  drag();
-                }}
-                onPressIn={drag}
-                hitSlop={HitSlop.sm}
-                style={styles.dragHandle}
-                accessibilityLabel={`Reorder task ${index + 1}`}
-              >
-                <FontAwesome5 name="grip-lines" size={13} color={colors.textDisabled} />
-              </TouchableOpacity>
+                  {/* Drag handle */}
+                  <TouchableOpacity
+                    onLongPress={() => {
+                      haptics.longPress();
+                      drag();
+                    }}
+                    onPressIn={drag}
+                    hitSlop={HitSlop.sm}
+                    style={styles.dragHandle}
+                    accessibilityLabel={`Reorder task ${index + 1}`}
+                  >
+                    <FontAwesome5 name="grip-lines" size={13} color={colors.textDisabled} />
+                  </TouchableOpacity>
+                </>
+              ) : null}
             </View>
           )}
         </View>
       </ScaleDecorator>
     );
-  }, [editingIndex, editingTitle, editingDescription, colors, tasks, onChange]);
+  }, [isEditMode, editingIndex, editingTitle, editingDescription, colors, tasks, onChange]);
 
   return (
     <View style={styles.root}>
+      {/* Header: what the sequence is, and the way into changing it. An empty
+          list has nothing to lock and its own call to action below, so the
+          header only appears once there is a sequence to protect. */}
+      {tasks.length > 0 ? (
+        <View style={styles.header}>
+          <Text style={[styles.headerCount, { color: colors.textTertiary }]}>
+            {tasks.length} task{tasks.length !== 1 ? 's' : ''} · one per session
+          </Text>
+
+          <TouchableOpacity
+            style={[
+              styles.toggleBtn,
+              isEditMode
+                ? { backgroundColor: colors.primary }
+                : { backgroundColor: colors.primaryMuted },
+            ]}
+            onPress={toggleEditMode}
+            activeOpacity={0.75}
+            accessibilityRole="button"
+            accessibilityLabel={
+              isEditMode ? 'Finish editing the task sequence' : 'Edit the task sequence'
+            }
+          >
+            <FontAwesome5
+              name={isEditMode ? 'check' : 'pen'}
+              size={11}
+              color={isEditMode ? colors.onPrimary : colors.primary}
+            />
+            <Text
+              style={[
+                styles.actionBtnText,
+                { color: isEditMode ? colors.onPrimary : colors.primary },
+              ]}
+            >
+              {isEditMode ? 'Done' : 'Edit'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
       {/* Empty state — a bare "Add task" button gives no sense of what a
           sequence is for. */}
       {items.length === 0 && !isAdding ? (
@@ -354,7 +426,7 @@ export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
       )}
 
       {/* Inline add input */}
-      {isAdding ? (
+      {isEditMode && isAdding ? (
         <View
           style={[
             styles.addInputRow,
@@ -407,45 +479,47 @@ export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
         </View>
       ) : null}
 
-      {/* Bottom action row */}
-      <View style={styles.actionRow}>
-        <TouchableOpacity
-          style={[styles.actionBtn, { backgroundColor: colors.primaryMuted }]}
-          onPress={() => {
-            haptics.light();
-            setIsAdding(true);
-          }}
-          activeOpacity={0.75}
-          accessibilityRole="button"
-          accessibilityLabel="Add a task"
-        >
-          <Ionicons name="add" size={16} color={colors.primary} />
-          <Text style={[styles.actionBtnText, { color: colors.primary }]}>Add task</Text>
-        </TouchableOpacity>
+      {/* Bottom action row — both actions mutate, so they follow the lock. */}
+      {isEditMode ? (
+        <View style={styles.actionRow}>
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: colors.primaryMuted }]}
+            onPress={() => {
+              haptics.light();
+              setIsAdding(true);
+            }}
+            activeOpacity={0.75}
+            accessibilityRole="button"
+            accessibilityLabel="Add a task"
+          >
+            <Ionicons name="add" size={16} color={colors.primary} />
+            <Text style={[styles.actionBtnText, { color: colors.primary }]}>Add task</Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[
-            styles.actionBtn,
-            { backgroundColor: colors.surfaceVariant, borderColor: colors.border },
-          ]}
-          onPress={() => {
-            haptics.light();
-            handleImport();
-          }}
-          activeOpacity={0.75}
-          accessibilityRole="button"
-          accessibilityLabel="Import tasks from a JSON file"
-        >
-          <FontAwesome5 name="file-import" size={12} color={colors.textSecondary} />
-          <Text style={[styles.actionBtnText, { color: colors.textSecondary }]}>Import JSON</Text>
-        </TouchableOpacity>
-      </View>
+          <TouchableOpacity
+            style={[
+              styles.actionBtn,
+              { backgroundColor: colors.surfaceVariant, borderColor: colors.border },
+            ]}
+            onPress={() => {
+              haptics.light();
+              handleImport();
+            }}
+            activeOpacity={0.75}
+            accessibilityRole="button"
+            accessibilityLabel="Import tasks from a JSON file"
+          >
+            <FontAwesome5 name="file-import" size={12} color={colors.textSecondary} />
+            <Text style={[styles.actionBtnText, { color: colors.textSecondary }]}>Import JSON</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
-      {tasks.length > 0 && (
+      {isEditMode && tasks.length > 1 ? (
         <Text style={[styles.hint, { color: colors.textDisabled }]}>
-          {tasks.length} task{tasks.length !== 1 ? 's' : ''} · drag the handle to reorder
+          Drag the handle to reorder
         </Text>
-      )}
+      ) : null}
     </View>
   );
 };
@@ -453,6 +527,24 @@ export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
 const styles = StyleSheet.create({
   root: {
     gap: Spacing.xs,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
+  headerCount: {
+    ...Typography.caption,
+    flex: 1,
+  },
+  toggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: Spacing.md - 2,
+    paddingVertical: Spacing.xs + 2,
+    borderRadius: BorderRadius.full,
   },
   empty: {
     flexDirection: 'row',
