@@ -19,6 +19,12 @@ export interface SequenceTask {
 export interface Activity {
   id: string;
   name: string;
+  /**
+   * Optional longer detail about the habit itself — what counts as done, why
+   * it matters, the rule you set yourself. Distinct from a sequence task's
+   * description, which belongs to one step rather than the whole habit.
+   */
+  description?: string;
   createdAt: number;
   requiresNote?: boolean;
   /**

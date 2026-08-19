@@ -34,6 +34,7 @@ export interface ActivityFormModalProps {
   visible: boolean;
   editingItemId: string | null;
   initialName: string;
+  initialDescription?: string;
   initialRequiresNote?: boolean;
   initialWeeklyGoal?: number;
   initialTaskSequence?: SequenceTask[];
@@ -46,6 +47,7 @@ export interface ActivityFormModalProps {
   onClose: () => void;
   onSave: (
     name: string,
+    description: string,
     requiresNote: boolean,
     weeklyGoal?: number,
     taskSequence?: SequenceTask[],
@@ -64,6 +66,7 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
   visible,
   editingItemId,
   initialName,
+  initialDescription = '',
   initialRequiresNote = false,
   initialWeeklyGoal,
   initialTaskSequence,
@@ -80,6 +83,7 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
   const insets = useSafeAreaInsets();
 
   const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
   const [requiresNote, setRequiresNote] = useState(false);
   const [weeklyModeEnabled, setWeeklyModeEnabled] = useState(false);
   const [weeklyGoal, setWeeklyGoal] = useState(3);
@@ -127,6 +131,7 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
   useEffect(() => {
     if (visible) {
       setName(initialName);
+      setDescription(initialDescription);
       setRequiresNote(initialRequiresNote);
       const hasGoal = !!initialWeeklyGoal && initialWeeklyGoal > 0;
       setWeeklyModeEnabled(hasGoal);
@@ -162,7 +167,7 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
       timeBoundHeight.value = hasTimeBound ? 320 : 0;
       timeBoundOpacity.value = hasTimeBound ? 1 : 0;
     }
-  }, [visible, initialName, initialRequiresNote, initialWeeklyGoal, initialTaskSequence, initialSequenceMode, initialTimeBoundType, initialTimeBoundStartTime, initialTimeBoundEndTime, initialActivityType, initialStreakGoal]);
+  }, [visible, initialName, initialDescription, initialRequiresNote, initialWeeklyGoal, initialTaskSequence, initialSequenceMode, initialTimeBoundType, initialTimeBoundStartTime, initialTimeBoundEndTime, initialActivityType, initialStreakGoal]);
 
   const handleWeeklyToggle = (val: boolean) => {
     haptics.toggle(val);
@@ -234,6 +239,7 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
     haptics.success();
     onSave(
       name.trim(),
+      description.trim(),
       requiresNote,
       weeklyModeEnabled ? weeklyGoal : undefined,
       taskSeqEnabled && tasks.length > 0 ? tasks : [],
@@ -359,6 +365,29 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
           {/* Character count */}
           <Text style={[styles.charCount, { color: colors.textSecondary }]}>
             {name.length}/40
+          </Text>
+
+          {/* ── Description ────────────────────────────────────────── */}
+          <View
+            style={[
+              styles.descriptionWrapper,
+              { backgroundColor: colors.background, borderColor: colors.border },
+            ]}
+          >
+            <TextInput
+              style={[styles.descriptionInput, { color: colors.textPrimary }]}
+              placeholder="Add a description (optional)"
+              placeholderTextColor={colors.textDisabled}
+              value={description}
+              onChangeText={setDescription}
+              maxLength={280}
+              multiline
+              selectionColor={colors.primary}
+            />
+          </View>
+
+          <Text style={[styles.charCount, { color: colors.textSecondary }]}>
+            {description.length}/280
           </Text>
 
           {/* ── Activity Type Selector ─────────────────────────────── */}
@@ -913,6 +942,22 @@ const styles = StyleSheet.create({
     flex: 1,
     ...Typography.bodyLarge,
     paddingVertical: Spacing.md,
+  },
+  descriptionWrapper: {
+    // Not `inputWrapper`: that is a centred row sized around a single-line
+    // field and its trailing clear button. This one has neither, and has to
+    // grow downward as the text wraps.
+    borderRadius: BorderRadius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: Spacing.md,
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.xs,
+  },
+  descriptionInput: {
+    ...Typography.bodyMedium,
+    paddingVertical: Spacing.md,
+    minHeight: 44,
+    maxHeight: 120,
   },
   clearBtn: {
     paddingLeft: Spacing.sm,

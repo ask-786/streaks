@@ -157,6 +157,7 @@ export const ActivitySettingsScreen: React.FC = () => {
     await editActivity(
       selectedActivityId,
       selectedActivity.name,
+      selectedActivity.description,
       selectedActivity.requiresNote,
       selectedActivity.weeklyGoal,
       selectedActivity.taskSequence,
@@ -174,6 +175,7 @@ export const ActivitySettingsScreen: React.FC = () => {
       editActivity(
         selectedActivityId,
         selectedActivity.name,
+        selectedActivity.description,
         selectedActivity.requiresNote,
         selectedActivity.weeklyGoal,
         newTasks,

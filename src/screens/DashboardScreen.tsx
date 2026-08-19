@@ -248,6 +248,13 @@ export const DashboardScreen: React.FC = () => {
             {formatDisplayDate(today)}
           </Text>
           <Text style={[styles.greeting, { color: colors.textPrimary }]}>{greeting}</Text>
+          {/* The nav bar carries the habit's name; this is the rest of what the
+              user wrote about it, where it is read before deciding to log. */}
+          {selectedActivity?.description ? (
+            <Text style={[styles.habitDescription, { color: colors.textSecondary }]}>
+              {selectedActivity.description}
+            </Text>
+          ) : null}
         </Animated.View>
 
         {/* ── Hero: streak + the one action that matters ────────────────────── */}
@@ -655,6 +662,10 @@ const styles = StyleSheet.create({
   },
   taskDescription: {
     ...Typography.bodySmall,
+    marginTop: Spacing.xs,
+  },
+  habitDescription: {
+    ...Typography.bodyMedium,
     marginTop: Spacing.xs,
   },
   skipBtn: {

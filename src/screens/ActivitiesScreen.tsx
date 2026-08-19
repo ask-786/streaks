@@ -56,6 +56,7 @@ export const ActivitiesScreen: React.FC = () => {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editingItemName, setEditingItemName] = useState<string>('');
+  const [editingDescription, setEditingDescription] = useState<string>('');
 
   const {
     activities,
@@ -108,6 +109,7 @@ export const ActivitiesScreen: React.FC = () => {
 
   const handleSaveActivity = (
     name: string,
+    description: string,
     requiresNote: boolean,
     weeklyGoal?: number,
     taskSequence?: SequenceTask[],
@@ -119,9 +121,9 @@ export const ActivitiesScreen: React.FC = () => {
     streakGoal?: number,
   ) => {
     if (editingItemId) {
-      editActivity(editingItemId, name, requiresNote, weeklyGoal, taskSequence, undefined, sequenceMode, timeBoundType, timeBoundStartTime, timeBoundEndTime);
+      editActivity(editingItemId, name, description, requiresNote, weeklyGoal, taskSequence, undefined, sequenceMode, timeBoundType, timeBoundStartTime, timeBoundEndTime);
     } else {
-      createActivity(name, requiresNote, weeklyGoal, taskSequence, undefined, sequenceMode, timeBoundType, timeBoundStartTime, timeBoundEndTime, activityType, streakGoal);
+      createActivity(name, description, requiresNote, weeklyGoal, taskSequence, undefined, sequenceMode, timeBoundType, timeBoundStartTime, timeBoundEndTime, activityType, streakGoal);
     }
     closeModal();
   };
@@ -130,6 +132,7 @@ export const ActivitiesScreen: React.FC = () => {
     haptics.medium();
     setEditingItemId(null);
     setEditingItemName('');
+    setEditingDescription('');
     setSelectedIds([]);
     setIsModalVisible(true);
   };
@@ -139,6 +142,7 @@ export const ActivitiesScreen: React.FC = () => {
     if (!activity || activity.completedAt) return; // Completed habits are read-only
     setEditingItemId(id);
     setEditingItemName(activity.name);
+    setEditingDescription(activity.description ?? '');
     setEditingRequiresNote(activity?.requiresNote ?? false);
     setEditingWeeklyGoal(activity?.weeklyGoal);
     setEditingTaskSequence(activity?.taskSequence ?? []);
@@ -156,6 +160,7 @@ export const ActivitiesScreen: React.FC = () => {
     setIsModalVisible(false);
     setEditingItemId(null);
     setEditingItemName('');
+    setEditingDescription('');
     setEditingRequiresNote(false);
     setEditingWeeklyGoal(undefined);
     setEditingTaskSequence([]);
@@ -411,6 +416,7 @@ export const ActivitiesScreen: React.FC = () => {
                   key={item.id}
                   id={item.id}
                   name={item.name}
+                  description={item.description}
                   stats={getActivityStats(item.id)}
                   index={index}
                   recentDays={trails[item.id]}
@@ -572,6 +578,7 @@ export const ActivitiesScreen: React.FC = () => {
         visible={isModalVisible}
         editingItemId={editingItemId}
         initialName={editingItemName}
+        initialDescription={editingDescription}
         initialRequiresNote={editingRequiresNote}
         initialWeeklyGoal={editingWeeklyGoal}
         initialTaskSequence={editingTaskSequence}

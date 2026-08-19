@@ -42,6 +42,7 @@ interface AttendanceState {
   hydrate: () => Promise<void>;
   createActivity: (
     name: string,
+    description?: string,
     requiresNote?: boolean,
     weeklyGoal?: number,
     taskSequence?: SequenceTask[],
@@ -56,6 +57,7 @@ interface AttendanceState {
   editActivity: (
     id: string,
     name: string,
+    description?: string,
     requiresNote?: boolean,
     weeklyGoal?: number,
     taskSequence?: SequenceTask[],
@@ -138,6 +140,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
 
   createActivity: async (
     name: string,
+    description?: string,
     requiresNote?: boolean,
     weeklyGoal?: number,
     taskSequence?: SequenceTask[],
@@ -155,6 +158,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       name,
       createdAt: Date.now(),
       requiresNote: requiresNote ?? false,
+      ...(description && description.trim() ? { description: description.trim() } : {}),
       activityType: activityType ?? 'endless',
       ...(activityType === 'goal' && streakGoal && streakGoal > 0 ? { streakGoal } : {}),
       ...(weeklyGoal !== undefined && weeklyGoal > 0 ? { weeklyGoal } : {}),
@@ -174,6 +178,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
   editActivity: async (
     id: string,
     name: string,
+    description?: string,
     requiresNote?: boolean,
     weeklyGoal?: number,
     taskSequence?: SequenceTask[],
@@ -187,6 +192,14 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     const updatedActivities = activities.map(a => {
       if (a.id !== id) return a;
       const updated = { ...a, name };
+      if (description !== undefined) {
+        const trimmed = description.trim();
+        if (trimmed) {
+          updated.description = trimmed;
+        } else {
+          delete updated.description;
+        }
+      }
       if (requiresNote !== undefined) updated.requiresNote = requiresNote;
       // weeklyGoal=0 means "remove weekly mode"; undefined means "don't change"
       if (weeklyGoal !== undefined) {
