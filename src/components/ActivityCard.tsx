@@ -111,8 +111,8 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
             <View
               style={[
                 styles.titleRow,
-                // A two-line description would otherwise drag the status chip
-                // down to the middle of the block; it belongs beside the name.
+                // The description adds a second row, which would otherwise drag
+                // the status chip down between the two; it belongs beside the name.
                 description ? { alignItems: 'flex-start' } : null,
               ]}
             >
@@ -128,7 +128,7 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
                 {description ? (
                   <Text
                     style={[styles.description, { color: colors.textTertiary }]}
-                    numberOfLines={2}
+                    numberOfLines={1}
                   >
                     {description}
                   </Text>
