@@ -10,7 +10,7 @@ import {
 import { Text } from 'react-native-paper';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { FontAwesome5, Ionicons } from '@expo/vector-icons';
-import { useAttendanceStore } from '../store/attendanceStore';
+import { useAttendanceStore, SequenceTask } from '../store/attendanceStore';
 import { TaskSequenceEditor } from '../components/TaskSequenceEditor';
 import {
   Spacing,
@@ -157,6 +157,7 @@ export const ActivitySettingsScreen: React.FC = () => {
     await editActivity(
       selectedActivityId,
       selectedActivity.name,
+      selectedActivity.description,
       selectedActivity.requiresNote,
       selectedActivity.weeklyGoal,
       selectedActivity.taskSequence,
@@ -169,11 +170,12 @@ export const ActivitySettingsScreen: React.FC = () => {
     await appendNote(selectedActivityId, todayStr(), noteText);
   };
 
-  const handleTaskSequenceChange = (newTasks: string[]) => {
+  const handleTaskSequenceChange = (newTasks: SequenceTask[]) => {
     if (selectedActivityId && selectedActivity) {
       editActivity(
         selectedActivityId,
         selectedActivity.name,
+        selectedActivity.description,
         selectedActivity.requiresNote,
         selectedActivity.weeklyGoal,
         newTasks,

@@ -6,7 +6,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import dayjs from 'dayjs';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { buildMarkedDates } from '../utils/calendarUtils';
-import { useAttendanceStore, getTaskForDate } from '../store/attendanceStore';
+import { useAttendanceStore, getTaskForDate, SequenceTask } from '../store/attendanceStore';
 import { CalendarLegend } from '../components/CalendarLegend';
 import { LogDetailsModal } from '../components/LogDetailsModal';
 import {
@@ -26,7 +26,7 @@ export const CalendarScreen: React.FC = () => {
   const [logModalDate, setLogModalDate] = React.useState('');
   const [logModalDateKey, setLogModalDateKey] = React.useState('');
   const [logModalTime, setLogModalTime] = React.useState<{ time: string, tzDisplay: string | null } | null>(null);
-  const [logModalTask, setLogModalTask] = React.useState<string | null>(null);
+  const [logModalTask, setLogModalTask] = React.useState<SequenceTask | null>(null);
   const [logModalIsLogged, setLogModalIsLogged] = React.useState(false);
   const [logModalTimeBoundKind, setLogModalTimeBoundKind] = React.useState<'too_early' | 'too_late' | undefined>(undefined);
   const [logModalIsSequenceSkipped, setLogModalIsSequenceSkipped] = React.useState(false);
@@ -164,7 +164,7 @@ export const CalendarScreen: React.FC = () => {
                   // Show time in the timezone where it was originally logged
                   setLogModalTime(rawEntry.ts.includes('T') ? formatTimeWithTz(rawEntry.ts, rawEntry.tz) : null);
                   // Compute which task was active on this day (accounting for skips)
-                  let task: string | null = null;
+                  let task: SequenceTask | null = null;
                   if (selectedActivityId) {
                     task = taskHistory[selectedActivityId]?.[day.dateString] || null;
                     if (!task && selectedActivity) {

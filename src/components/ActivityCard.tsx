@@ -25,6 +25,8 @@ export interface ActivityStats {
 export interface ActivityCardProps {
   id: string;
   name: string;
+  /** Optional detail about the habit, shown under its name. */
+  description?: string;
   stats: ActivityStats;
   index: number;
   /** The list is in multi-select mode: a tap picks instead of opening. */
@@ -41,6 +43,7 @@ const DAY_INITIALS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 export const ActivityCard: React.FC<ActivityCardProps> = ({
   id,
   name,
+  description,
   stats,
   index,
   selectionMode,
@@ -105,15 +108,32 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
         >
           <View style={styles.body}>
             {/* Title row */}
-            <View style={styles.titleRow}>
+            <View
+              style={[
+                styles.titleRow,
+                // The description adds a second row, which would otherwise drag
+                // the status chip down between the two; it belongs beside the name.
+                description ? { alignItems: 'flex-start' } : null,
+              ]}
+            >
               {selectionMode ? <SelectionCheck selected={isSelected} /> : null}
 
-              <Text
-                style={[styles.name, { color: colors.textPrimary }]}
-                numberOfLines={1}
-              >
-                {name}
-              </Text>
+              <View style={styles.titleText}>
+                <Text
+                  style={[styles.name, { color: colors.textPrimary }]}
+                  numberOfLines={1}
+                >
+                  {name}
+                </Text>
+                {description ? (
+                  <Text
+                    style={[styles.description, { color: colors.textTertiary }]}
+                    numberOfLines={1}
+                  >
+                    {description}
+                  </Text>
+                ) : null}
+              </View>
 
               <Chip
                 label={done ? 'Done' : 'Pending'}
@@ -227,10 +247,16 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
     marginBottom: Spacing.sm + 4,
   },
+  titleText: {
+    flex: 1,
+    gap: 3,
+  },
   name: {
     ...Typography.titleLarge,
     fontWeight: '700',
-    flex: 1,
+  },
+  description: {
+    ...Typography.bodySmall,
   },
   metrics: {
     flexDirection: 'row',

@@ -3,9 +3,28 @@ import dayjs from 'dayjs';
 import { todayStr, getCurrentTz } from '../../utils/dateUtils';
 import { StorageKeys } from '../../constants';
 
+/**
+ * One step of a habit's task sequence.
+ *
+ * `title` is the short line shown wherever the task is named; `description` is
+ * optional longer detail (sets, reps, a route, why it matters) surfaced under
+ * the title. Sequences created before descriptions existed were plain strings
+ * and are migrated to `{ title }` on read — see `normalizeSequenceTask`.
+ */
+export interface SequenceTask {
+  title: string;
+  description?: string;
+}
+
 export interface Activity {
   id: string;
   name: string;
+  /**
+   * Optional longer detail about the habit itself — what counts as done, why
+   * it matters, the rule you set yourself. Distinct from a sequence task's
+   * description, which belongs to one step rather than the whole habit.
+   */
+  description?: string;
   createdAt: number;
   requiresNote?: boolean;
   /**
@@ -15,8 +34,8 @@ export interface Activity {
    */
   weeklyGoal?: number;
 
-  /** Ordered list of task strings that rotate one-per-day. */
-  taskSequence?: string[];
+  /** Ordered list of tasks that rotate one-per-day. */
+  taskSequence?: SequenceTask[];
   /**
    * The YYYY-MM-DD date that maps to index 0 of taskSequence.
    * Defaults to dayjs(createdAt).format('YYYY-MM-DD') when not set.
@@ -80,8 +99,9 @@ export interface NoteEntry {
 // Notes: { [activityId]: { [dateStr YYYY-MM-DD]: NoteEntry[] } }
 export type NotesMap = Record<string, Record<string, NoteEntry[]>>;
 
-// TaskHistory: { [activityId]: { [dateStr YYYY-MM-DD]: string } }
-export type TaskHistoryMap = Record<string, Record<string, string>>;
+// TaskHistory: { [activityId]: { [dateStr YYYY-MM-DD]: SequenceTask } }
+// Older versions stored a bare title string per date; those are migrated on read.
+export type TaskHistoryMap = Record<string, Record<string, SequenceTask>>;
 
 /**
  * SequenceSkips: { [activityId]: string[] }
@@ -92,6 +112,40 @@ export type TaskHistoryMap = Record<string, Record<string, string>>;
 export type SequenceSkipsMap = Record<string, string[]>;
 
 /**
+ * Coerces one stored sequence entry into a `SequenceTask`.
+ *
+ * Accepts the legacy plain-string form, the current object form, and the
+ * shapes a hand-written or exported JSON file is likely to use (`text`/`name`
+ * as an alias for `title`, `notes`/`detail` for `description`). Returns null
+ * for anything without a usable title, so callers can filter junk out.
+ */
+export function normalizeSequenceTask(value: unknown): SequenceTask | null {
+  if (typeof value === 'string') {
+    const title = value.trim();
+    return title ? { title } : null;
+  }
+  if (!value || typeof value !== 'object') return null;
+
+  const raw = value as Record<string, unknown>;
+  const titleSource = [raw.title, raw.text, raw.name].find(v => typeof v === 'string');
+  const title = typeof titleSource === 'string' ? titleSource.trim() : '';
+  if (!title) return null;
+
+  const descSource = [raw.description, raw.notes, raw.detail].find(v => typeof v === 'string');
+  const description = typeof descSource === 'string' ? descSource.trim() : '';
+
+  return description ? { title, description } : { title };
+}
+
+/** Normalizes a whole stored sequence, dropping entries with no usable title. */
+export function normalizeSequenceTasks(value: unknown): SequenceTask[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map(normalizeSequenceTask)
+    .filter((t): t is SequenceTask => t !== null);
+}
+
+/**
  * Attendance Service
  * Handles persistence of activities, logged dates, and notes via AsyncStorage.
  */
@@ -100,7 +154,13 @@ export const attendanceService = {
     try {
       const raw = await AsyncStorage.getItem(StorageKeys.ACTIVITIES);
       if (!raw) return [];
-      return JSON.parse(raw) as Activity[];
+      const parsed = JSON.parse(raw) as Activity[];
+      // Migrate: sequences used to be plain strings, before tasks gained a
+      // description. Normalizing here means nothing downstream sees both forms.
+      return parsed.map(activity => {
+        if (!activity.taskSequence) return activity;
+        return { ...activity, taskSequence: normalizeSequenceTasks(activity.taskSequence) };
+      });
     } catch {
       return [];
     }
@@ -180,7 +240,18 @@ export const attendanceService = {
     try {
       const raw = await AsyncStorage.getItem(StorageKeys.TASK_HISTORY);
       if (!raw) return {};
-      return JSON.parse(raw) as TaskHistoryMap;
+      const parsed = JSON.parse(raw) as Record<string, Record<string, unknown>>;
+
+      // Migrate: older versions locked in a bare title string per date.
+      const migrated: TaskHistoryMap = {};
+      for (const actId of Object.keys(parsed)) {
+        migrated[actId] = {};
+        for (const dateStr of Object.keys(parsed[actId])) {
+          const task = normalizeSequenceTask(parsed[actId][dateStr]);
+          if (task) migrated[actId][dateStr] = task;
+        }
+      }
+      return migrated;
     } catch {
       return {};
     }
@@ -317,7 +388,7 @@ export const attendanceService = {
 };
 
 /**
- * Returns the task string that should be displayed for the given date.
+ * Returns the task that should be displayed for the given date.
  * Works identically for daily and weekly-goal habits.
  *
  * calendar mode (default):
@@ -337,10 +408,13 @@ export function getTaskForDate(
   dateStr: string,
   logs: string[] = [],
   skippedDates: string[] = [],
-): string | null {
-  if (!activity.taskSequence || activity.taskSequence.length === 0) return null;
+): SequenceTask | null {
+  // Normalize rather than trust the field: an imported file can carry the
+  // legacy string form straight into the store without passing getActivities.
+  const sequence = normalizeSequenceTasks(activity.taskSequence);
+  if (sequence.length === 0) return null;
 
-  const n = activity.taskSequence.length;
+  const n = sequence.length;
   let index: number;
 
   if (activity.sequenceMode === 'log') {
@@ -365,5 +439,5 @@ export function getTaskForDate(
     index = ((offset % n) + n) % n; // handles negative offset correctly
   }
 
-  return activity.taskSequence[index];
+  return sequence[index];
 }

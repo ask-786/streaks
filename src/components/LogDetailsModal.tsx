@@ -25,7 +25,7 @@ import dayjs from 'dayjs';
 import { Typography, Spacing, BorderRadius, alpha } from '../constants';
 import { FontAwesome5, Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
-import { NoteEntry } from '../features/attendance/attendanceService';
+import { NoteEntry, SequenceTask } from '../features/attendance/attendanceService';
 import { formatTimeWithTz } from '../utils/dateUtils';
 import { haptics } from '../utils/haptics';
 
@@ -42,7 +42,7 @@ export interface LogDetailsModalProps {
   /** Whether this activity has notes enabled (requiresNote). */
   requiresNote?: boolean;
   /** The task that was active on this logged day (computed by caller). */
-  taskForDay?: string | null;
+  taskForDay?: SequenceTask | null;
   /** Whether the sequence was skipped on this logged day. */
   isSequenceSkipped?: boolean;
   /** If today is unlogged and time-bound, whether the window is already passed or not yet open. */
@@ -450,8 +450,13 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                                 styles.infoValue,
                                 { color: isSequenceSkipped ? colors.textSecondary : colors.textPrimary },
                               ]}>
-                                {taskForDay}
+                                {taskForDay.title}
                               </Text>
+                              {taskForDay.description ? (
+                                <Text style={[styles.infoDescription, { color: colors.textTertiary }]}>
+                                  {taskForDay.description}
+                                </Text>
+                              ) : null}
                             </View>
                           </View>
                         </>
@@ -926,6 +931,10 @@ const styles = StyleSheet.create({
   infoValue: {
     ...Typography.bodyLarge,
     fontWeight: '600',
+  },
+  infoDescription: {
+    ...Typography.bodySmall,
+    marginTop: 3,
   },
   statusBadge: {
     flexDirection: 'row',
