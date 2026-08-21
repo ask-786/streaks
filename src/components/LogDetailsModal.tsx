@@ -25,7 +25,7 @@ import dayjs from 'dayjs';
 import { Typography, Spacing, BorderRadius, alpha } from '../constants';
 import { FontAwesome5, Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
-import { NoteEntry, SequenceTask } from '../features/attendance/attendanceService';
+import { NoteEntry, SequenceDrop, SequenceTask } from '../features/attendance/attendanceService';
 import { formatTimeWithTz } from '../utils/dateUtils';
 import { haptics } from '../utils/haptics';
 
@@ -43,8 +43,10 @@ export interface LogDetailsModalProps {
   requiresNote?: boolean;
   /** The task that was active on this logged day (computed by caller). */
   taskForDay?: SequenceTask | null;
-  /** Whether the sequence was skipped on this logged day. */
+  /** Whether the sequence task was postponed on this logged day. */
   isSequenceSkipped?: boolean;
+  /** Tasks dropped out of the cycle on this day, logged or not. */
+  droppedTasks?: SequenceDrop[];
   /** If today is unlogged and time-bound, whether the window is already passed or not yet open. */
   timeBoundKind?: 'too_early' | 'too_late';
   /** Whether the overall activity has been marked as completed (goal reached or manual). */
@@ -67,6 +69,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
   requiresNote = false,
   taskForDay,
   isSequenceSkipped = false,
+  droppedTasks = [],
   timeBoundKind,
   isActivityCompleted = false,
   onNoteAppend,
@@ -423,7 +426,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                               ]}
                             >
                               <FontAwesome5
-                                name={isSequenceSkipped ? 'forward' : 'list-ol'}
+                                name={isSequenceSkipped ? 'clock' : 'list-ol'}
                                 size={13}
                                 color={isSequenceSkipped ? colors.warning : colors.primary}
                               />
@@ -439,9 +442,9 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                                     styles.skippedInlinePill,
                                     { backgroundColor: colors.warningMuted, borderColor: colors.warning },
                                   ]}>
-                                    <FontAwesome5 name="forward" size={9} color={colors.warning} />
+                                    <FontAwesome5 name="clock" size={9} color={colors.warning} />
                                     <Text style={[styles.skippedInlinePillText, { color: colors.warning }]}>
-                                      Skipped
+                                      Doing later
                                     </Text>
                                   </View>
                                 )}
@@ -457,6 +460,48 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                                   {taskForDay.description}
                                 </Text>
                               ) : null}
+                            </View>
+                          </View>
+                        </>
+                      ) : null}
+
+                      {/* ── Tasks skipped out of the cycle on this day ── */}
+                      {droppedTasks.length > 0 ? (
+                        <>
+                          <View style={[styles.divider, { backgroundColor: colors.surfaceVariant }]} />
+                          <View style={styles.infoRow}>
+                            <View
+                              style={[styles.infoIconWrap, { backgroundColor: colors.surfaceVariant }]}
+                            >
+                              <FontAwesome5 name="forward" size={13} color={colors.textSecondary} />
+                            </View>
+                            <View style={styles.infoTextWrap}>
+                              <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>
+                                {droppedTasks.length > 1 ? 'Skipped tasks' : 'Skipped task'}
+                              </Text>
+                              {droppedTasks.map((drop, i) => (
+                                <View key={`${drop.date}-${i}`} style={i > 0 ? styles.droppedExtra : undefined}>
+                                  <Text
+                                    style={[
+                                      styles.infoValue,
+                                      {
+                                        color: colors.textSecondary,
+                                        textDecorationLine: 'line-through',
+                                      },
+                                    ]}
+                                  >
+                                    {drop.task?.title ?? 'Sequence task'}
+                                  </Text>
+                                  {drop.note ? (
+                                    <Text style={[styles.infoDescription, { color: colors.textTertiary }]}>
+                                      {drop.note}
+                                    </Text>
+                                  ) : null}
+                                </View>
+                              ))}
+                              <Text style={[styles.infoDescription, { color: colors.textTertiary }]}>
+                                Left the cycle without being done.
+                              </Text>
                             </View>
                           </View>
                         </>
@@ -1161,6 +1206,9 @@ const styles = StyleSheet.create({
     ...Typography.labelLarge,
     color: '#FFFFFF',
     fontWeight: '700',
+  },
+  droppedExtra: {
+    marginTop: Spacing.xs,
   },
   skippedInlinePill: {
     flexDirection: 'row',

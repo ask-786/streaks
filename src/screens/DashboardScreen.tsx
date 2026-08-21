@@ -30,7 +30,10 @@ export const DashboardScreen: React.FC = () => {
     getActivityStats,
     logToday,
     logTodayWithSequenceSkip,
+    dropSequenceTask,
+    undoSequenceDrop,
     sequenceSkips,
+    sequenceDrops,
     isLoading,
     isConfettiEnabled,
   } = useAttendanceStore();
@@ -52,7 +55,8 @@ export const DashboardScreen: React.FC = () => {
   const isWeekly = unit === 'week';
 
   const [noteModalVisible, setNoteModalVisible] = React.useState(false);
-  const [skipModalVisible, setSkipModalVisible] = React.useState(false);
+  const [laterModalVisible, setLaterModalVisible] = React.useState(false);
+  const [dropModalVisible, setDropModalVisible] = React.useState(false);
   const confettiRef = React.useRef<any>(null);
 
   const triggerConfetti = () => {
@@ -135,43 +139,83 @@ export const DashboardScreen: React.FC = () => {
     triggerConfetti();
   };
 
-  const handleSkipSequence = () => {
+  const handleDoLater = () => {
     if (!selectedActivityId || !selectedActivity) return;
     if (isTodayLogged || isCompleted) return;
     haptics.medium();
-    setSkipModalVisible(true);
+    setLaterModalVisible(true);
   };
 
-  const handleSkipSubmit = (note: string) => {
+  const handleLaterSubmit = (note: string) => {
     if (!selectedActivityId) return;
-    setSkipModalVisible(false);
+    setLaterModalVisible(false);
     haptics.success();
     logTodayWithSequenceSkip(selectedActivityId, note || undefined);
     triggerConfetti();
   };
 
+  const handleSkipTask = () => {
+    if (!selectedActivityId || !selectedActivity) return;
+    if (isTodayLogged || isCompleted) return;
+    haptics.medium();
+    setDropModalVisible(true);
+  };
+
+  const handleDropSubmit = (note: string) => {
+    if (!selectedActivityId) return;
+    setDropModalVisible(false);
+    haptics.success();
+    // No confetti here — nothing was accomplished, the task just left the cycle.
+    dropSequenceTask(selectedActivityId, note || undefined);
+  };
+
+  const handleUndoDrop = () => {
+    if (!selectedActivityId) return;
+    haptics.light();
+    undoSequenceDrop(selectedActivityId);
+  };
+
   const today = todayStr();
 
-  // Sequence skips for this activity
+  // Postponed days for this activity — logged, but the task carried over.
   const activitySequenceSkips: string[] = selectedActivityId
     ? (sequenceSkips[selectedActivityId] ?? [])
     : [];
-  const isTodaySequenceSkipped = activitySequenceSkips.includes(today);
+  const isTodayPostponed = activitySequenceSkips.includes(today);
 
-  // Compute today's task for the selected activity (accounting for skips)
+  // Tasks dropped out of the cycle entirely.
+  const activityDrops = selectedActivityId ? (sequenceDrops[selectedActivityId] ?? []) : [];
+  const activityDropDates = activityDrops.map(d => d.date);
+  const todayDrops = activityDrops.filter(d => d.date === today);
+
+  const sequenceContext = {
+    logs: selectedActivityId ? (allLogs[selectedActivityId] ?? []).map(e => e.date) : [],
+    postponed: activitySequenceSkips,
+    dropped: activityDropDates,
+  };
+
+  // Today's task, with both postponements and drops applied.
   const todayTask =
     selectedActivity && selectedActivityId
-      ? getTaskForDate(
-          selectedActivity,
-          today,
-          (allLogs[selectedActivityId] ?? []).map(e => e.date),
-          activitySequenceSkips,
-        )
+      ? getTaskForDate(selectedActivity, today, sequenceContext)
       : null;
 
-  // Today's skip note (first note entry on today, if logged-with-skip)
-  const todaySkipNote =
-    isTodaySequenceSkipped && selectedActivityId
+  // What the card would show if the user skipped right now — used to promise
+  // the outcome up front in the confirmation sheet.
+  const taskAfterDrop =
+    selectedActivity && selectedActivityId
+      ? getTaskForDate(selectedActivity, today, {
+          ...sequenceContext,
+          dropped: [...activityDropDates, today],
+        })
+      : null;
+
+  const isSequenceByLog = selectedActivity?.sequenceMode === 'log';
+  const canAdjustSequence = !!todayTask && !isTodayLogged && !isCompleted && !isTodayPostponed;
+
+  // Today's postpone note (first note entry on today, if logged-with-postpone)
+  const todayPostponeNote =
+    isTodayPostponed && selectedActivityId
       ? notes[selectedActivityId]?.[today]?.[0]?.text
       : undefined;
 
@@ -387,26 +431,44 @@ export const DashboardScreen: React.FC = () => {
                   Today's task
                 </Text>
 
-                {!isTodayLogged && !isCompleted && !isTodaySequenceSkipped ? (
-                  <PressableScale
-                    onPress={handleSkipSequence}
-                    scaleTo={0.94}
-                    style={[
-                      styles.skipBtn,
-                      { borderColor: colors.warningBorder, backgroundColor: colors.warningMuted },
-                    ]}
-                    accessibilityRole="button"
-                    accessibilityLabel="Skip today's sequence task"
-                  >
-                    <FontAwesome5 name="forward" size={9} color={colors.warning} />
-                    <Text style={[styles.skipBtnText, { color: colors.warning }]}>
-                      Skip
-                    </Text>
-                  </PressableScale>
+                {canAdjustSequence ? (
+                  <>
+                    <PressableScale
+                      onPress={handleDoLater}
+                      scaleTo={0.94}
+                      style={[
+                        styles.taskActionBtn,
+                        { borderColor: colors.warningBorder, backgroundColor: colors.warningMuted },
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityLabel="Log today but keep this task for the next session"
+                    >
+                      <FontAwesome5 name="clock" size={9} color={colors.warning} />
+                      <Text style={[styles.taskActionText, { color: colors.warning }]}>
+                        Do later
+                      </Text>
+                    </PressableScale>
+
+                    <PressableScale
+                      onPress={handleSkipTask}
+                      scaleTo={0.94}
+                      style={[
+                        styles.taskActionBtn,
+                        { borderColor: colors.border, backgroundColor: colors.surfaceVariant },
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityLabel="Drop this task from the current cycle"
+                    >
+                      <FontAwesome5 name="forward" size={9} color={colors.textSecondary} />
+                      <Text style={[styles.taskActionText, { color: colors.textSecondary }]}>
+                        Skip
+                      </Text>
+                    </PressableScale>
+                  </>
                 ) : null}
 
-                {isTodaySequenceSkipped ? (
-                  <Chip label="Skipped" icon="forward" tone="warning" />
+                {isTodayPostponed ? (
+                  <Chip label="Doing later" icon="clock" tone="warning" />
                 ) : null}
               </View>
 
@@ -414,10 +476,10 @@ export const DashboardScreen: React.FC = () => {
                 style={[
                   styles.taskText,
                   {
-                    color: isTodaySequenceSkipped
+                    color: isTodayPostponed
                       ? colors.textTertiary
                       : colors.textPrimary,
-                    textDecorationLine: isTodaySequenceSkipped ? 'line-through' : 'none',
+                    textDecorationLine: isTodayPostponed ? 'line-through' : 'none',
                   },
                 ]}
               >
@@ -429,7 +491,7 @@ export const DashboardScreen: React.FC = () => {
                   style={[
                     styles.taskDescription,
                     {
-                      color: isTodaySequenceSkipped
+                      color: isTodayPostponed
                         ? colors.textDisabled
                         : colors.textSecondary,
                     },
@@ -439,21 +501,55 @@ export const DashboardScreen: React.FC = () => {
                 </Text>
               ) : null}
 
-              {isTodaySequenceSkipped ? (
+              {isTodayPostponed ? (
                 <View
                   style={[
-                    styles.skipNote,
+                    styles.taskBanner,
                     { backgroundColor: colors.surfaceVariant },
                   ]}
                 >
                   <FontAwesome5
-                    name={todaySkipNote ? 'sticky-note' : 'info-circle'}
+                    name={todayPostponeNote ? 'sticky-note' : 'info-circle'}
                     size={11}
                     color={colors.textTertiary}
                   />
-                  <Text style={[styles.skipNoteText, { color: colors.textSecondary }]}>
-                    {todaySkipNote ?? 'Logged today — this task moves to your next session.'}
+                  <Text style={[styles.taskBannerText, { color: colors.textSecondary }]}>
+                    {todayPostponeNote ?? 'Logged today — this task moves to your next session.'}
                   </Text>
+                </View>
+              ) : null}
+
+              {todayDrops.length > 0 ? (
+                <View
+                  style={[
+                    styles.taskBanner,
+                    { backgroundColor: colors.surfaceVariant },
+                  ]}
+                >
+                  <FontAwesome5 name="forward" size={11} color={colors.textTertiary} />
+                  <Text style={[styles.taskBannerText, { color: colors.textSecondary }]}>
+                    Skipped{' '}
+                    <Text style={{ fontWeight: '700' }}>
+                      {todayDrops.map(d => d.task?.title ?? 'a task').join(', ')}
+                    </Text>
+                    {' — '}
+                    {todayDrops.length > 1 ? 'they are ' : 'it is '}
+                    out of this cycle.
+                  </Text>
+                  {/* Undo disappears once today is logged: that log locked in
+                      the post-skip task, so putting the task back would shift
+                      every following day out from under it. */}
+                  {!isTodayLogged && !isCompleted ? (
+                    <PressableScale
+                      onPress={handleUndoDrop}
+                      scaleTo={0.94}
+                      hitSlop={8}
+                      accessibilityRole="button"
+                      accessibilityLabel="Undo the last skipped task"
+                    >
+                      <Text style={[styles.undoText, { color: colors.primary }]}>Undo</Text>
+                    </PressableScale>
+                  ) : null}
                 </View>
               ) : null}
             </Card>
@@ -528,20 +624,42 @@ export const DashboardScreen: React.FC = () => {
         onSubmit={handleNoteSubmit}
       />
 
-      {/* Skip Sequence modal — note is required */}
+      {/* Do Later — logs the day, the task carries over. Note is required. */}
       <NoteInputModal
-        visible={skipModalVisible}
+        visible={laterModalVisible}
         activityName={selectedActivity?.name}
-        title="Skip Today's Sequence?"
+        title="Keep This Task for Later?"
         subtitle={
           todayTask
             ? `"${todayTask.title}" will be deferred to your next session. Add a note explaining why.`
             : undefined
         }
-        submitLabel="Log & Skip Sequence"
+        submitLabel="Log & Do Later"
         noteRequired
-        onClose={() => setSkipModalVisible(false)}
-        onSubmit={handleSkipSubmit}
+        onClose={() => setLaterModalVisible(false)}
+        onSubmit={handleLaterSubmit}
+      />
+
+      {/* Skip — the task leaves the cycle unfinished. Note is optional. */}
+      <NoteInputModal
+        visible={dropModalVisible}
+        activityName={selectedActivity?.name}
+        title="Skip This Task?"
+        subtitle={
+          todayTask
+            ? isSequenceByLog
+              ? `"${todayTask.title}" leaves this cycle without being done${
+                  taskAfterDrop ? `, so you move on to "${taskAfterDrop.title}"` : ''
+                }. It won't appear in your record.`
+              : `"${todayTask.title}" leaves this cycle without being done${
+                  taskAfterDrop ? `, so today becomes "${taskAfterDrop.title}"` : ''
+                } and the rest of the sequence shifts a day earlier.`
+            : undefined
+        }
+        submitLabel="Skip Task"
+        noteRequired={false}
+        onClose={() => setDropModalVisible(false)}
+        onSubmit={handleDropSubmit}
       />
     </View>
   );
@@ -642,7 +760,8 @@ const styles = StyleSheet.create({
   taskHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm,
+    flexWrap: 'wrap',
+    gap: Spacing.sm - 2,
     marginBottom: Spacing.sm + 2,
   },
   taskIcon: {
@@ -668,7 +787,7 @@ const styles = StyleSheet.create({
     ...Typography.bodyMedium,
     marginTop: Spacing.xs,
   },
-  skipBtn: {
+  taskActionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
@@ -677,11 +796,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
-  skipBtnText: {
+  taskActionText: {
     ...Typography.labelMedium,
     fontWeight: '700',
   },
-  skipNote: {
+  taskBanner: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: Spacing.sm,
@@ -689,9 +808,13 @@ const styles = StyleSheet.create({
     padding: Spacing.sm + 2,
     borderRadius: BorderRadius.sm,
   },
-  skipNoteText: {
+  taskBannerText: {
     ...Typography.bodySmall,
     flex: 1,
+  },
+  undoText: {
+    ...Typography.labelMedium,
+    fontWeight: '700',
   },
   weekHeader: {
     flexDirection: 'row',

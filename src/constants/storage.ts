@@ -10,4 +10,5 @@ export const StorageKeys = {
   HIDE_EXTRA_DAYS: '@streak_counter_hide_extra_days',
   HAPTICS:      '@streak_counter_haptics',
   SEQUENCE_SKIPS: 'streak_sequence_skips',
+  SEQUENCE_DROPS: 'streak_sequence_drops',
 } as const;

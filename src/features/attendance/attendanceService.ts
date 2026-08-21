@@ -112,6 +112,31 @@ export type TaskHistoryMap = Record<string, Record<string, SequenceTask>>;
 export type SequenceSkipsMap = Record<string, string[]>;
 
 /**
+ * One dropped sequence step — the user pulled a task out of the current cycle
+ * without doing it (skipped Leg day and went straight back to Push).
+ *
+ * The opposite of a sequence skip: a skip holds the pointer still so the task
+ * comes back, a drop pushes the pointer forward so the task never comes back.
+ * Drops are stored as a list rather than a set of dates because dropping twice
+ * in one day is meaningful — that jumps two steps down the sequence.
+ */
+export interface SequenceDrop {
+  /** Local YYYY-MM-DD date the drop was made. */
+  date: string;
+  /** The task that was dropped, kept so history can name it. */
+  task?: SequenceTask;
+  /** UTC ISO timestamp of the drop. */
+  ts?: string;
+  /** IANA timezone name at the time of the drop. */
+  tz?: string;
+  /** Optional reason the user gave. */
+  note?: string;
+}
+
+/** SequenceDrops: { [activityId]: SequenceDrop[] } */
+export type SequenceDropsMap = Record<string, SequenceDrop[]>;
+
+/**
  * Coerces one stored sequence entry into a `SequenceTask`.
  *
  * Accepts the legacy plain-string form, the current object form, and the
@@ -143,6 +168,43 @@ export function normalizeSequenceTasks(value: unknown): SequenceTask[] {
   return value
     .map(normalizeSequenceTask)
     .filter((t): t is SequenceTask => t !== null);
+}
+
+/**
+ * Coerces stored drops into `SequenceDrop[]`, keeping only entries with a
+ * usable YYYY-MM-DD date. Imported files can carry anything, and a malformed
+ * date here would silently shift every task in the sequence.
+ */
+export function normalizeSequenceDrops(value: unknown): SequenceDrop[] {
+  if (!Array.isArray(value)) return [];
+  const drops: SequenceDrop[] = [];
+  for (const entry of value) {
+    // A bare date string is accepted so a hand-written export still works.
+    const raw = typeof entry === 'string' ? { date: entry } : entry;
+    if (!raw || typeof raw !== 'object') continue;
+    const record = raw as Record<string, unknown>;
+    const date = typeof record.date === 'string' ? record.date.trim() : '';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+
+    const drop: SequenceDrop = { date };
+    const task = normalizeSequenceTask(record.task);
+    if (task) drop.task = task;
+    if (typeof record.ts === 'string') drop.ts = record.ts;
+    if (typeof record.tz === 'string') drop.tz = record.tz;
+    if (typeof record.note === 'string' && record.note.trim()) drop.note = record.note.trim();
+    drops.push(drop);
+  }
+  return drops;
+}
+
+/** Normalizes a whole stored drops map. */
+export function normalizeSequenceDropsMap(value: unknown): SequenceDropsMap {
+  if (!value || typeof value !== 'object') return {};
+  const result: SequenceDropsMap = {};
+  for (const [activityId, drops] of Object.entries(value as Record<string, unknown>)) {
+    result[activityId] = normalizeSequenceDrops(drops);
+  }
+  return result;
 }
 
 /**
@@ -275,6 +337,20 @@ export const attendanceService = {
     await AsyncStorage.setItem(StorageKeys.SEQUENCE_SKIPS, JSON.stringify(skips));
   },
 
+  getSequenceDrops: async (): Promise<SequenceDropsMap> => {
+    try {
+      const raw = await AsyncStorage.getItem(StorageKeys.SEQUENCE_DROPS);
+      if (!raw) return {};
+      return normalizeSequenceDropsMap(JSON.parse(raw));
+    } catch {
+      return {};
+    }
+  },
+
+  saveSequenceDrops: async (drops: SequenceDropsMap): Promise<void> => {
+    await AsyncStorage.setItem(StorageKeys.SEQUENCE_DROPS, JSON.stringify(drops));
+  },
+
   logToday: async (activityId: string, note?: string): Promise<boolean> => {
     const logs = await attendanceService.getLogs();
     const today = todayStr();
@@ -339,6 +415,7 @@ export const attendanceService = {
     await AsyncStorage.removeItem(StorageKeys.NOTES);
     await AsyncStorage.removeItem(StorageKeys.TASK_HISTORY);
     await AsyncStorage.removeItem(StorageKeys.SEQUENCE_SKIPS);
+    await AsyncStorage.removeItem(StorageKeys.SEQUENCE_DROPS);
   },
 
   exportData: async (): Promise<string> => {
@@ -347,7 +424,8 @@ export const attendanceService = {
     const notes = await attendanceService.getNotes();
     const taskHistory = await attendanceService.getTaskHistory();
     const sequenceSkips = await attendanceService.getSequenceSkips();
-    return JSON.stringify({ activities, logs, notes, taskHistory, sequenceSkips });
+    const sequenceDrops = await attendanceService.getSequenceDrops();
+    return JSON.stringify({ activities, logs, notes, taskHistory, sequenceSkips, sequenceDrops });
   },
 
   importData: async (jsonData: string): Promise<boolean> => {
@@ -380,6 +458,14 @@ export const attendanceService = {
         await attendanceService.saveSequenceSkips(parsed.sequenceSkips);
       }
 
+      // Sequence drops are optional too, and normalized on the way in — a bad
+      // date here would silently shift every task in the sequence.
+      if (parsed.sequenceDrops && typeof parsed.sequenceDrops === 'object') {
+        await attendanceService.saveSequenceDrops(
+          normalizeSequenceDropsMap(parsed.sequenceDrops),
+        );
+      }
+
       return true;
     } catch {
       return false;
@@ -388,54 +474,78 @@ export const attendanceService = {
 };
 
 /**
+ * How the sequence pointer has been nudged away from its natural position.
+ *
+ * `postponed` and `dropped` are exact opposites and cancel each other out:
+ * a postponed day holds the pointer still so the same task comes back
+ * tomorrow, a dropped task pushes the pointer forward so that task never
+ * comes back this cycle.
+ */
+export interface SequenceContext {
+  /** YYYY-MM-DD dates the activity was logged on. */
+  logs?: string[];
+  /**
+   * YYYY-MM-DD dates where the user logged but did not perform the sequence
+   * task, so it carries over to the next session.
+   */
+  postponed?: string[];
+  /**
+   * YYYY-MM-DD dates where the user dropped that day's task from the cycle.
+   * Repeats are meaningful: two entries on one date jump two steps forward.
+   */
+  dropped?: string[];
+}
+
+/**
  * Returns the task that should be displayed for the given date.
  * Works identically for daily and weekly-goal habits.
  *
  * calendar mode (default):
- *   index = (days elapsed since sequenceStartDate - skips on or before dateStr) mod tasks.length
- *   Each sequence skip "pauses" the sequence for that calendar day, so the
- *   same task reappears on the following day.
+ *   index = (days elapsed since sequenceStartDate - postponed + dropped) mod tasks.length
+ *   Each postponement "pauses" the sequence for that calendar day, so the same
+ *   task reappears on the following day; each drop does the reverse and pulls
+ *   the rest of the sequence a day closer.
  *
  * log mode:
- *   index = (number of logged days strictly before dateStr that are NOT skipped) mod tasks.length
- *   Task advances only when the user actually performs the sequence task.
+ *   index = (logged days strictly before dateStr that were not postponed + dropped) mod tasks.length
+ *   Task advances only when the user actually performs the sequence task, or
+ *   explicitly drops one.
  *
- * @param skippedDates - Array of YYYY-MM-DD dates where the sequence was skipped.
- *   On these dates the user logged but did not perform the sequence task.
+ * Drops count from the day they were made (`<= dateStr`) in both modes, so
+ * tapping Skip swaps the card to the next task immediately.
  */
 export function getTaskForDate(
   activity: Activity,
   dateStr: string,
-  logs: string[] = [],
-  skippedDates: string[] = [],
+  context: SequenceContext = {},
 ): SequenceTask | null {
   // Normalize rather than trust the field: an imported file can carry the
   // legacy string form straight into the store without passing getActivities.
   const sequence = normalizeSequenceTasks(activity.taskSequence);
   if (sequence.length === 0) return null;
 
+  const { logs = [], postponed = [], dropped = [] } = context;
   const n = sequence.length;
+  const dropsOnOrBefore = dropped.filter(d => d <= dateStr).length;
   let index: number;
 
   if (activity.sequenceMode === 'log') {
     // Count unique calendar days with a log strictly before dateStr,
-    // excluding days where the sequence was skipped.
+    // excluding days where the sequence task was postponed.
     // `logs` contains pre-sanitized YYYY-MM-DD date strings.
-    const skippedSet = new Set(skippedDates);
+    const postponedSet = new Set(postponed);
     const uniqueLogDays = new Set(
-      logs.filter(d => d < dateStr && !skippedSet.has(d)),
+      logs.filter(d => d < dateStr && !postponedSet.has(d)),
     );
-    index = uniqueLogDays.size % n;
+    index = (uniqueLogDays.size + dropsOnOrBefore) % n;
   } else {
     // calendar (default)
     const start =
       activity.sequenceStartDate ??
       dayjs(activity.createdAt).format('YYYY-MM-DD');
     const rawOffset = dayjs(dateStr).diff(dayjs(start), 'day');
-    // Subtract the number of skips that occurred on or before dateStr.
-    // Each skip pauses the sequence by one calendar day.
-    const skipsOnOrBefore = skippedDates.filter(d => d <= dateStr).length;
-    const offset = rawOffset - skipsOnOrBefore;
+    const postponedOnOrBefore = postponed.filter(d => d <= dateStr).length;
+    const offset = rawOffset - postponedOnOrBefore + dropsOnOrBefore;
     index = ((offset % n) + n) % n; // handles negative offset correctly
   }
 
