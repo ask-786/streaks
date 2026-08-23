@@ -2,13 +2,7 @@ import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text } from 'react-native-paper';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import {
-  Typography,
-  Spacing,
-  BorderRadius,
-  LongPressDelay,
-  stagger,
-} from '../constants';
+import { Typography, Spacing, BorderRadius, LongPressDelay, stagger } from '../constants';
 import { useTheme } from '../hooks/useTheme';
 import { Card, Chip, ProgressBar, PressableScale, SelectionCheck } from './ui';
 
@@ -69,10 +63,7 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
   const trail = recentDays ?? [];
 
   return (
-    <Animated.View
-      entering={FadeInDown.delay(stagger(index)).springify()}
-      style={styles.wrapper}
-    >
+    <Animated.View entering={FadeInDown.delay(stagger(index)).springify()} style={styles.wrapper}>
       <PressableScale
         onPress={() => onSelect(id)}
         onLongPress={() => onLongPress(id)}
@@ -119,10 +110,7 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
               {selectionMode ? <SelectionCheck selected={isSelected} /> : null}
 
               <View style={styles.titleText}>
-                <Text
-                  style={[styles.name, { color: colors.textPrimary }]}
-                  numberOfLines={1}
-                >
+                <Text style={[styles.name, { color: colors.textPrimary }]} numberOfLines={1}>
                   {name}
                 </Text>
                 {description ? (
@@ -159,9 +147,7 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
                 <Text style={[styles.metricValue, { color: colors.textSecondary }]}>
                   {stats.longestStreak}
                 </Text>
-                <Text style={[styles.metricLabel, { color: colors.textTertiary }]}>
-                  best
-                </Text>
+                <Text style={[styles.metricLabel, { color: colors.textTertiary }]}>best</Text>
               </View>
 
               {/* Last-7-days trail — the whole history at a glance. */}
@@ -176,12 +162,8 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
                           style={[
                             styles.trailDot,
                             {
-                              backgroundColor: logged
-                                ? colors.success
-                                : colors.surfaceVariant,
-                              borderColor: isToday && !logged
-                                ? colors.primary
-                                : 'transparent',
+                              backgroundColor: logged ? colors.success : colors.surfaceVariant,
+                              borderColor: isToday && !logged ? colors.primary : 'transparent',
                               borderWidth: isToday && !logged ? 1.5 : 0,
                             },
                           ]}

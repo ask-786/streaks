@@ -57,7 +57,7 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   // Load persisted preference on mount. Values written by older builds were
   // only ever 'light' | 'dark', so they read back cleanly.
   useEffect(() => {
-    AsyncStorage.getItem(StorageKeys.THEME).then(saved => {
+    AsyncStorage.getItem(StorageKeys.THEME).then((saved) => {
       if (saved === 'light' || saved === 'dark' || saved === 'system') {
         setPreferenceState(saved);
       }

@@ -12,8 +12,7 @@ export const todayStr = (): string => dayjs().format(DATE_FORMAT);
  * Store this alongside each log/note entry so the time can always be
  * displayed in the original timezone regardless of where the device is later.
  */
-export const getCurrentTz = (): string =>
-  Intl.DateTimeFormat().resolvedOptions().timeZone;
+export const getCurrentTz = (): string => Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 /**
  * Formats a UTC ISO timestamp for display in the timezone where it was recorded.
@@ -22,7 +21,10 @@ export const getCurrentTz = (): string =>
  * If `tz` is absent (old entries before this feature) it falls back to the
  * device's current timezone without a label.
  */
-export const formatTimeWithTz = (isoTs: string, tz?: string | null): { time: string, tzDisplay: string | null } => {
+export const formatTimeWithTz = (
+  isoTs: string,
+  tz?: string | null,
+): { time: string; tzDisplay: string | null } => {
   try {
     const targetTz = tz ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
     const date = new Date(isoTs);
@@ -41,9 +43,9 @@ export const formatTimeWithTz = (isoTs: string, tz?: string | null): { time: str
     let period = '';
     let tzName = '';
     for (const p of parts) {
-      if (p.type === 'hour')         hour   = p.value;
+      if (p.type === 'hour') hour = p.value;
       else if (p.type === 'minute') minute = p.value;
-      else if (p.type === 'dayPeriod')  period = p.value;
+      else if (p.type === 'dayPeriod') period = p.value;
       else if (p.type === 'timeZoneName') tzName = p.value;
     }
 
@@ -60,14 +62,12 @@ export const formatTimeWithTz = (isoTs: string, tz?: string | null): { time: str
 /**
  * Returns yesterday's date as a YYYY-MM-DD string.
  */
-export const yesterdayStr = (): string =>
-  dayjs().subtract(1, 'day').format(DATE_FORMAT);
+export const yesterdayStr = (): string => dayjs().subtract(1, 'day').format(DATE_FORMAT);
 
 /**
  * Formats any dayjs-compatible value to YYYY-MM-DD string.
  */
-export const toDateStr = (date: dayjs.ConfigType): string =>
-  dayjs(date).format(DATE_FORMAT);
+export const toDateStr = (date: dayjs.ConfigType): string => dayjs(date).format(DATE_FORMAT);
 
 /**
  * Returns an array of all YYYY-MM-DD strings in the given month.
@@ -77,9 +77,7 @@ export const toDateStr = (date: dayjs.ConfigType): string =>
 export const daysInMonth = (year: number, month: number): string[] => {
   const start = dayjs().year(year).month(month).startOf('month');
   const count = start.daysInMonth();
-  return Array.from({ length: count }, (_, i) =>
-    start.add(i, 'day').format(DATE_FORMAT)
-  );
+  return Array.from({ length: count }, (_, i) => start.add(i, 'day').format(DATE_FORMAT));
 };
 
 /**
@@ -87,9 +85,7 @@ export const daysInMonth = (year: number, month: number): string[] => {
  */
 export const getPastNDays = (n: number): string[] => {
   const today = dayjs();
-  return Array.from({ length: n }, (_, i) =>
-    today.subtract(n - 1 - i, 'day').format(DATE_FORMAT)
-  );
+  return Array.from({ length: n }, (_, i) => today.subtract(n - 1 - i, 'day').format(DATE_FORMAT));
 };
 
 /**
@@ -111,8 +107,7 @@ export const totalDaysPassedThisMonth = (): number => {
 /**
  * Formats a YYYY-MM-DD string for display (e.g. "Thursday, March 19").
  */
-export const formatDisplayDate = (dateStr: string): string =>
-  dayjs(dateStr).format('dddd, MMMM D');
+export const formatDisplayDate = (dateStr: string): string => dayjs(dateStr).format('dddd, MMMM D');
 
 /**
  * Returns the display name for a month (e.g. "March 2025").
@@ -134,7 +129,7 @@ export const formatTime12h = (time24: string): string => {
   return `${hour.toString().padStart(2, '0')}:${parts[1]} ${ampm}`;
 };
 
-export const to12h = (time24: string): { time: string, ampm: 'AM' | 'PM' } => {
+export const to12h = (time24: string): { time: string; ampm: 'AM' | 'PM' } => {
   if (!time24) return { time: '', ampm: 'AM' as 'AM' | 'PM' };
   const parts = time24.split(':');
   if (parts.length !== 2) return { time: '', ampm: 'AM' as 'AM' | 'PM' };

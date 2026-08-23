@@ -12,15 +12,7 @@ import { Text } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, SlideInDown, SlideOutDown } from 'react-native-reanimated';
 import { FontAwesome5, Ionicons } from '@expo/vector-icons';
-import {
-  Typography,
-  Spacing,
-  BorderRadius,
-  Duration,
-  Ease,
-  HitSlop,
-  alpha,
-} from '../constants';
+import { Typography, Spacing, BorderRadius, Duration, Ease, HitSlop, alpha } from '../constants';
 import { useTheme } from '../hooks/useTheme';
 import { haptics } from '../utils/haptics';
 import { PressableScale } from './ui';
@@ -92,11 +84,7 @@ export const NoteInputModal: React.FC<NoteInputModalProps> = ({
 
   const remaining = MAX_LENGTH - note.length;
   const countColor =
-    remaining <= 0
-      ? colors.danger
-      : remaining < 30
-        ? colors.warning
-        : colors.textTertiary;
+    remaining <= 0 ? colors.danger : remaining < 30 ? colors.warning : colors.textTertiary;
 
   return (
     <View
@@ -171,8 +159,7 @@ export const NoteInputModal: React.FC<NoteInputModalProps> = ({
             </View>
 
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-              {subtitle ??
-                'A line about how it went. Future you will be glad it is here.'}
+              {subtitle ?? 'A line about how it went. Future you will be glad it is here.'}
             </Text>
 
             {/* Note input */}
@@ -222,9 +209,7 @@ export const NoteInputModal: React.FC<NoteInputModalProps> = ({
                 accessibilityRole="button"
                 accessibilityLabel="Cancel"
               >
-                <Text style={[styles.btnCancelText, { color: colors.textSecondary }]}>
-                  Cancel
-                </Text>
+                <Text style={[styles.btnCancelText, { color: colors.textSecondary }]}>Cancel</Text>
               </PressableScale>
 
               <PressableScale

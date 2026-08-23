@@ -1,11 +1,7 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, LayoutChangeEvent, Pressable } from 'react-native';
 import { Text } from 'react-native-paper';
-import Animated, {
-  useAnimatedStyle,
-  withSpring,
-  useDerivedValue,
-} from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, withSpring, useDerivedValue } from 'react-native-reanimated';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { BorderRadius, Spacing, Typography, Spring } from '../../constants';
 import { useTheme } from '../../hooks/useTheme';
@@ -39,7 +35,10 @@ export function SegmentedControl<T extends string>({
   const { colors, elevation } = useTheme();
   const [trackWidth, setTrackWidth] = useState(0);
 
-  const index = Math.max(0, options.findIndex(o => o.value === value));
+  const index = Math.max(
+    0,
+    options.findIndex((o) => o.value === value),
+  );
   const segmentWidth = trackWidth > 0 ? (trackWidth - PADDING * 2) / options.length : 0;
 
   const offset = useDerivedValue(() => withSpring(index * segmentWidth, Spring.gentle));
@@ -54,23 +53,15 @@ export function SegmentedControl<T extends string>({
   return (
     <View
       onLayout={handleLayout}
-      style={[
-        styles.track,
-        { backgroundColor: colors.surfaceVariant, borderColor: colors.border },
-      ]}
+      style={[styles.track, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}
     >
       {segmentWidth > 0 ? (
         <Animated.View
-          style={[
-            styles.thumb,
-            elevation.low,
-            { backgroundColor: colors.surface },
-            thumbStyle,
-          ]}
+          style={[styles.thumb, elevation.low, { backgroundColor: colors.surface }, thumbStyle]}
         />
       ) : null}
 
-      {options.map(option => {
+      {options.map((option) => {
         const active = option.value === value;
         return (
           <Pressable
@@ -85,9 +76,7 @@ export function SegmentedControl<T extends string>({
             accessibilityRole="tab"
             accessibilityState={{ selected: active }}
             accessibilityLabel={
-              option.count !== undefined
-                ? `${option.label}, ${option.count} items`
-                : option.label
+              option.count !== undefined ? `${option.label}, ${option.count} items` : option.label
             }
           >
             {option.icon ? (
@@ -99,19 +88,13 @@ export function SegmentedControl<T extends string>({
             ) : null}
             <Text
               numberOfLines={1}
-              style={[
-                styles.label,
-                { color: active ? colors.textPrimary : colors.textSecondary },
-              ]}
+              style={[styles.label, { color: active ? colors.textPrimary : colors.textSecondary }]}
             >
               {option.label}
             </Text>
             {option.count !== undefined ? (
               <Text
-                style={[
-                  styles.count,
-                  { color: active ? colors.primary : colors.textTertiary },
-                ]}
+                style={[styles.count, { color: active ? colors.primary : colors.textTertiary }]}
               >
                 {option.count}
               </Text>

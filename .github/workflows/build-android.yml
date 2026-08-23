@@ -78,4 +78,3 @@ jobs:
           files: android/app/build/outputs/apk/release/app-release-${{ env.VERSION }}.apk
           name: Release ${{ github.ref_name }}
           generate_release_notes: true
-

@@ -32,7 +32,7 @@ import { haptics } from '../utils/haptics';
 export interface LogDetailsModalProps {
   visible: boolean;
   dateStr: string;
-  timeData: { time: string, tzDisplay: string | null } | null;
+  timeData: { time: string; tzDisplay: string | null } | null;
   notes?: NoteEntry[];
   activityName?: string;
   dateKey?: string;
@@ -174,8 +174,14 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
     <>
       {/* ── Main log-details sheet ─────────────────────────────────────────── */}
       {(visible || noteModalVisible) && (
-        <View style={[StyleSheet.absoluteFill, { zIndex: 9999, elevation: 9999 }]} pointerEvents="box-none">
-          <Animated.View entering={FadeIn.duration(120)} style={[styles.backdrop, { zIndex: 0, backgroundColor: colors.scrim }]}>
+        <View
+          style={[StyleSheet.absoluteFill, { zIndex: 9999, elevation: 9999 }]}
+          pointerEvents="box-none"
+        >
+          <Animated.View
+            entering={FadeIn.duration(120)}
+            style={[styles.backdrop, { zIndex: 0, backgroundColor: colors.scrim }]}
+          >
             <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
           </Animated.View>
 
@@ -223,7 +229,11 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                           opacity: pressed ? 0.6 : 1,
                         },
                       ]}
-                      android_ripple={{ color: colors.textSecondary + '33', radius: 20, borderless: true }}
+                      android_ripple={{
+                        color: colors.textSecondary + '33',
+                        radius: 20,
+                        borderless: true,
+                      }}
                     >
                       <Ionicons name="close" size={18} color={colors.textSecondary} />
                     </Pressable>
@@ -255,7 +265,9 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                           <FontAwesome5 name="calendar-day" size={13} color={colors.primary} />
                         </View>
                         <View style={styles.infoTextWrap}>
-                          <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Date</Text>
+                          <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>
+                            Date
+                          </Text>
                           <Text style={[styles.infoValue, { color: colors.textPrimary }]}>
                             {dateStr}
                           </Text>
@@ -298,7 +310,8 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                                   {timeData.time}
                                   {timeData.tzDisplay && (
                                     <Text style={{ fontSize: 12, color: colors.textSecondary }}>
-                                      {' '}{timeData.tzDisplay}
+                                      {' '}
+                                      {timeData.tzDisplay}
                                     </Text>
                                   )}
                                 </Text>
@@ -309,10 +322,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                           </View>
                           {timeData ? (
                             <View
-                              style={[
-                                styles.statusBadge,
-                                { backgroundColor: colors.successMuted },
-                              ]}
+                              style={[styles.statusBadge, { backgroundColor: colors.successMuted }]}
                             >
                               <Ionicons name="checkmark-circle" size={14} color={colors.success} />
                               <Text style={[styles.statusBadgeText, { color: colors.success }]}>
@@ -337,25 +347,35 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                             ]}
                           >
                             <FontAwesome5
-                              name={isToday
-                                ? timeBoundKind === 'too_late' ? 'calendar-times' : 'clock'
-                                : 'calendar-times'}
+                              name={
+                                isToday
+                                  ? timeBoundKind === 'too_late'
+                                    ? 'calendar-times'
+                                    : 'clock'
+                                  : 'calendar-times'
+                              }
                               size={13}
                               color={
                                 isToday
-                                  ? timeBoundKind === 'too_late' ? colors.danger : colors.warning
+                                  ? timeBoundKind === 'too_late'
+                                    ? colors.danger
+                                    : colors.warning
                                   : colors.textSecondary
                               }
                             />
                           </View>
                           <View style={styles.infoTextWrap}>
-                            <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Status</Text>
+                            <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>
+                              Status
+                            </Text>
                             <Text
                               style={[
                                 styles.infoValue,
                                 {
                                   color: isToday
-                                    ? timeBoundKind === 'too_late' ? colors.danger : colors.warning
+                                    ? timeBoundKind === 'too_late'
+                                      ? colors.danger
+                                      : colors.warning
                                     : colors.textSecondary,
                                 },
                               ]}
@@ -382,13 +402,17 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                             <Ionicons
                               name={
                                 isToday
-                                  ? timeBoundKind === 'too_late' ? 'close-circle' : 'time-outline'
+                                  ? timeBoundKind === 'too_late'
+                                    ? 'close-circle'
+                                    : 'time-outline'
                                   : 'close-circle'
                               }
                               size={14}
                               color={
                                 isToday
-                                  ? timeBoundKind === 'too_late' ? colors.danger : colors.warning
+                                  ? timeBoundKind === 'too_late'
+                                    ? colors.danger
+                                    : colors.warning
                                   : colors.textSecondary
                               }
                             />
@@ -397,13 +421,17 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                                 styles.statusBadgeText,
                                 {
                                   color: isToday
-                                    ? timeBoundKind === 'too_late' ? colors.danger : colors.warning
+                                    ? timeBoundKind === 'too_late'
+                                      ? colors.danger
+                                      : colors.warning
                                     : colors.textSecondary,
                                 },
                               ]}
                             >
                               {isToday
-                                ? timeBoundKind === 'too_late' ? 'Missed' : 'Pending'
+                                ? timeBoundKind === 'too_late'
+                                  ? 'Missed'
+                                  : 'Pending'
                                 : 'Missed'}
                             </Text>
                           </View>
@@ -413,7 +441,9 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                       {/* ── Task that day ── */}
                       {taskForDay ? (
                         <>
-                          <View style={[styles.divider, { backgroundColor: colors.surfaceVariant }]} />
+                          <View
+                            style={[styles.divider, { backgroundColor: colors.surfaceVariant }]}
+                          />
                           <View style={styles.infoRow}>
                             <View
                               style={[
@@ -433,30 +463,54 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                             </View>
                             <View style={styles.infoTextWrap}>
                               {/* Label row: text left, skipped pill right */}
-                              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <View
+                                style={{
+                                  flexDirection: 'row',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                }}
+                              >
                                 <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>
                                   {isSequenceSkipped ? 'Task kept for later' : 'Task that day'}
                                 </Text>
                                 {isSequenceSkipped && (
-                                  <View style={[
-                                    styles.skippedInlinePill,
-                                    { backgroundColor: colors.warningMuted, borderColor: colors.warning },
-                                  ]}>
+                                  <View
+                                    style={[
+                                      styles.skippedInlinePill,
+                                      {
+                                        backgroundColor: colors.warningMuted,
+                                        borderColor: colors.warning,
+                                      },
+                                    ]}
+                                  >
                                     <FontAwesome5 name="clock" size={9} color={colors.warning} />
-                                    <Text style={[styles.skippedInlinePillText, { color: colors.warning }]}>
+                                    <Text
+                                      style={[
+                                        styles.skippedInlinePillText,
+                                        { color: colors.warning },
+                                      ]}
+                                    >
                                       Doing later
                                     </Text>
                                   </View>
                                 )}
                               </View>
-                              <Text style={[
-                                styles.infoValue,
-                                { color: isSequenceSkipped ? colors.textSecondary : colors.textPrimary },
-                              ]}>
+                              <Text
+                                style={[
+                                  styles.infoValue,
+                                  {
+                                    color: isSequenceSkipped
+                                      ? colors.textSecondary
+                                      : colors.textPrimary,
+                                  },
+                                ]}
+                              >
                                 {taskForDay.title}
                               </Text>
                               {taskForDay.description ? (
-                                <Text style={[styles.infoDescription, { color: colors.textTertiary }]}>
+                                <Text
+                                  style={[styles.infoDescription, { color: colors.textTertiary }]}
+                                >
                                   {taskForDay.description}
                                 </Text>
                               ) : null}
@@ -468,10 +522,15 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                       {/* ── Tasks skipped out of the cycle on this day ── */}
                       {droppedTasks.length > 0 ? (
                         <>
-                          <View style={[styles.divider, { backgroundColor: colors.surfaceVariant }]} />
+                          <View
+                            style={[styles.divider, { backgroundColor: colors.surfaceVariant }]}
+                          />
                           <View style={styles.infoRow}>
                             <View
-                              style={[styles.infoIconWrap, { backgroundColor: colors.surfaceVariant }]}
+                              style={[
+                                styles.infoIconWrap,
+                                { backgroundColor: colors.surfaceVariant },
+                              ]}
                             >
                               <FontAwesome5 name="forward" size={13} color={colors.textSecondary} />
                             </View>
@@ -480,7 +539,10 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                                 {droppedTasks.length > 1 ? 'Skipped tasks' : 'Skipped task'}
                               </Text>
                               {droppedTasks.map((drop, i) => (
-                                <View key={`${drop.date}-${i}`} style={i > 0 ? styles.droppedExtra : undefined}>
+                                <View
+                                  key={`${drop.date}-${i}`}
+                                  style={i > 0 ? styles.droppedExtra : undefined}
+                                >
                                   <Text
                                     style={[
                                       styles.infoValue,
@@ -493,13 +555,20 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                                     {drop.task?.title ?? 'Sequence task'}
                                   </Text>
                                   {drop.note ? (
-                                    <Text style={[styles.infoDescription, { color: colors.textTertiary }]}>
+                                    <Text
+                                      style={[
+                                        styles.infoDescription,
+                                        { color: colors.textTertiary },
+                                      ]}
+                                    >
                                       {drop.note}
                                     </Text>
                                   ) : null}
                                 </View>
                               ))}
-                              <Text style={[styles.infoDescription, { color: colors.textTertiary }]}>
+                              <Text
+                                style={[styles.infoDescription, { color: colors.textTertiary }]}
+                              >
                                 Left the cycle without being done.
                               </Text>
                             </View>
@@ -510,7 +579,9 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                       {/* ── Notes section — only shown when requiresNote is true ── */}
                       {showNotesSection ? (
                         <>
-                          <View style={[styles.divider, { backgroundColor: colors.surfaceVariant }]} />
+                          <View
+                            style={[styles.divider, { backgroundColor: colors.surfaceVariant }]}
+                          />
                           <View style={styles.notesSection}>
                             {/* Section header */}
                             <View style={styles.notesSectionHeader}>
@@ -524,7 +595,9 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                               >
                                 <FontAwesome5 name="sticky-note" size={13} color={colors.primary} />
                               </View>
-                              <Text style={[styles.notesSectionTitle, { color: colors.textSecondary }]}>
+                              <Text
+                                style={[styles.notesSectionTitle, { color: colors.textSecondary }]}
+                              >
                                 Notes
                               </Text>
                               {hasNotes ? (
@@ -595,16 +668,28 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                                             ]}
                                           >
                                             <Text
-                                              style={[styles.timePillText, { color: colors.primary }]}
+                                              style={[
+                                                styles.timePillText,
+                                                { color: colors.primary },
+                                              ]}
                                             >
                                               {(() => {
-                                                const formatted = formatTimeWithTz(entry.time!, entry.tz);
+                                                const formatted = formatTimeWithTz(
+                                                  entry.time!,
+                                                  entry.tz,
+                                                );
                                                 return (
                                                   <Text>
                                                     {formatted.time}
                                                     {formatted.tzDisplay && (
-                                                      <Text style={{ fontSize: 10, color: colors.textTertiary }}>
-                                                        {' '}{formatted.tzDisplay}
+                                                      <Text
+                                                        style={{
+                                                          fontSize: 10,
+                                                          color: colors.textTertiary,
+                                                        }}
+                                                      >
+                                                        {' '}
+                                                        {formatted.tzDisplay}
                                                       </Text>
                                                     )}
                                                   </Text>
@@ -623,20 +708,31 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                                             style={({ pressed }) => [
                                               styles.copyIconBtn,
                                               {
-                                                backgroundColor: copiedIndex === i
-                                                  ? (colors.successMuted)
-                                                  : (colors.surfaceVariant),
+                                                backgroundColor:
+                                                  copiedIndex === i
+                                                    ? colors.successMuted
+                                                    : colors.surfaceVariant,
                                                 opacity: pressed ? 0.55 : 1,
                                               },
                                             ]}
                                             onPress={() => handleCopy(entry.text, i)}
                                             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                                            android_ripple={{ color: colors.primary + '33', radius: 16, borderless: true }}
+                                            android_ripple={{
+                                              color: colors.primary + '33',
+                                              radius: 16,
+                                              borderless: true,
+                                            }}
                                           >
                                             <Ionicons
-                                              name={copiedIndex === i ? 'checkmark' : 'copy-outline'}
+                                              name={
+                                                copiedIndex === i ? 'checkmark' : 'copy-outline'
+                                              }
                                               size={13}
-                                              color={copiedIndex === i ? colors.success : colors.textSecondary}
+                                              color={
+                                                copiedIndex === i
+                                                  ? colors.success
+                                                  : colors.textSecondary
+                                              }
                                             />
                                           </Pressable>
 
@@ -652,7 +748,11 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                                               ]}
                                               onPress={() => openEdit(i)}
                                               hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                                              android_ripple={{ color: colors.primary + '33', radius: 16, borderless: true }}
+                                              android_ripple={{
+                                                color: colors.primary + '33',
+                                                radius: 16,
+                                                borderless: true,
+                                              }}
                                             >
                                               <MaterialIcons
                                                 name="edit"
@@ -664,7 +764,9 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                                         </View>
                                       </View>
 
-                                      <Text style={[styles.noteCardText, { color: colors.textPrimary }]}>
+                                      <Text
+                                        style={[styles.noteCardText, { color: colors.textPrimary }]}
+                                      >
                                         {entry.text}
                                       </Text>
                                     </View>
@@ -690,7 +792,11 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                                 onPress={openAdd}
                                 android_ripple={{ color: colors.primary + '33', radius: 80 }}
                               >
-                                <Ionicons name="add-circle-outline" size={16} color={colors.primary} />
+                                <Ionicons
+                                  name="add-circle-outline"
+                                  size={16}
+                                  color={colors.primary}
+                                />
                                 <Text style={[styles.addNoteBtnText, { color: colors.primary }]}>
                                   {hasNotes ? 'Add Another Note' : 'Add Note'}
                                 </Text>
@@ -708,8 +814,14 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
 
           {/* ── Add / Edit note layer (stacked on top inside same Modal) ───────────────────────── */}
           {noteModalVisible && (
-            <View style={[StyleSheet.absoluteFill, { zIndex: 100, elevation: 100 }]} pointerEvents="box-none">
-              <Animated.View entering={FadeIn.duration(100)} style={[styles.backdrop, { zIndex: 0, backgroundColor: colors.scrim }]}>
+            <View
+              style={[StyleSheet.absoluteFill, { zIndex: 100, elevation: 100 }]}
+              pointerEvents="box-none"
+            >
+              <Animated.View
+                entering={FadeIn.duration(100)}
+                style={[styles.backdrop, { zIndex: 0, backgroundColor: colors.scrim }]}
+              >
                 <Pressable style={StyleSheet.absoluteFill} onPress={handleCloseNoteModal} />
               </Animated.View>
 
@@ -764,7 +876,11 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                             opacity: pressed ? 0.6 : 1,
                           },
                         ]}
-                        android_ripple={{ color: colors.textSecondary + '33', radius: 20, borderless: true }}
+                        android_ripple={{
+                          color: colors.textSecondary + '33',
+                          radius: 20,
+                          borderless: true,
+                        }}
                       >
                         <Ionicons name="close" size={18} color={colors.textSecondary} />
                       </Pressable>

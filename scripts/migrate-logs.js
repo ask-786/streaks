@@ -24,7 +24,7 @@
 
 'use strict';
 
-const fs   = require('fs');
+const fs = require('fs');
 const path = require('path');
 
 // ─── Parse args ─────────────────────────────────────────────────────────────
@@ -48,19 +48,16 @@ function getSystemTz() {
 /** Format a UTC timestamp as YYYY-MM-DD in the LOCAL (system) timezone. */
 function toLocalDateStr(isoOrDate) {
   const d = new Date(isoOrDate);
-  const year  = d.getFullYear();
+  const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day   = String(d.getDate()).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 }
 
 /** Check if a value is already a LogEntry { ts, date }. */
 function isLogEntry(v) {
   return (
-    v !== null &&
-    typeof v === 'object' &&
-    typeof v.ts   === 'string' &&
-    typeof v.date === 'string'
+    v !== null && typeof v === 'object' && typeof v.ts === 'string' && typeof v.date === 'string'
   );
 }
 
@@ -75,7 +72,7 @@ function migrateLogEntry(entry, tz) {
     return entry;
   }
   if (typeof entry === 'string') {
-    const ts   = entry.includes('T') ? entry : `${entry}T00:00:00.000Z`;
+    const ts = entry.includes('T') ? entry : `${entry}T00:00:00.000Z`;
     const date = toLocalDateStr(ts);
     return { ts, date, tz };
   }
@@ -93,11 +90,13 @@ function migrateNoteEntry(entry, tz) {
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 if (!inputArg) {
-  console.error('Usage: node scripts/migrate-logs.js <input.json> [output.json] [--tz Asia/Kolkata]');
+  console.error(
+    'Usage: node scripts/migrate-logs.js <input.json> [output.json] [--tz Asia/Kolkata]',
+  );
   process.exit(1);
 }
 
-const inputPath  = path.resolve(inputArg);
+const inputPath = path.resolve(inputArg);
 const outputPath = outputArg
   ? path.resolve(outputArg)
   : inputPath.replace(/(\.[^.]+)?$/, '_migrated$1');
@@ -112,9 +111,9 @@ const tz = tzOverride || getSystemTz();
 
 // Show which timezone we'll use
 const tzOffset = -new Date().getTimezoneOffset();
-const tzSign   = tzOffset >= 0 ? '+' : '-';
-const tzHrs    = String(Math.floor(Math.abs(tzOffset) / 60)).padStart(2, '0');
-const tzMins   = String(Math.abs(tzOffset) % 60).padStart(2, '0');
+const tzSign = tzOffset >= 0 ? '+' : '-';
+const tzHrs = String(Math.floor(Math.abs(tzOffset) / 60)).padStart(2, '0');
+const tzMins = String(Math.abs(tzOffset) % 60).padStart(2, '0');
 console.log(`\nTimezone  : ${tz} (UTC${tzSign}${tzHrs}:${tzMins})`);
 console.log(`tz field  : "${tz}" will be stamped on all entries\n`);
 
@@ -134,10 +133,10 @@ if (!data.logs || typeof data.logs !== 'object') {
 // ─── Migrate logs ───────────────────────────────────────────────────────────
 
 const logs = data.logs;
-let totalLogEntries  = 0;
-let alreadyMigrated  = 0;
-let newlyMigrated    = 0;
-let tzStamped        = 0;
+let totalLogEntries = 0;
+let alreadyMigrated = 0;
+let newlyMigrated = 0;
+let tzStamped = 0;
 
 for (const activityId of Object.keys(logs)) {
   const entries = logs[activityId];
@@ -176,7 +175,7 @@ if (data.notes && typeof data.notes === 'object') {
     for (const dateStr of Object.keys(actNotes)) {
       const entries = actNotes[dateStr];
       if (!Array.isArray(entries)) continue;
-      data.notes[activityId][dateStr] = entries.map(entry => {
+      data.notes[activityId][dateStr] = entries.map((entry) => {
         const result = migrateNoteEntry(entry, tz);
         if (result !== entry) notesTzStamped++;
         return result;

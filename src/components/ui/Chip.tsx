@@ -64,9 +64,7 @@ export const Chip: React.FC<ChipProps> = ({
     >
       {icon ? <FontAwesome5 name={icon} size={10} color={fg} /> : null}
       <Text style={[styles.label, { color: fg }]}>{label}</Text>
-      {trailing ? (
-        <Text style={[styles.trailing, { color: fg }]}>{trailing}</Text>
-      ) : null}
+      {trailing ? <Text style={[styles.trailing, { color: fg }]}>{trailing}</Text> : null}
     </View>
   );
 };

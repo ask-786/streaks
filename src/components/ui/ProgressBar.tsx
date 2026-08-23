@@ -61,11 +61,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
       ]}
     >
       <Animated.View
-        style={[
-          styles.fill,
-          fillStyle,
-          { backgroundColor: fillColor, borderRadius: height / 2 },
-        ]}
+        style={[styles.fill, fillStyle, { backgroundColor: fillColor, borderRadius: height / 2 }]}
       />
       {segments && segments > 1 ? (
         <View style={styles.ticks} pointerEvents="none">

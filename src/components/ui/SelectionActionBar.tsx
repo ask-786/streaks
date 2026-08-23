@@ -48,7 +48,7 @@ export const SelectionActionBar: React.FC<SelectionActionBarProps> = ({
         },
       ]}
     >
-      {actions.map(action => {
+      {actions.map((action) => {
         const tint = action.disabled
           ? colors.textDisabled
           : action.tone === 'danger'

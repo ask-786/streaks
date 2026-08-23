@@ -210,7 +210,7 @@ export const SettingsScreen: React.FC = () => {
             [
               { text: 'Cancel', style: 'cancel' },
               { text: 'Import', style: 'destructive', onPress: () => processImport(fileUri) },
-            ]
+            ],
           );
         } else {
           await processImport(fileUri);
@@ -226,10 +226,7 @@ export const SettingsScreen: React.FC = () => {
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
-      <ScrollView
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {/* Page header */}
         <Animated.View entering={FadeInDown.springify()} style={styles.header}>
           <Text style={[styles.eyebrow, { color: colors.textTertiary }]}>Preferences</Text>
@@ -270,7 +267,7 @@ export const SettingsScreen: React.FC = () => {
             right={
               <Switch
                 {...switchProps(isConfettiEnabled)}
-                onValueChange={v => {
+                onValueChange={(v) => {
                   haptics.toggle(v);
                   setConfettiEnabled(v);
                 }}
@@ -284,7 +281,7 @@ export const SettingsScreen: React.FC = () => {
             right={
               <Switch
                 {...switchProps(isHideExtraDaysEnabled)}
-                onValueChange={v => {
+                onValueChange={(v) => {
                   haptics.toggle(v);
                   setHideExtraDaysEnabled(v);
                 }}
@@ -300,7 +297,7 @@ export const SettingsScreen: React.FC = () => {
             right={
               <Switch
                 {...switchProps(isHapticsEnabled)}
-                onValueChange={v => {
+                onValueChange={(v) => {
                   // Order matters, so the flip is felt either way. The store
                   // action mirrors the flag into the haptics util synchronously
                   // before it awaits, so switching on then firing is audible.
@@ -361,9 +358,7 @@ export const SettingsScreen: React.FC = () => {
         >
           <Card elevation="high" padding={Spacing.xl} style={styles.loadingCard}>
             <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={[styles.loadingText, { color: colors.textPrimary }]}>
-              Working on it…
-            </Text>
+            <Text style={[styles.loadingText, { color: colors.textPrimary }]}>Working on it…</Text>
           </Card>
         </Animated.View>
       )}

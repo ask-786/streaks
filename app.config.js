@@ -21,7 +21,7 @@ module.exports = ({ config }) => {
       plugins: base.plugins.map((plugin) =>
         Array.isArray(plugin) && plugin[0] === 'expo-notifications'
           ? [plugin[0], { ...plugin[1], color: '#F18437' }]
-          : plugin
+          : plugin,
       ),
       ios: {
         ...base.ios,

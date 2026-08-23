@@ -73,9 +73,7 @@ export const StatTile: React.FC<StatTileProps> = ({
 
       <Animated.View style={[styles.valueRow, numeralStyle]}>
         <Text style={[styles.value, { color: tint }]}>{value}</Text>
-        {unit ? (
-          <Text style={[styles.unit, { color: colors.textTertiary }]}>{unit}</Text>
-        ) : null}
+        {unit ? <Text style={[styles.unit, { color: colors.textTertiary }]}>{unit}</Text> : null}
       </Animated.View>
 
       {caption ? (

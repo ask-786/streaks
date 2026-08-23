@@ -28,10 +28,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   const { colors } = useTheme();
 
   return (
-    <Animated.View
-      entering={FadeInDown.delay(delay).springify()}
-      style={styles.container}
-    >
+    <Animated.View entering={FadeInDown.delay(delay).springify()} style={styles.container}>
       <View
         style={[
           styles.iconHalo,
@@ -47,9 +44,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       </View>
 
       <Text style={[styles.title, { color: colors.textPrimary }]}>{title}</Text>
-      <Text style={[styles.description, { color: colors.textSecondary }]}>
-        {description}
-      </Text>
+      <Text style={[styles.description, { color: colors.textSecondary }]}>{description}</Text>
 
       {actionLabel && onAction ? (
         <PressableScale
@@ -60,9 +55,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
           accessibilityLabel={actionLabel}
         >
           <FontAwesome5 name="plus" size={12} color={colors.onPrimary} />
-          <Text style={[styles.actionLabel, { color: colors.onPrimary }]}>
-            {actionLabel}
-          </Text>
+          <Text style={[styles.actionLabel, { color: colors.onPrimary }]}>{actionLabel}</Text>
         </PressableScale>
       ) : null}
     </Animated.View>

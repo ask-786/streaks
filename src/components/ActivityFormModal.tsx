@@ -167,7 +167,20 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
       timeBoundHeight.value = hasTimeBound ? 320 : 0;
       timeBoundOpacity.value = hasTimeBound ? 1 : 0;
     }
-  }, [visible, initialName, initialDescription, initialRequiresNote, initialWeeklyGoal, initialTaskSequence, initialSequenceMode, initialTimeBoundType, initialTimeBoundStartTime, initialTimeBoundEndTime, initialActivityType, initialStreakGoal]);
+  }, [
+    visible,
+    initialName,
+    initialDescription,
+    initialRequiresNote,
+    initialWeeklyGoal,
+    initialTaskSequence,
+    initialSequenceMode,
+    initialTimeBoundType,
+    initialTimeBoundStartTime,
+    initialTimeBoundEndTime,
+    initialActivityType,
+    initialStreakGoal,
+  ]);
 
   const handleWeeklyToggle = (val: boolean) => {
     haptics.toggle(val);
@@ -212,9 +225,7 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
   useEffect(() => {
     const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const show = Keyboard.addListener(showEvt, e =>
-      setKeyboardHeight(e.endCoordinates.height),
-    );
+    const show = Keyboard.addListener(showEvt, (e) => setKeyboardHeight(e.endCoordinates.height));
     const hide = Keyboard.addListener(hideEvt, () => setKeyboardHeight(0));
     return () => {
       show.remove();
@@ -254,26 +265,38 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
 
   const isEditing = !!editingItemId;
 
-  const isTimeOrderValid = !timeBoundEnabled || timeBoundType !== 'between' || (
-    isValidTime12h(timeBoundStartTime) && isValidTime12h(timeBoundEndTime) &&
-    to24h(timeBoundStartTime, startAmPm) < to24h(timeBoundEndTime, endAmPm)
-  );
+  const isTimeOrderValid =
+    !timeBoundEnabled ||
+    timeBoundType !== 'between' ||
+    (isValidTime12h(timeBoundStartTime) &&
+      isValidTime12h(timeBoundEndTime) &&
+      to24h(timeBoundStartTime, startAmPm) < to24h(timeBoundEndTime, endAmPm));
 
-  const isTimeValid = !timeBoundEnabled || (
-    timeBoundType === 'between'
+  const isTimeValid =
+    !timeBoundEnabled ||
+    (timeBoundType === 'between'
       ? isValidTime12h(timeBoundStartTime) && isValidTime12h(timeBoundEndTime) && isTimeOrderValid
-      : isValidTime12h(timeBoundStartTime)
-  );
+      : isValidTime12h(timeBoundStartTime));
 
-  const isStreakGoalValid = activityType !== 'goal' || (streakGoal >= 1);
+  const isStreakGoalValid = activityType !== 'goal' || streakGoal >= 1;
   const canSave = name.trim().length > 0 && isTimeValid && isStreakGoalValid;
 
-  const timeOrderInvalid = timeBoundEnabled && timeBoundType === 'between' &&
-    isValidTime12h(timeBoundStartTime) && isValidTime12h(timeBoundEndTime) &&
+  const timeOrderInvalid =
+    timeBoundEnabled &&
+    timeBoundType === 'between' &&
+    isValidTime12h(timeBoundStartTime) &&
+    isValidTime12h(timeBoundEndTime) &&
     to24h(timeBoundStartTime, startAmPm) >= to24h(timeBoundEndTime, endAmPm);
 
-  const startInvalid = (timeBoundEnabled && timeBoundStartTime.length > 0 && !isValidTime12h(timeBoundStartTime)) || timeOrderInvalid;
-  const endInvalid = (timeBoundEnabled && timeBoundType === 'between' && timeBoundEndTime.length > 0 && !isValidTime12h(timeBoundEndTime)) || timeOrderInvalid;
+  const startInvalid =
+    (timeBoundEnabled && timeBoundStartTime.length > 0 && !isValidTime12h(timeBoundStartTime)) ||
+    timeOrderInvalid;
+  const endInvalid =
+    (timeBoundEnabled &&
+      timeBoundType === 'between' &&
+      timeBoundEndTime.length > 0 &&
+      !isValidTime12h(timeBoundEndTime)) ||
+    timeOrderInvalid;
 
   if (!visible) return null;
 
@@ -292,7 +315,10 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
       pointerEvents="box-none"
     >
       {/* Backdrop */}
-      <Animated.View entering={FadeIn.duration(120)} style={[styles.backdrop, { backgroundColor: colors.scrim }]}>
+      <Animated.View
+        entering={FadeIn.duration(120)}
+        style={[styles.backdrop, { backgroundColor: colors.scrim }]}
+      >
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
       </Animated.View>
 
@@ -321,531 +347,657 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={styles.scrollContent}
           >
-          {/* Title */}
-          <Text style={[styles.title, { color: colors.textPrimary }]}>
-            {isEditing ? 'Edit Habit' : 'New Habit'}
-          </Text>
+            {/* Title */}
+            <Text style={[styles.title, { color: colors.textPrimary }]}>
+              {isEditing ? 'Edit Habit' : 'New Habit'}
+            </Text>
 
-          {/* Subtitle */}
-          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-            {isEditing
-              ? 'Update the settings of your habit'
-              : 'Give your habit a clear, motivating name'}
-          </Text>
+            {/* Subtitle */}
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+              {isEditing
+                ? 'Update the settings of your habit'
+                : 'Give your habit a clear, motivating name'}
+            </Text>
 
-          {/* Input */}
-          <View style={[styles.inputWrapper, { backgroundColor: colors.background, borderColor: colors.border }]}>
-            <TextInput
-              ref={inputRef}
-              style={[styles.input, { color: colors.textPrimary }]}
-              placeholder="e.g., Read 10 pages"
-              placeholderTextColor={colors.textDisabled}
-              value={name}
-              onChangeText={setName}
-              onSubmitEditing={handleSave}
-              autoFocus
-              maxLength={40}
-              returnKeyType="done"
-              selectionColor={colors.primary}
-            />
-            {name.length > 0 && (
-              <TouchableOpacity
-                onPress={() => {
-                  haptics.light();
-                  setName('');
-                }}
-                style={styles.clearBtn}
-                hitSlop={8}
-              >
-                <FontAwesome5 name="times" size={14} color={colors.textDisabled} />
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Character count */}
-          <Text style={[styles.charCount, { color: colors.textSecondary }]}>
-            {name.length}/40
-          </Text>
-
-          {/* ── Description ────────────────────────────────────────── */}
-          <View
-            style={[
-              styles.descriptionWrapper,
-              { backgroundColor: colors.background, borderColor: colors.border },
-            ]}
-          >
-            <TextInput
-              style={[styles.descriptionInput, { color: colors.textPrimary }]}
-              placeholder="Add a description (optional)"
-              placeholderTextColor={colors.textDisabled}
-              value={description}
-              onChangeText={setDescription}
-              maxLength={280}
-              multiline
-              selectionColor={colors.primary}
-            />
-          </View>
-
-          <Text style={[styles.charCount, { color: colors.textSecondary }]}>
-            {description.length}/280
-          </Text>
-
-          {/* ── Activity Type Selector ─────────────────────────────── */}
-          {!isEditing && (
-            <>
-              <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>
-                Activity Type
-              </Text>
-              <View style={styles.typeRow}>
-                {/* Goal-Based card */}
+            {/* Input */}
+            <View
+              style={[
+                styles.inputWrapper,
+                { backgroundColor: colors.background, borderColor: colors.border },
+              ]}
+            >
+              <TextInput
+                ref={inputRef}
+                style={[styles.input, { color: colors.textPrimary }]}
+                placeholder="e.g., Read 10 pages"
+                placeholderTextColor={colors.textDisabled}
+                value={name}
+                onChangeText={setName}
+                onSubmitEditing={handleSave}
+                autoFocus
+                maxLength={40}
+                returnKeyType="done"
+                selectionColor={colors.primary}
+              />
+              {name.length > 0 && (
                 <TouchableOpacity
-                  style={[
-                    styles.typeCard,
-                    {
-                      backgroundColor: activityType === 'goal'
-                        ? colors.successMuted
-                        : colors.background,
-                      borderColor: activityType === 'goal' ? colors.success : colors.border,
-                    },
-                  ]}
                   onPress={() => {
-                    if (activityType !== 'goal') haptics.selection();
-                    setActivityType('goal');
+                    haptics.light();
+                    setName('');
                   }}
-                  activeOpacity={0.75}
+                  style={styles.clearBtn}
+                  hitSlop={8}
                 >
-                  <View style={[styles.typeIconWrap, {
-                    backgroundColor: activityType === 'goal'
-                      ? colors.successMuted
-                      : colors.surfaceVariant,
-                  }]}>
-                    <FontAwesome5
-                      name="bullseye"
-                      size={16}
-                      color={activityType === 'goal' ? colors.success : colors.textSecondary}
-                    />
-                  </View>
-                  <Text style={[styles.typeCardTitle, {
-                    color: activityType === 'goal' ? colors.success : colors.textPrimary,
-                  }]}>
-                    Goal-Based
-                  </Text>
-                  <Text style={[styles.typeCardSub, { color: colors.textSecondary }]}>
-                    Completes when streak goal is hit
-                  </Text>
-                  {activityType === 'goal' && (
-                    <View style={[styles.typeCheckDot, { backgroundColor: colors.success }]}>
-                      <FontAwesome5 name="check" size={9} color="#fff" />
-                    </View>
-                  )}
+                  <FontAwesome5 name="times" size={14} color={colors.textDisabled} />
                 </TouchableOpacity>
-
-                {/* Endless card */}
-                <TouchableOpacity
-                  style={[
-                    styles.typeCard,
-                    {
-                      backgroundColor: activityType === 'endless'
-                        ? colors.primarySubtle
-                        : colors.background,
-                      borderColor: activityType === 'endless' ? colors.primary : colors.border,
-                    },
-                  ]}
-                  onPress={() => {
-                    if (activityType !== 'endless') haptics.selection();
-                    setActivityType('endless');
-                  }}
-                  activeOpacity={0.75}
-                >
-                  <View style={[styles.typeIconWrap, {
-                    backgroundColor: activityType === 'endless'
-                      ? colors.primaryMuted
-                      : colors.surfaceVariant,
-                  }]}>
-                    <FontAwesome5
-                      name="infinity"
-                      size={14}
-                      color={activityType === 'endless' ? colors.primary : colors.textSecondary}
-                    />
-                  </View>
-                  <Text style={[styles.typeCardTitle, {
-                    color: activityType === 'endless' ? colors.primary : colors.textPrimary,
-                  }]}>
-                    Endless
-                  </Text>
-                  <Text style={[styles.typeCardSub, { color: colors.textSecondary }]}>
-                    No target — track forever
-                  </Text>
-                  {activityType === 'endless' && (
-                    <View style={[styles.typeCheckDot, { backgroundColor: colors.primary }]}>
-                      <FontAwesome5 name="check" size={9} color="#fff" />
-                    </View>
-                  )}
-                </TouchableOpacity>
-              </View>
-
-              {/* Streak Goal input — only for goal-based */}
-              {activityType === 'goal' && (
-                <View style={[styles.streakGoalRow, {
-                  backgroundColor: colors.successMuted,
-                  borderColor: colors.success,
-                }]}>
-                  <FontAwesome5 name="trophy" size={14} color={colors.success} />
-                  <Text style={[styles.streakGoalLabel, { color: colors.textPrimary }]}>
-                    Streak Goal
-                  </Text>
-                  <View style={[styles.streakGoalInputWrap, {
-                    backgroundColor: colors.background,
-                    borderColor: colors.border,
-                  }]}>
-                    <TextInput
-                      style={[styles.streakGoalInput, { color: colors.textPrimary }]}
-                      value={streakGoalText}
-                      onChangeText={(val) => {
-                        setStreakGoalText(val);
-                        const n = parseInt(val, 10);
-                        if (!isNaN(n) && n > 0) setStreakGoal(n);
-                      }}
-                      keyboardType="number-pad"
-                      maxLength={4}
-                      selectTextOnFocus
-                    />
-                  </View>
-                  <Text style={[styles.streakGoalUnit, { color: colors.textSecondary }]}>
-                    days
-                  </Text>
-                </View>
               )}
-            </>
-          )}
+            </View>
 
-          {/* ── Weekly Goal Mode toggle ────────────────────────── */}
-          <View style={[styles.toggleRow, {
-            backgroundColor: weeklyModeEnabled
-              ? colors.primarySubtle
-              : colors.background,
-            borderColor: weeklyModeEnabled ? colors.primary : colors.border,
-          }]}>
-            <View style={[styles.toggleIconWrap, {
-              backgroundColor: weeklyModeEnabled
-                ? colors.primaryMuted
-                : colors.surfaceVariant,
-            }]}>
-              <FontAwesome5
-                name="calendar-check"
-                size={14}
-                color={weeklyModeEnabled ? colors.primary : colors.textSecondary}
+            {/* Character count */}
+            <Text style={[styles.charCount, { color: colors.textSecondary }]}>
+              {name.length}/40
+            </Text>
+
+            {/* ── Description ────────────────────────────────────────── */}
+            <View
+              style={[
+                styles.descriptionWrapper,
+                { backgroundColor: colors.background, borderColor: colors.border },
+              ]}
+            >
+              <TextInput
+                style={[styles.descriptionInput, { color: colors.textPrimary }]}
+                placeholder="Add a description (optional)"
+                placeholderTextColor={colors.textDisabled}
+                value={description}
+                onChangeText={setDescription}
+                maxLength={280}
+                multiline
+                selectionColor={colors.primary}
               />
             </View>
-            <View style={styles.toggleTextWrap}>
-              <Text style={[styles.toggleLabel, { color: colors.textPrimary }]}>
-                Weekly Goal Mode
-              </Text>
-              <Text style={[styles.toggleSub, { color: colors.textSecondary }]}>
-                {weeklyModeEnabled
-                  ? `Streak counts weeks you hit ${weeklyGoal}x`
-                  : 'Track streaks by consecutive days'}
-              </Text>
-            </View>
-            <Switch
-              value={weeklyModeEnabled}
-              onValueChange={handleWeeklyToggle}
-              trackColor={{ false: colors.surfaceVariant, true: colors.primaryMuted }}
-              thumbColor={weeklyModeEnabled ? colors.primary : colors.textSecondary}
-            />
-          </View>
 
-          {/* Goal picker — animates in/out */}
-          <Animated.View style={pickerStyle}>
-            <View style={[styles.goalPicker, { backgroundColor: colors.background, borderColor: colors.border }]}>
-              <Text style={[styles.goalPickerLabel, { color: colors.textSecondary }]}>
-                Sessions per week
-              </Text>
-              <View style={styles.goalOptions}>
-                {GOAL_OPTIONS.map(n => (
+            <Text style={[styles.charCount, { color: colors.textSecondary }]}>
+              {description.length}/280
+            </Text>
+
+            {/* ── Activity Type Selector ─────────────────────────────── */}
+            {!isEditing && (
+              <>
+                <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>
+                  Activity Type
+                </Text>
+                <View style={styles.typeRow}>
+                  {/* Goal-Based card */}
                   <TouchableOpacity
-                    key={n}
                     style={[
-                      styles.goalOption,
+                      styles.typeCard,
                       {
-                        backgroundColor: weeklyGoal === n
-                          ? colors.primary
-                          : colors.surfaceVariant,
+                        backgroundColor:
+                          activityType === 'goal' ? colors.successMuted : colors.background,
+                        borderColor: activityType === 'goal' ? colors.success : colors.border,
                       },
                     ]}
                     onPress={() => {
-                      if (weeklyGoal !== n) haptics.selection();
-                      setWeeklyGoal(n);
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[
-                      styles.goalOptionText,
-                      { color: weeklyGoal === n ? '#FFFFFF' : colors.textSecondary },
-                    ]}>
-                      {n}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-          </Animated.View>
-
-          {/* Require note toggle */}
-          <View style={[styles.toggleRow, { backgroundColor: colors.background, borderColor: colors.border, marginBottom: Spacing.sm }]}>
-            <View style={[styles.toggleIconWrap, { backgroundColor: requiresNote ? colors.primaryMuted : colors.surfaceVariant }]}>
-              <FontAwesome5
-                name="sticky-note"
-                size={14}
-                color={requiresNote ? colors.primary : colors.textSecondary}
-              />
-            </View>
-            <View style={styles.toggleTextWrap}>
-              <Text style={[styles.toggleLabel, { color: colors.textPrimary }]}>
-                Require a note when logging
-              </Text>
-              <Text style={[styles.toggleSub, { color: colors.textSecondary }]}>
-                You'll need to add a note each time you log
-              </Text>
-            </View>
-            <Switch
-              value={requiresNote}
-              onValueChange={val => {
-                haptics.toggle(val);
-                setRequiresNote(val);
-              }}
-              trackColor={{ false: colors.surfaceVariant, true: colors.primaryMuted }}
-              thumbColor={requiresNote ? colors.primary : colors.textSecondary}
-            />
-          </View>
-
-          {/* ── Task Sequence toggle ───────────────────────────────────────── */}
-          <View style={[styles.toggleRow, {
-            backgroundColor: taskSeqEnabled
-              ? colors.primarySubtle
-              : colors.background,
-            borderColor: taskSeqEnabled ? colors.primary : colors.border,
-            marginBottom: Spacing.sm,
-          }]}>
-            <View style={[styles.toggleIconWrap, {
-              backgroundColor: taskSeqEnabled
-                ? colors.primaryMuted
-                : colors.surfaceVariant,
-            }]}>
-              <FontAwesome5
-                name="list-ol"
-                size={13}
-                color={taskSeqEnabled ? colors.primary : colors.textSecondary}
-              />
-            </View>
-            <View style={styles.toggleTextWrap}>
-              <Text style={[styles.toggleLabel, { color: colors.textPrimary }]}>
-                Task Sequence
-              </Text>
-              <Text style={[styles.toggleSub, { color: colors.textSecondary }]}>
-                {taskSeqEnabled
-                  ? `${tasks.length} task${tasks.length !== 1 ? 's' : ''} · rotates daily`
-                  : 'Show a different task each day'}
-              </Text>
-            </View>
-            <Switch
-              value={taskSeqEnabled}
-              onValueChange={handleTaskSeqToggle}
-              trackColor={{ false: colors.surfaceVariant, true: colors.primaryMuted }}
-              thumbColor={taskSeqEnabled ? colors.primary : colors.textSecondary}
-            />
-          </View>
-
-          {/* Task sequence editor — animates open */}
-          <Animated.View style={taskSeqStyle}>
-            {/* Advancement mode picker */}
-            <View style={[styles.modePickerRow, { backgroundColor: colors.background, borderColor: colors.border }]}>
-              <Text style={[styles.modePickerLabel, { color: colors.textSecondary }]}>Advance by</Text>
-              <View style={styles.modePills}>
-                {(['calendar', 'log'] as const).map(mode => (
-                  <TouchableOpacity
-                    key={mode}
-                    style={[
-                      styles.modePill,
-                      { backgroundColor: sequenceMode === mode ? colors.primary : colors.surfaceVariant },
-                    ]}
-                    onPress={() => {
-                      if (sequenceMode !== mode) haptics.selection();
-                      setSequenceMode(mode);
+                      if (activityType !== 'goal') haptics.selection();
+                      setActivityType('goal');
                     }}
                     activeOpacity={0.75}
                   >
-                    <FontAwesome5
-                      name={mode === 'calendar' ? 'calendar-day' : 'check-square'}
-                      size={11}
-                      color={sequenceMode === mode ? '#fff' : colors.textSecondary}
-                    />
-                    <Text style={[
-                      styles.modePillText,
-                      { color: sequenceMode === mode ? '#fff' : colors.textSecondary },
-                    ]}>
-                      {mode === 'calendar' ? 'Calendar day' : 'Log count'}
+                    <View
+                      style={[
+                        styles.typeIconWrap,
+                        {
+                          backgroundColor:
+                            activityType === 'goal' ? colors.successMuted : colors.surfaceVariant,
+                        },
+                      ]}
+                    >
+                      <FontAwesome5
+                        name="bullseye"
+                        size={16}
+                        color={activityType === 'goal' ? colors.success : colors.textSecondary}
+                      />
+                    </View>
+                    <Text
+                      style={[
+                        styles.typeCardTitle,
+                        {
+                          color: activityType === 'goal' ? colors.success : colors.textPrimary,
+                        },
+                      ]}
+                    >
+                      Goal-Based
                     </Text>
+                    <Text style={[styles.typeCardSub, { color: colors.textSecondary }]}>
+                      Completes when streak goal is hit
+                    </Text>
+                    {activityType === 'goal' && (
+                      <View style={[styles.typeCheckDot, { backgroundColor: colors.success }]}>
+                        <FontAwesome5 name="check" size={9} color="#fff" />
+                      </View>
+                    )}
                   </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-            <Text style={[styles.modeHint, { color: colors.textSecondary }]}>
-              {sequenceMode === 'calendar'
-                ? 'Task advances every day, even if you miss one.'
-                : 'Task advances only after you log.'}
-            </Text>
 
-            {/* Editor */}
-            <TaskSequenceEditor tasks={tasks} onChange={setTasks} />
-            <View style={{ height: Spacing.md }} />
-          </Animated.View>
-
-          {/* ── Time Bound toggle ───────────────────────────────────────── */}
-          <View style={[styles.toggleRow, {
-            backgroundColor: timeBoundEnabled
-              ? colors.primarySubtle
-              : colors.background,
-            borderColor: timeBoundEnabled ? colors.primary : colors.border,
-            marginBottom: Spacing.sm,
-          }]}>
-            <View style={[styles.toggleIconWrap, {
-              backgroundColor: timeBoundEnabled
-                ? colors.primaryMuted
-                : colors.surfaceVariant,
-            }]}>
-              <FontAwesome5
-                name="clock"
-                size={13}
-                color={timeBoundEnabled ? colors.primary : colors.textSecondary}
-              />
-            </View>
-            <View style={styles.toggleTextWrap}>
-              <Text style={[styles.toggleLabel, { color: colors.textPrimary }]}>
-                Time Bound
-              </Text>
-              <Text style={[styles.toggleSub, { color: colors.textSecondary }]}>
-                {timeBoundEnabled
-                  ? `Log ${timeBoundType} specific time`
-                  : 'Log at any time'}
-              </Text>
-            </View>
-            <Switch
-              value={timeBoundEnabled}
-              onValueChange={handleTimeBoundToggle}
-              trackColor={{ false: colors.surfaceVariant, true: colors.primaryMuted }}
-              thumbColor={timeBoundEnabled ? colors.primary : colors.textSecondary}
-            />
-          </View>
-
-          {/* Time Bound picker — animates open */}
-          <Animated.View style={timeBoundStyle}>
-            <View style={[styles.modePickerRow, { backgroundColor: colors.background, borderColor: colors.border }]}>
-              <Text style={[styles.modePickerLabel, { color: colors.textSecondary }]}>Type</Text>
-              <View style={styles.modePills}>
-                {(['before', 'after', 'between'] as const).map(type => (
+                  {/* Endless card */}
                   <TouchableOpacity
-                    key={type}
                     style={[
-                      styles.modePill,
-                      { backgroundColor: timeBoundType === type ? colors.primary : colors.surfaceVariant },
+                      styles.typeCard,
+                      {
+                        backgroundColor:
+                          activityType === 'endless' ? colors.primarySubtle : colors.background,
+                        borderColor: activityType === 'endless' ? colors.primary : colors.border,
+                      },
                     ]}
                     onPress={() => {
-                      if (timeBoundType !== type) haptics.selection();
-                      setTimeBoundType(type);
+                      if (activityType !== 'endless') haptics.selection();
+                      setActivityType('endless');
                     }}
                     activeOpacity={0.75}
                   >
-                    <Text style={[
-                      styles.modePillText,
-                      { color: timeBoundType === type ? '#fff' : colors.textSecondary },
-                    ]}>
-                      {type.charAt(0).toUpperCase() + type.slice(1)}
+                    <View
+                      style={[
+                        styles.typeIconWrap,
+                        {
+                          backgroundColor:
+                            activityType === 'endless'
+                              ? colors.primaryMuted
+                              : colors.surfaceVariant,
+                        },
+                      ]}
+                    >
+                      <FontAwesome5
+                        name="infinity"
+                        size={14}
+                        color={activityType === 'endless' ? colors.primary : colors.textSecondary}
+                      />
+                    </View>
+                    <Text
+                      style={[
+                        styles.typeCardTitle,
+                        {
+                          color: activityType === 'endless' ? colors.primary : colors.textPrimary,
+                        },
+                      ]}
+                    >
+                      Endless
                     </Text>
+                    <Text style={[styles.typeCardSub, { color: colors.textSecondary }]}>
+                      No target — track forever
+                    </Text>
+                    {activityType === 'endless' && (
+                      <View style={[styles.typeCheckDot, { backgroundColor: colors.primary }]}>
+                        <FontAwesome5 name="check" size={9} color="#fff" />
+                      </View>
+                    )}
                   </TouchableOpacity>
-                ))}
-              </View>
-            </View>
+                </View>
 
-            {/* Start time */}
-            <View style={styles.timeFieldGroup}>
-              <Text style={[styles.timeFieldLabel, { color: colors.textSecondary }]}>
-                {timeBoundType === 'between' ? 'Start Time' : 'Time'}
-              </Text>
-              <View style={[styles.inputWrapper, {
-                backgroundColor: colors.background,
-                borderColor: startInvalid ? colors.danger : colors.border,
-                marginBottom: 0,
-              }]}>
-                <TextInput
-                  style={[styles.input, { flex: 1, color: startInvalid ? colors.danger : colors.textPrimary }]}
-                  placeholder="HH:MM"
-                  placeholderTextColor={colors.textDisabled}
-                  value={timeBoundStartTime}
-                  onChangeText={setTimeBoundStartTime}
-                  keyboardType="numbers-and-punctuation"
-                  maxLength={5}
+                {/* Streak Goal input — only for goal-based */}
+                {activityType === 'goal' && (
+                  <View
+                    style={[
+                      styles.streakGoalRow,
+                      {
+                        backgroundColor: colors.successMuted,
+                        borderColor: colors.success,
+                      },
+                    ]}
+                  >
+                    <FontAwesome5 name="trophy" size={14} color={colors.success} />
+                    <Text style={[styles.streakGoalLabel, { color: colors.textPrimary }]}>
+                      Streak Goal
+                    </Text>
+                    <View
+                      style={[
+                        styles.streakGoalInputWrap,
+                        {
+                          backgroundColor: colors.background,
+                          borderColor: colors.border,
+                        },
+                      ]}
+                    >
+                      <TextInput
+                        style={[styles.streakGoalInput, { color: colors.textPrimary }]}
+                        value={streakGoalText}
+                        onChangeText={(val) => {
+                          setStreakGoalText(val);
+                          const n = parseInt(val, 10);
+                          if (!isNaN(n) && n > 0) setStreakGoal(n);
+                        }}
+                        keyboardType="number-pad"
+                        maxLength={4}
+                        selectTextOnFocus
+                      />
+                    </View>
+                    <Text style={[styles.streakGoalUnit, { color: colors.textSecondary }]}>
+                      days
+                    </Text>
+                  </View>
+                )}
+              </>
+            )}
+
+            {/* ── Weekly Goal Mode toggle ────────────────────────── */}
+            <View
+              style={[
+                styles.toggleRow,
+                {
+                  backgroundColor: weeklyModeEnabled ? colors.primarySubtle : colors.background,
+                  borderColor: weeklyModeEnabled ? colors.primary : colors.border,
+                },
+              ]}
+            >
+              <View
+                style={[
+                  styles.toggleIconWrap,
+                  {
+                    backgroundColor: weeklyModeEnabled
+                      ? colors.primaryMuted
+                      : colors.surfaceVariant,
+                  },
+                ]}
+              >
+                <FontAwesome5
+                  name="calendar-check"
+                  size={14}
+                  color={weeklyModeEnabled ? colors.primary : colors.textSecondary}
                 />
-                <TouchableOpacity
-                  style={[styles.amPmToggle, {
-                    backgroundColor: startAmPm === 'AM' ? colors.surfaceVariant : colors.primaryContainer,
-                  }]}
-                  onPress={() => {
-                    haptics.selection();
-                    setStartAmPm(startAmPm === 'AM' ? 'PM' : 'AM');
-                  }}
-                >
-                  <Text style={[styles.amPmText, { color: startAmPm === 'PM' ? colors.primary : colors.textPrimary }]}>
-                    {startAmPm}
-                  </Text>
-                </TouchableOpacity>
               </View>
+              <View style={styles.toggleTextWrap}>
+                <Text style={[styles.toggleLabel, { color: colors.textPrimary }]}>
+                  Weekly Goal Mode
+                </Text>
+                <Text style={[styles.toggleSub, { color: colors.textSecondary }]}>
+                  {weeklyModeEnabled
+                    ? `Streak counts weeks you hit ${weeklyGoal}x`
+                    : 'Track streaks by consecutive days'}
+                </Text>
+              </View>
+              <Switch
+                value={weeklyModeEnabled}
+                onValueChange={handleWeeklyToggle}
+                trackColor={{ false: colors.surfaceVariant, true: colors.primaryMuted }}
+                thumbColor={weeklyModeEnabled ? colors.primary : colors.textSecondary}
+              />
             </View>
 
-            {/* End time — only for 'between' */}
-            {timeBoundType === 'between' && (
-              <View style={[styles.timeFieldGroup, { marginTop: Spacing.sm }]}>
-                <Text style={[styles.timeFieldLabel, { color: colors.textSecondary }]}>End Time</Text>
-                <View style={[styles.inputWrapper, {
+            {/* Goal picker — animates in/out */}
+            <Animated.View style={pickerStyle}>
+              <View
+                style={[
+                  styles.goalPicker,
+                  { backgroundColor: colors.background, borderColor: colors.border },
+                ]}
+              >
+                <Text style={[styles.goalPickerLabel, { color: colors.textSecondary }]}>
+                  Sessions per week
+                </Text>
+                <View style={styles.goalOptions}>
+                  {GOAL_OPTIONS.map((n) => (
+                    <TouchableOpacity
+                      key={n}
+                      style={[
+                        styles.goalOption,
+                        {
+                          backgroundColor:
+                            weeklyGoal === n ? colors.primary : colors.surfaceVariant,
+                        },
+                      ]}
+                      onPress={() => {
+                        if (weeklyGoal !== n) haptics.selection();
+                        setWeeklyGoal(n);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Text
+                        style={[
+                          styles.goalOptionText,
+                          { color: weeklyGoal === n ? '#FFFFFF' : colors.textSecondary },
+                        ]}
+                      >
+                        {n}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            </Animated.View>
+
+            {/* Require note toggle */}
+            <View
+              style={[
+                styles.toggleRow,
+                {
                   backgroundColor: colors.background,
-                  borderColor: endInvalid ? colors.danger : colors.border,
-                  marginBottom: 0,
-                }]}>
+                  borderColor: colors.border,
+                  marginBottom: Spacing.sm,
+                },
+              ]}
+            >
+              <View
+                style={[
+                  styles.toggleIconWrap,
+                  { backgroundColor: requiresNote ? colors.primaryMuted : colors.surfaceVariant },
+                ]}
+              >
+                <FontAwesome5
+                  name="sticky-note"
+                  size={14}
+                  color={requiresNote ? colors.primary : colors.textSecondary}
+                />
+              </View>
+              <View style={styles.toggleTextWrap}>
+                <Text style={[styles.toggleLabel, { color: colors.textPrimary }]}>
+                  Require a note when logging
+                </Text>
+                <Text style={[styles.toggleSub, { color: colors.textSecondary }]}>
+                  You'll need to add a note each time you log
+                </Text>
+              </View>
+              <Switch
+                value={requiresNote}
+                onValueChange={(val) => {
+                  haptics.toggle(val);
+                  setRequiresNote(val);
+                }}
+                trackColor={{ false: colors.surfaceVariant, true: colors.primaryMuted }}
+                thumbColor={requiresNote ? colors.primary : colors.textSecondary}
+              />
+            </View>
+
+            {/* ── Task Sequence toggle ───────────────────────────────────────── */}
+            <View
+              style={[
+                styles.toggleRow,
+                {
+                  backgroundColor: taskSeqEnabled ? colors.primarySubtle : colors.background,
+                  borderColor: taskSeqEnabled ? colors.primary : colors.border,
+                  marginBottom: Spacing.sm,
+                },
+              ]}
+            >
+              <View
+                style={[
+                  styles.toggleIconWrap,
+                  {
+                    backgroundColor: taskSeqEnabled ? colors.primaryMuted : colors.surfaceVariant,
+                  },
+                ]}
+              >
+                <FontAwesome5
+                  name="list-ol"
+                  size={13}
+                  color={taskSeqEnabled ? colors.primary : colors.textSecondary}
+                />
+              </View>
+              <View style={styles.toggleTextWrap}>
+                <Text style={[styles.toggleLabel, { color: colors.textPrimary }]}>
+                  Task Sequence
+                </Text>
+                <Text style={[styles.toggleSub, { color: colors.textSecondary }]}>
+                  {taskSeqEnabled
+                    ? `${tasks.length} task${tasks.length !== 1 ? 's' : ''} · rotates daily`
+                    : 'Show a different task each day'}
+                </Text>
+              </View>
+              <Switch
+                value={taskSeqEnabled}
+                onValueChange={handleTaskSeqToggle}
+                trackColor={{ false: colors.surfaceVariant, true: colors.primaryMuted }}
+                thumbColor={taskSeqEnabled ? colors.primary : colors.textSecondary}
+              />
+            </View>
+
+            {/* Task sequence editor — animates open */}
+            <Animated.View style={taskSeqStyle}>
+              {/* Advancement mode picker */}
+              <View
+                style={[
+                  styles.modePickerRow,
+                  { backgroundColor: colors.background, borderColor: colors.border },
+                ]}
+              >
+                <Text style={[styles.modePickerLabel, { color: colors.textSecondary }]}>
+                  Advance by
+                </Text>
+                <View style={styles.modePills}>
+                  {(['calendar', 'log'] as const).map((mode) => (
+                    <TouchableOpacity
+                      key={mode}
+                      style={[
+                        styles.modePill,
+                        {
+                          backgroundColor:
+                            sequenceMode === mode ? colors.primary : colors.surfaceVariant,
+                        },
+                      ]}
+                      onPress={() => {
+                        if (sequenceMode !== mode) haptics.selection();
+                        setSequenceMode(mode);
+                      }}
+                      activeOpacity={0.75}
+                    >
+                      <FontAwesome5
+                        name={mode === 'calendar' ? 'calendar-day' : 'check-square'}
+                        size={11}
+                        color={sequenceMode === mode ? '#fff' : colors.textSecondary}
+                      />
+                      <Text
+                        style={[
+                          styles.modePillText,
+                          { color: sequenceMode === mode ? '#fff' : colors.textSecondary },
+                        ]}
+                      >
+                        {mode === 'calendar' ? 'Calendar day' : 'Log count'}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+              <Text style={[styles.modeHint, { color: colors.textSecondary }]}>
+                {sequenceMode === 'calendar'
+                  ? 'Task advances every day, even if you miss one.'
+                  : 'Task advances only after you log.'}
+              </Text>
+
+              {/* Editor */}
+              <TaskSequenceEditor tasks={tasks} onChange={setTasks} />
+              <View style={{ height: Spacing.md }} />
+            </Animated.View>
+
+            {/* ── Time Bound toggle ───────────────────────────────────────── */}
+            <View
+              style={[
+                styles.toggleRow,
+                {
+                  backgroundColor: timeBoundEnabled ? colors.primarySubtle : colors.background,
+                  borderColor: timeBoundEnabled ? colors.primary : colors.border,
+                  marginBottom: Spacing.sm,
+                },
+              ]}
+            >
+              <View
+                style={[
+                  styles.toggleIconWrap,
+                  {
+                    backgroundColor: timeBoundEnabled ? colors.primaryMuted : colors.surfaceVariant,
+                  },
+                ]}
+              >
+                <FontAwesome5
+                  name="clock"
+                  size={13}
+                  color={timeBoundEnabled ? colors.primary : colors.textSecondary}
+                />
+              </View>
+              <View style={styles.toggleTextWrap}>
+                <Text style={[styles.toggleLabel, { color: colors.textPrimary }]}>Time Bound</Text>
+                <Text style={[styles.toggleSub, { color: colors.textSecondary }]}>
+                  {timeBoundEnabled ? `Log ${timeBoundType} specific time` : 'Log at any time'}
+                </Text>
+              </View>
+              <Switch
+                value={timeBoundEnabled}
+                onValueChange={handleTimeBoundToggle}
+                trackColor={{ false: colors.surfaceVariant, true: colors.primaryMuted }}
+                thumbColor={timeBoundEnabled ? colors.primary : colors.textSecondary}
+              />
+            </View>
+
+            {/* Time Bound picker — animates open */}
+            <Animated.View style={timeBoundStyle}>
+              <View
+                style={[
+                  styles.modePickerRow,
+                  { backgroundColor: colors.background, borderColor: colors.border },
+                ]}
+              >
+                <Text style={[styles.modePickerLabel, { color: colors.textSecondary }]}>Type</Text>
+                <View style={styles.modePills}>
+                  {(['before', 'after', 'between'] as const).map((type) => (
+                    <TouchableOpacity
+                      key={type}
+                      style={[
+                        styles.modePill,
+                        {
+                          backgroundColor:
+                            timeBoundType === type ? colors.primary : colors.surfaceVariant,
+                        },
+                      ]}
+                      onPress={() => {
+                        if (timeBoundType !== type) haptics.selection();
+                        setTimeBoundType(type);
+                      }}
+                      activeOpacity={0.75}
+                    >
+                      <Text
+                        style={[
+                          styles.modePillText,
+                          { color: timeBoundType === type ? '#fff' : colors.textSecondary },
+                        ]}
+                      >
+                        {type.charAt(0).toUpperCase() + type.slice(1)}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* Start time */}
+              <View style={styles.timeFieldGroup}>
+                <Text style={[styles.timeFieldLabel, { color: colors.textSecondary }]}>
+                  {timeBoundType === 'between' ? 'Start Time' : 'Time'}
+                </Text>
+                <View
+                  style={[
+                    styles.inputWrapper,
+                    {
+                      backgroundColor: colors.background,
+                      borderColor: startInvalid ? colors.danger : colors.border,
+                      marginBottom: 0,
+                    },
+                  ]}
+                >
                   <TextInput
-                    style={[styles.input, { flex: 1, color: endInvalid ? colors.danger : colors.textPrimary }]}
+                    style={[
+                      styles.input,
+                      { flex: 1, color: startInvalid ? colors.danger : colors.textPrimary },
+                    ]}
                     placeholder="HH:MM"
                     placeholderTextColor={colors.textDisabled}
-                    value={timeBoundEndTime}
-                    onChangeText={setTimeBoundEndTime}
+                    value={timeBoundStartTime}
+                    onChangeText={setTimeBoundStartTime}
                     keyboardType="numbers-and-punctuation"
                     maxLength={5}
                   />
                   <TouchableOpacity
-                    style={[styles.amPmToggle, {
-                      backgroundColor: endAmPm === 'AM' ? colors.surfaceVariant : colors.primaryContainer,
-                    }]}
+                    style={[
+                      styles.amPmToggle,
+                      {
+                        backgroundColor:
+                          startAmPm === 'AM' ? colors.surfaceVariant : colors.primaryContainer,
+                      },
+                    ]}
                     onPress={() => {
                       haptics.selection();
-                      setEndAmPm(endAmPm === 'AM' ? 'PM' : 'AM');
+                      setStartAmPm(startAmPm === 'AM' ? 'PM' : 'AM');
                     }}
                   >
-                    <Text style={[styles.amPmText, { color: endAmPm === 'PM' ? colors.primary : colors.textPrimary }]}>
-                      {endAmPm}
+                    <Text
+                      style={[
+                        styles.amPmText,
+                        { color: startAmPm === 'PM' ? colors.primary : colors.textPrimary },
+                      ]}
+                    >
+                      {startAmPm}
                     </Text>
                   </TouchableOpacity>
                 </View>
               </View>
-            )}
 
-            {/* Validation error hint */}
-            {timeOrderInvalid && (
-              <Text style={[styles.timeErrorHint, { color: colors.danger }]}>
-                End time must be after start time
-              </Text>
-            )}
-            <View style={{ height: Spacing.md }} />
-          </Animated.View>
+              {/* End time — only for 'between' */}
+              {timeBoundType === 'between' && (
+                <View style={[styles.timeFieldGroup, { marginTop: Spacing.sm }]}>
+                  <Text style={[styles.timeFieldLabel, { color: colors.textSecondary }]}>
+                    End Time
+                  </Text>
+                  <View
+                    style={[
+                      styles.inputWrapper,
+                      {
+                        backgroundColor: colors.background,
+                        borderColor: endInvalid ? colors.danger : colors.border,
+                        marginBottom: 0,
+                      },
+                    ]}
+                  >
+                    <TextInput
+                      style={[
+                        styles.input,
+                        { flex: 1, color: endInvalid ? colors.danger : colors.textPrimary },
+                      ]}
+                      placeholder="HH:MM"
+                      placeholderTextColor={colors.textDisabled}
+                      value={timeBoundEndTime}
+                      onChangeText={setTimeBoundEndTime}
+                      keyboardType="numbers-and-punctuation"
+                      maxLength={5}
+                    />
+                    <TouchableOpacity
+                      style={[
+                        styles.amPmToggle,
+                        {
+                          backgroundColor:
+                            endAmPm === 'AM' ? colors.surfaceVariant : colors.primaryContainer,
+                        },
+                      ]}
+                      onPress={() => {
+                        haptics.selection();
+                        setEndAmPm(endAmPm === 'AM' ? 'PM' : 'AM');
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.amPmText,
+                          { color: endAmPm === 'PM' ? colors.primary : colors.textPrimary },
+                        ]}
+                      >
+                        {endAmPm}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
 
+              {/* Validation error hint */}
+              {timeOrderInvalid && (
+                <Text style={[styles.timeErrorHint, { color: colors.danger }]}>
+                  End time must be after start time
+                </Text>
+              )}
+              <View style={{ height: Spacing.md }} />
+            </Animated.View>
           </ScrollView>
 
           {/* Actions */}

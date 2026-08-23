@@ -1,10 +1,5 @@
 import React, { useMemo } from 'react';
-import {
-  NavigationContainer,
-  DefaultTheme,
-  DarkTheme,
-  Theme,
-} from '@react-navigation/native';
+import { NavigationContainer, DefaultTheme, DarkTheme, Theme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { View, StyleSheet } from 'react-native';
@@ -46,10 +41,7 @@ const HabitTitle: React.FC<{ name?: string }> = ({ name }) => {
   return (
     <View style={styles.headerTitle}>
       <Text style={[styles.headerEyebrow, { color: colors.textTertiary }]}>Habit</Text>
-      <Text
-        style={[styles.headerName, { color: colors.textPrimary }]}
-        numberOfLines={1}
-      >
+      <Text style={[styles.headerName, { color: colors.textPrimary }]} numberOfLines={1}>
         {name ?? 'Activity'}
       </Text>
     </View>
@@ -58,12 +50,12 @@ const HabitTitle: React.FC<{ name?: string }> = ({ name }) => {
 
 const ActivityTabNavigator = () => {
   const { activities, selectedActivityId } = useAttendanceStore();
-  const selectedActivity = activities.find(a => a.id === selectedActivityId);
+  const selectedActivity = activities.find((a) => a.id === selectedActivityId);
   const { colors } = useTheme();
 
   return (
     <Tab.Navigator
-      tabBar={props => <TabBar {...props} />}
+      tabBar={(props) => <TabBar {...props} />}
       screenOptions={({ navigation }) => ({
         headerStyle: {
           backgroundColor: colors.background,
@@ -163,11 +155,7 @@ export const AppNavigator: React.FC = () => {
           component={ActivityTabNavigator}
           options={{ headerShown: false }}
         />
-        <Stack.Screen
-          name="Settings"
-          component={SettingsScreen}
-          options={{ title: 'Settings' }}
-        />
+        <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
         <Stack.Screen
           name="ActivitySettings"
           component={ActivitySettingsScreen}
