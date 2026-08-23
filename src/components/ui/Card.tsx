@@ -49,14 +49,7 @@ export const Card: React.FC<CardProps> = ({
   })();
 
   return (
-    <View
-      style={[
-        depth[elevation],
-        { borderRadius: radius, padding },
-        toneStyle,
-        style,
-      ]}
-    >
+    <View style={[depth[elevation], { borderRadius: radius, padding }, toneStyle, style]}>
       {children}
     </View>
   );

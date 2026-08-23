@@ -1,11 +1,5 @@
 import React, { useState } from 'react';
-import {
-  View,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  Alert,
-} from 'react-native';
+import { View, StyleSheet, TextInput, TouchableOpacity, Alert } from 'react-native';
 import { Text } from 'react-native-paper';
 import DraggableFlatList, {
   RenderItemParams,
@@ -17,10 +11,7 @@ import { FontAwesome5, Ionicons } from '@expo/vector-icons';
 import { Typography, Spacing, BorderRadius, HitSlop, alpha } from '../constants';
 import { useTheme } from '../hooks/useTheme';
 import { haptics } from '../utils/haptics';
-import {
-  SequenceTask,
-  normalizeSequenceTasks,
-} from '../features/attendance/attendanceService';
+import { SequenceTask, normalizeSequenceTasks } from '../features/attendance/attendanceService';
 
 export interface TaskSequenceEditorProps {
   tasks: SequenceTask[];
@@ -39,10 +30,7 @@ const buildTask = (title: string, description: string): SequenceTask => {
   return trimmed ? { title: title.trim(), description: trimmed } : { title: title.trim() };
 };
 
-export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
-  tasks,
-  onChange,
-}) => {
+export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({ tasks, onChange }) => {
   const { colors } = useTheme();
   /**
    * The list is read-only until the user asks to edit it. A sequence is easy to
@@ -62,18 +50,18 @@ export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
   const [editingDescription, setEditingDescription] = useState('');
 
   const [items, setItems] = useState<TaskItem[]>(() =>
-    tasks.map((t, i) => ({ id: `init-${i}-${Math.random()}`, task: t }))
+    tasks.map((t, i) => ({ id: `init-${i}-${Math.random()}`, task: t })),
   );
 
   React.useEffect(() => {
-    setItems(prev => {
+    setItems((prev) => {
       if (tasks.length === prev.length && tasks.every((t, i) => sameTask(t, prev[i].task))) {
         return prev;
       }
 
       const prevItems = [...prev];
       return tasks.map((t, i) => {
-        const matchIdx = prevItems.findIndex(p => sameTask(p.task, t));
+        const matchIdx = prevItems.findIndex((p) => sameTask(p.task, t));
         if (matchIdx !== -1) {
           const matched = prevItems[matchIdx];
           prevItems.splice(matchIdx, 1);
@@ -96,7 +84,7 @@ export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
       setEditingTitle('');
       setEditingDescription('');
     }
-    setIsEditMode(v => !v);
+    setIsEditMode((v) => !v);
   };
 
   // ── Edit ────────────────────────────────────────────────────────────────────
@@ -169,7 +157,7 @@ export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
 
       const uri = result.assets[0].uri;
       const raw = await FileSystem.readAsStringAsync(uri);
-      
+
       // Strip potential BOM (Byte Order Mark) which crashes JSON.parse
       const cleanRaw = raw.replace(/^\uFEFF/, '').trim();
       const parsed = JSON.parse(cleanRaw);
@@ -204,157 +192,159 @@ export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
     } catch (error: any) {
       haptics.error();
       Alert.alert(
-        'Import failed', 
-        `Could not read or parse the selected file. \n\n${error?.message || error}`
+        'Import failed',
+        `Could not read or parse the selected file. \n\n${error?.message || error}`,
       );
     }
   };
 
   // ── Render ───────────────────────────────────────────────────────────────────
-  const renderItem = React.useCallback(({ item, getIndex, drag, isActive }: RenderItemParams<TaskItem>) => {
-    const index = getIndex() ?? 0;
-    const task = item.task;
-    const isEditing = isEditMode && editingIndex === index;
-    return (
-      <ScaleDecorator activeScale={1.02}>
-        <View
-          style={[
-            styles.taskRow,
-            isEditing && styles.taskRowEditing,
-            {
-              backgroundColor: isActive ? colors.primaryMuted : colors.surfaceSunken,
-              borderColor: isActive ? colors.primaryBorder : colors.border,
-            },
-          ]}
-        >
-          {isEditing ? (
-            <>
-              <View style={styles.editRow}>
-                {/* Position stays visible while editing, so a long sequence
+  const renderItem = React.useCallback(
+    ({ item, getIndex, drag, isActive }: RenderItemParams<TaskItem>) => {
+      const index = getIndex() ?? 0;
+      const task = item.task;
+      const isEditing = isEditMode && editingIndex === index;
+      return (
+        <ScaleDecorator activeScale={1.02}>
+          <View
+            style={[
+              styles.taskRow,
+              isEditing && styles.taskRowEditing,
+              {
+                backgroundColor: isActive ? colors.primaryMuted : colors.surfaceSunken,
+                borderColor: isActive ? colors.primaryBorder : colors.border,
+              },
+            ]}
+          >
+            {isEditing ? (
+              <>
+                <View style={styles.editRow}>
+                  {/* Position stays visible while editing, so a long sequence
                     never loses track of which step is open. */}
+                  <View
+                    style={[styles.indexPill, { backgroundColor: alpha(colors.primary, 0.12) }]}
+                  >
+                    <Text style={[styles.indexText, { color: colors.primary }]}>{index + 1}</Text>
+                  </View>
+                  <View style={styles.editFields}>
+                    <TextInput
+                      style={[styles.titleInput, { color: colors.textPrimary }]}
+                      value={editingTitle}
+                      onChangeText={setEditingTitle}
+                      placeholder="Task"
+                      placeholderTextColor={colors.textDisabled}
+                      autoFocus
+                      maxLength={200}
+                      returnKeyType="next"
+                      multiline
+                      selectionColor={colors.primary}
+                    />
+                    <TextInput
+                      style={[styles.descriptionInput, { color: colors.textSecondary }]}
+                      value={editingDescription}
+                      onChangeText={setEditingDescription}
+                      placeholder="Description (optional)"
+                      placeholderTextColor={colors.textDisabled}
+                      maxLength={500}
+                      onSubmitEditing={() => commitEdit(index)}
+                      returnKeyType="done"
+                      multiline
+                      selectionColor={colors.primary}
+                    />
+                  </View>
+                </View>
+                <View style={styles.editActions}>
+                  <TouchableOpacity
+                    onPress={cancelEdit}
+                    hitSlop={HitSlop.md}
+                    accessibilityRole="button"
+                    accessibilityLabel="Cancel editing"
+                  >
+                    <Ionicons name="close" size={19} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => commitEdit(index)}
+                    hitSlop={HitSlop.md}
+                    style={[styles.addConfirmBtn, { backgroundColor: colors.primary }]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Save task"
+                  >
+                    <Ionicons name="checkmark" size={18} color={colors.onPrimary} />
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <View style={styles.displayRow}>
+                {/* Index pill */}
                 <View style={[styles.indexPill, { backgroundColor: alpha(colors.primary, 0.12) }]}>
                   <Text style={[styles.indexText, { color: colors.primary }]}>{index + 1}</Text>
                 </View>
-                <View style={styles.editFields}>
-                  <TextInput
-                    style={[styles.titleInput, { color: colors.textPrimary }]}
-                    value={editingTitle}
-                    onChangeText={setEditingTitle}
-                    placeholder="Task"
-                    placeholderTextColor={colors.textDisabled}
-                    autoFocus
-                    maxLength={200}
-                    returnKeyType="next"
-                    multiline
-                    selectionColor={colors.primary}
-                  />
-                  <TextInput
-                    style={[styles.descriptionInput, { color: colors.textSecondary }]}
-                    value={editingDescription}
-                    onChangeText={setEditingDescription}
-                    placeholder="Description (optional)"
-                    placeholderTextColor={colors.textDisabled}
-                    maxLength={500}
-                    onSubmitEditing={() => commitEdit(index)}
-                    returnKeyType="done"
-                    multiline
-                    selectionColor={colors.primary}
-                  />
-                </View>
-              </View>
-              <View style={styles.editActions}>
-                <TouchableOpacity
-                  onPress={cancelEdit}
-                  hitSlop={HitSlop.md}
-                  accessibilityRole="button"
-                  accessibilityLabel="Cancel editing"
-                >
-                  <Ionicons name="close" size={19} color={colors.textSecondary} />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => commitEdit(index)}
-                  hitSlop={HitSlop.md}
-                  style={[styles.addConfirmBtn, { backgroundColor: colors.primary }]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Save task"
-                >
-                  <Ionicons name="checkmark" size={18} color={colors.onPrimary} />
-                </TouchableOpacity>
-              </View>
-            </>
-          ) : (
-            <View style={styles.displayRow}>
-              {/* Index pill */}
-              <View style={[styles.indexPill, { backgroundColor: alpha(colors.primary, 0.12) }]}>
-                <Text style={[styles.indexText, { color: colors.primary }]}>{index + 1}</Text>
-              </View>
 
-              {/* Task title, with its description underneath */}
-              <View style={styles.taskTextWrap}>
-                <Text
-                  style={[styles.taskText, { color: colors.textPrimary }]}
-                  numberOfLines={2}
-                >
-                  {task.title}
-                </Text>
-                {task.description ? (
-                  <Text
-                    style={[styles.taskDescription, { color: colors.textTertiary }]}
-                    numberOfLines={3}
-                  >
-                    {task.description}
+                {/* Task title, with its description underneath */}
+                <View style={styles.taskTextWrap}>
+                  <Text style={[styles.taskText, { color: colors.textPrimary }]} numberOfLines={2}>
+                    {task.title}
                   </Text>
-                ) : null}
-              </View>
+                  {task.description ? (
+                    <Text
+                      style={[styles.taskDescription, { color: colors.textTertiary }]}
+                      numberOfLines={3}
+                    >
+                      {task.description}
+                    </Text>
+                  ) : null}
+                </View>
 
-              {/* Row actions, including the drag handle, exist only while
+                {/* Row actions, including the drag handle, exist only while
                   unlocked. With no handle rendered nothing calls `drag()`, so
                   reordering is genuinely off rather than merely hidden. */}
-              {isEditMode ? (
-                <>
-                  {/* Edit */}
-                  <TouchableOpacity
-                    onPress={() => startEdit(index, task)}
-                    hitSlop={HitSlop.md}
-                    style={styles.actionIconBtn}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Edit task ${index + 1}`}
-                  >
-                    <FontAwesome5 name="pen" size={13} color={colors.textTertiary} />
-                  </TouchableOpacity>
+                {isEditMode ? (
+                  <>
+                    {/* Edit */}
+                    <TouchableOpacity
+                      onPress={() => startEdit(index, task)}
+                      hitSlop={HitSlop.md}
+                      style={styles.actionIconBtn}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Edit task ${index + 1}`}
+                    >
+                      <FontAwesome5 name="pen" size={13} color={colors.textTertiary} />
+                    </TouchableOpacity>
 
-                  {/* Delete */}
-                  <TouchableOpacity
-                    onPress={() => deleteTask(index)}
-                    hitSlop={HitSlop.md}
-                    style={styles.actionIconBtn}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Delete task ${index + 1}`}
-                  >
-                    <FontAwesome5 name="times" size={14} color={colors.danger} />
-                  </TouchableOpacity>
+                    {/* Delete */}
+                    <TouchableOpacity
+                      onPress={() => deleteTask(index)}
+                      hitSlop={HitSlop.md}
+                      style={styles.actionIconBtn}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Delete task ${index + 1}`}
+                    >
+                      <FontAwesome5 name="times" size={14} color={colors.danger} />
+                    </TouchableOpacity>
 
-                  {/* Drag handle */}
-                  <TouchableOpacity
-                    onLongPress={() => {
-                      haptics.longPress();
-                      drag();
-                    }}
-                    onPressIn={drag}
-                    hitSlop={HitSlop.sm}
-                    style={styles.dragHandle}
-                    accessibilityLabel={`Reorder task ${index + 1}`}
-                  >
-                    <FontAwesome5 name="grip-lines" size={13} color={colors.textDisabled} />
-                  </TouchableOpacity>
-                </>
-              ) : null}
-            </View>
-          )}
-        </View>
-      </ScaleDecorator>
-    );
-  }, [isEditMode, editingIndex, editingTitle, editingDescription, colors, tasks, onChange]);
+                    {/* Drag handle */}
+                    <TouchableOpacity
+                      onLongPress={() => {
+                        haptics.longPress();
+                        drag();
+                      }}
+                      onPressIn={drag}
+                      hitSlop={HitSlop.sm}
+                      style={styles.dragHandle}
+                      accessibilityLabel={`Reorder task ${index + 1}`}
+                    >
+                      <FontAwesome5 name="grip-lines" size={13} color={colors.textDisabled} />
+                    </TouchableOpacity>
+                  </>
+                ) : null}
+              </View>
+            )}
+          </View>
+        </ScaleDecorator>
+      );
+    },
+    [isEditMode, editingIndex, editingTitle, editingDescription, colors, tasks, onChange],
+  );
 
   return (
     <View style={styles.root}>
@@ -404,8 +394,7 @@ export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
         <View style={[styles.empty, { borderColor: colors.border }]}>
           <FontAwesome5 name="stream" size={18} color={colors.textDisabled} />
           <Text style={[styles.emptyText, { color: colors.textTertiary }]}>
-            No sequence yet. Add tasks and this habit will cycle through them, one per
-            session.
+            No sequence yet. Add tasks and this habit will cycle through them, one per session.
           </Text>
         </View>
       ) : null}
@@ -418,7 +407,7 @@ export const TaskSequenceEditor: React.FC<TaskSequenceEditorProps> = ({
           renderItem={renderItem}
           onDragEnd={({ data }) => {
             setItems(data);
-            onChange(data.map(d => d.task));
+            onChange(data.map((d) => d.task));
           }}
           scrollEnabled={false}
           activationDistance={5}

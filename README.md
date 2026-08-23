@@ -31,6 +31,7 @@ Follow these instructions to get a copy of the project up and running on your lo
 ### Prerequisites
 
 Ensure you have the following installed:
+
 - [Node.js](https://nodejs.org/) (v16 or newer recommended)
 - [npm](https://www.npmjs.com/), [Yarn](https://yarnpkg.com/), or [pnpm](https://pnpm.io/) (the project includes a `pnpm-lock.yaml`)
 - Expo CLI (`npm install -g expo-cli` or just use `npx expo`)
@@ -38,6 +39,7 @@ Ensure you have the following installed:
 ### Installation
 
 1. Clone the repository (if applicable) or navigate to the project directory:
+
    ```bash
    cd streaks
    ```
@@ -57,6 +59,7 @@ npx expo start
 ```
 
 From there, you can:
+
 - Press `a` to open the app on an Android Emulator.
 - Press `i` to open the app on an iOS Simulator.
 - Scan the QR code with your mobile device using the Expo Go app (Android) or the Camera app (iOS) to test on a physical device.
@@ -66,11 +69,12 @@ From there, you can:
 This project uses **Expo Application Services (EAS)** for building the app.
 
 To build the test or production variants (e.g., Android APKs/AABs):
+
 ```bash
 eas build --platform android
 ```
 
-*Note: The app is configured in `app.json` to support multiple variants on the same device (e.g., using different package names like `com.anonymous.streakcounter` for different environments).* The development variant (`APP_VARIANT=development`) also gets an amber icon so it is easy to tell apart from the production build on the home screen.
+_Note: The app is configured in `app.json` to support multiple variants on the same device (e.g., using different package names like `com.anonymous.streakcounter` for different environments)._ The development variant (`APP_VARIANT=development`) also gets an amber icon so it is easy to tell apart from the production build on the home screen.
 
 ## 🎨 App Icons
 

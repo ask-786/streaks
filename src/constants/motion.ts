@@ -36,5 +36,4 @@ export const Ease = {
  * Staggered entrance delay. Caps out so a long list never leaves the user
  * waiting on the twentieth row to fade in.
  */
-export const stagger = (index: number, step = 45, max = 260): number =>
-  Math.min(index * step, max);
+export const stagger = (index: number, step = 45, max = 260): number => Math.min(index * step, max);

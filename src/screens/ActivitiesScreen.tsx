@@ -1,12 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import {
-  View,
-  StyleSheet,
-  Alert,
-  ScrollView,
-  StatusBar,
-  BackHandler,
-} from 'react-native';
+import { View, StyleSheet, Alert, ScrollView, StatusBar, BackHandler } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -72,16 +65,26 @@ export const ActivitiesScreen: React.FC = () => {
   const [editingRequiresNote, setEditingRequiresNote] = useState<boolean>(false);
   const [editingWeeklyGoal, setEditingWeeklyGoal] = useState<number | undefined>(undefined);
   const [editingTaskSequence, setEditingTaskSequence] = useState<SequenceTask[]>([]);
-  const [editingSequenceMode, setEditingSequenceMode] = useState<'calendar' | 'log' | undefined>(undefined);
-  const [editingTimeBoundType, setEditingTimeBoundType] = useState<'before' | 'after' | 'between' | undefined>(undefined);
-  const [editingTimeBoundStartTime, setEditingTimeBoundStartTime] = useState<string | undefined>(undefined);
-  const [editingTimeBoundEndTime, setEditingTimeBoundEndTime] = useState<string | undefined>(undefined);
-  const [editingActivityType, setEditingActivityType] = useState<'goal' | 'endless' | undefined>(undefined);
+  const [editingSequenceMode, setEditingSequenceMode] = useState<'calendar' | 'log' | undefined>(
+    undefined,
+  );
+  const [editingTimeBoundType, setEditingTimeBoundType] = useState<
+    'before' | 'after' | 'between' | undefined
+  >(undefined);
+  const [editingTimeBoundStartTime, setEditingTimeBoundStartTime] = useState<string | undefined>(
+    undefined,
+  );
+  const [editingTimeBoundEndTime, setEditingTimeBoundEndTime] = useState<string | undefined>(
+    undefined,
+  );
+  const [editingActivityType, setEditingActivityType] = useState<'goal' | 'endless' | undefined>(
+    undefined,
+  );
   const [editingStreakGoal, setEditingStreakGoal] = useState<number | undefined>(undefined);
 
   // Split active vs completed
-  const activeActivities = activities.filter(a => !a.completedAt);
-  const completedActivities = activities.filter(a => !!a.completedAt);
+  const activeActivities = activities.filter((a) => !a.completedAt);
+  const completedActivities = activities.filter((a) => !!a.completedAt);
 
   // Selection never spans the two tabs — the actions that apply to a finished
   // habit are not the ones that apply to a running one.
@@ -101,8 +104,8 @@ export const ActivitiesScreen: React.FC = () => {
     );
     const map: Record<string, boolean[]> = {};
     for (const activity of activities) {
-      const dates = new Set((logs[activity.id] ?? []).map(e => e.date));
-      map[activity.id] = window.map(d => dates.has(d));
+      const dates = new Set((logs[activity.id] ?? []).map((e) => e.date));
+      map[activity.id] = window.map((d) => dates.has(d));
     }
     return map;
   }, [activities, logs]);
@@ -121,9 +124,34 @@ export const ActivitiesScreen: React.FC = () => {
     streakGoal?: number,
   ) => {
     if (editingItemId) {
-      editActivity(editingItemId, name, description, requiresNote, weeklyGoal, taskSequence, undefined, sequenceMode, timeBoundType, timeBoundStartTime, timeBoundEndTime);
+      editActivity(
+        editingItemId,
+        name,
+        description,
+        requiresNote,
+        weeklyGoal,
+        taskSequence,
+        undefined,
+        sequenceMode,
+        timeBoundType,
+        timeBoundStartTime,
+        timeBoundEndTime,
+      );
     } else {
-      createActivity(name, description, requiresNote, weeklyGoal, taskSequence, undefined, sequenceMode, timeBoundType, timeBoundStartTime, timeBoundEndTime, activityType, streakGoal);
+      createActivity(
+        name,
+        description,
+        requiresNote,
+        weeklyGoal,
+        taskSequence,
+        undefined,
+        sequenceMode,
+        timeBoundType,
+        timeBoundStartTime,
+        timeBoundEndTime,
+        activityType,
+        streakGoal,
+      );
     }
     closeModal();
   };
@@ -138,7 +166,7 @@ export const ActivitiesScreen: React.FC = () => {
   };
 
   const openEditModal = (id: string) => {
-    const activity = activities.find(a => a.id === id);
+    const activity = activities.find((a) => a.id === id);
     if (!activity || activity.completedAt) return; // Completed habits are read-only
     setEditingItemId(id);
     setEditingItemName(activity.name);
@@ -176,8 +204,8 @@ export const ActivitiesScreen: React.FC = () => {
 
   const toggleSelection = (id: string) => {
     haptics.selection();
-    setSelectedIds(prev =>
-      prev.includes(id) ? prev.filter(existing => existing !== id) : [...prev, id],
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((existing) => existing !== id) : [...prev, id],
     );
   };
 
@@ -198,7 +226,7 @@ export const ActivitiesScreen: React.FC = () => {
   /** Long press is the way in to selection mode, from either tab. */
   const handleLongPress = (id: string) => {
     if (selectedIds.includes(id)) return; // already picked — leave it picked
-    setSelectedIds(prev => [...prev, id]);
+    setSelectedIds((prev) => [...prev, id]);
   };
 
   const handleTabChange = (tab: 'active' | 'completed') => {
@@ -206,7 +234,7 @@ export const ActivitiesScreen: React.FC = () => {
     setActiveTab(tab);
   };
 
-  const selectAll = () => setSelectedIds(visibleActivities.map(a => a.id));
+  const selectAll = () => setSelectedIds(visibleActivities.map((a) => a.id));
 
   /**
    * Android back unwinds the screen's states in the order the user entered
@@ -236,7 +264,7 @@ export const ActivitiesScreen: React.FC = () => {
   /** Names the current selection the way a sentence would. */
   const describeSelection = () => {
     if (selectedIds.length === 1) {
-      const only = activities.find(a => a.id === selectedIds[0]);
+      const only = activities.find((a) => a.id === selectedIds[0]);
       return `"${only?.name ?? 'This habit'}"`;
     }
     return `${selectedIds.length} habits`;
@@ -305,13 +333,18 @@ export const ActivitiesScreen: React.FC = () => {
       : [{ icon: 'trash-alt', label: 'Delete', tone: 'danger', onPress: confirmDelete }];
 
   // Today's completion count across active habits — a one-glance daily summary.
-  const doneToday = activeActivities.filter(a => {
+  const doneToday = activeActivities.filter((a) => {
     const s = getActivityStats(a.id);
     return s.unit === 'week' ? s.isThisWeekGoalMet : s.isTodayLogged;
   }).length;
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top + Spacing.md }]}>
+    <View
+      style={[
+        styles.container,
+        { backgroundColor: colors.background, paddingTop: insets.top + Spacing.md },
+      ]}
+    >
       <StatusBar
         barStyle={isDark ? 'light-content' : 'dark-content'}
         backgroundColor={colors.background}
@@ -383,7 +416,12 @@ export const ActivitiesScreen: React.FC = () => {
           onChange={handleTabChange}
           options={[
             { value: 'active', label: 'Active', icon: 'fire', count: activeActivities.length },
-            { value: 'completed', label: 'Completed', icon: 'trophy', count: completedActivities.length },
+            {
+              value: 'completed',
+              label: 'Completed',
+              icon: 'trophy',
+              count: completedActivities.length,
+            },
           ]}
         />
       </Animated.View>
@@ -491,12 +529,7 @@ export const ActivitiesScreen: React.FC = () => {
                         {isSelecting ? (
                           <SelectionCheck selected={isSelected} />
                         ) : (
-                          <View
-                            style={[
-                              styles.trophy,
-                              { backgroundColor: colors.warningMuted },
-                            ]}
-                          >
+                          <View style={[styles.trophy, { backgroundColor: colors.warningMuted }]}>
                             <FontAwesome5 name="trophy" size={16} color={colors.warning} />
                           </View>
                         )}
@@ -512,9 +545,8 @@ export const ActivitiesScreen: React.FC = () => {
                             style={[styles.completedMeta, { color: colors.textTertiary }]}
                             numberOfLines={1}
                           >
-                            Best {stats.longestStreak}{' '}
-                            {stats.unit === 'week' ? 'wks' : 'days'} · Finished{' '}
-                            {dayjs(item.completedAt).format('MMM D, YYYY')}
+                            Best {stats.longestStreak} {stats.unit === 'week' ? 'wks' : 'days'} ·
+                            Finished {dayjs(item.completedAt).format('MMM D, YYYY')}
                           </Text>
                         </View>
 

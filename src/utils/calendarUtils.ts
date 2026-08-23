@@ -57,18 +57,20 @@ export const buildMarkedDates = (
   });
 
   // Mark all logged dates
-  loggedDates.forEach(date => {
+  loggedDates.forEach((date) => {
     marked[date] = cell(palette.logged, palette.loggedText, '700');
   });
 
   // Mark missed days (from activity creation date up to the end of the active period)
   // For completed activities the active period ends on the completion date.
   // For ongoing activities it ends the day before today (today is handled separately).
-  const startOfPeriod = activityCreatedAt ? dayjs(activityCreatedAt) : dayjs(today).startOf('month');
+  const startOfPeriod = activityCreatedAt
+    ? dayjs(activityCreatedAt)
+    : dayjs(today).startOf('month');
   // upperBound is exclusive: we iterate while cursor is strictly before this day.
   const upperBound = completionDateStr
-    ? dayjs(completionDateStr).add(1, 'day')  // include the completion day itself
-    : dayjs(today);                             // stop before today (today handled below)
+    ? dayjs(completionDateStr).add(1, 'day') // include the completion day itself
+    : dayjs(today); // stop before today (today handled below)
   let cursor = startOfPeriod.startOf('day');
 
   while (cursor.isBefore(upperBound, 'day')) {

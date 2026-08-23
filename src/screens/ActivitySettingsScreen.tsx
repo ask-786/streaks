@@ -1,24 +1,11 @@
 import React, { useState } from 'react';
-import {
-  View,
-  StyleSheet,
-  ScrollView,
-  Alert,
-  TextInput,
-  Pressable,
-} from 'react-native';
+import { View, StyleSheet, ScrollView, Alert, TextInput, Pressable } from 'react-native';
 import { Text } from 'react-native-paper';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { FontAwesome5, Ionicons } from '@expo/vector-icons';
 import { useAttendanceStore, SequenceTask } from '../store/attendanceStore';
 import { TaskSequenceEditor } from '../components/TaskSequenceEditor';
-import {
-  Spacing,
-  Typography,
-  BorderRadius,
-  ScreenPadding,
-  alpha,
-} from '../constants';
+import { Spacing, Typography, BorderRadius, ScreenPadding, alpha } from '../constants';
 import { useTheme } from '../hooks/useTheme';
 import { to12h, to24h, isValidTime12h, todayStr, formatTime12h } from '../utils/dateUtils';
 import { haptics } from '../utils/haptics';
@@ -41,9 +28,7 @@ const SectionHeading: React.FC<{
       </View>
       <View style={{ flex: 1 }}>
         <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>{title}</Text>
-        <Text style={[styles.sectionSubtitle, { color: colors.textTertiary }]}>
-          {subtitle}
-        </Text>
+        <Text style={[styles.sectionSubtitle, { color: colors.textTertiary }]}>{subtitle}</Text>
       </View>
     </View>
   );
@@ -71,9 +56,7 @@ const ActionCard: React.FC<{
           </View>
           <View style={{ flex: 1 }}>
             <Text style={[styles.actionLabel, { color: tint }]}>{label}</Text>
-            <Text style={[styles.actionSublabel, { color: colors.textTertiary }]}>
-              {sublabel}
-            </Text>
+            <Text style={[styles.actionSublabel, { color: colors.textTertiary }]}>{sublabel}</Text>
           </View>
           <Ionicons name="chevron-forward" size={16} color={colors.textDisabled} />
         </View>
@@ -95,38 +78,60 @@ export const ActivitySettingsScreen: React.FC = () => {
     completeActivity,
   } = useAttendanceStore();
 
-  const selectedActivity = activities.find(a => a.id === selectedActivityId);
+  const selectedActivity = activities.find((a) => a.id === selectedActivityId);
   const isCompleted = !!selectedActivity?.completedAt;
 
-  const [timeBoundStartTime, setTimeBoundStartTime] = useState(() => to12h(selectedActivity?.timeBoundStartTime || '').time);
-  const [startAmPm, setStartAmPm] = useState<'AM' | 'PM'>(() => to12h(selectedActivity?.timeBoundStartTime || '').ampm);
-  const [timeBoundEndTime, setTimeBoundEndTime] = useState(() => to12h(selectedActivity?.timeBoundEndTime || '').time);
-  const [endAmPm, setEndAmPm] = useState<'AM' | 'PM'>(() => to12h(selectedActivity?.timeBoundEndTime || '').ampm);
+  const [timeBoundStartTime, setTimeBoundStartTime] = useState(
+    () => to12h(selectedActivity?.timeBoundStartTime || '').time,
+  );
+  const [startAmPm, setStartAmPm] = useState<'AM' | 'PM'>(
+    () => to12h(selectedActivity?.timeBoundStartTime || '').ampm,
+  );
+  const [timeBoundEndTime, setTimeBoundEndTime] = useState(
+    () => to12h(selectedActivity?.timeBoundEndTime || '').time,
+  );
+  const [endAmPm, setEndAmPm] = useState<'AM' | 'PM'>(
+    () => to12h(selectedActivity?.timeBoundEndTime || '').ampm,
+  );
 
   const timeBoundType = selectedActivity?.timeBoundType;
 
-  const isTimeOrderValid = !timeBoundType || timeBoundType !== 'between' || (
-    isValidTime12h(timeBoundStartTime) && isValidTime12h(timeBoundEndTime) &&
-    to24h(timeBoundStartTime, startAmPm) < to24h(timeBoundEndTime, endAmPm)
-  );
+  const isTimeOrderValid =
+    !timeBoundType ||
+    timeBoundType !== 'between' ||
+    (isValidTime12h(timeBoundStartTime) &&
+      isValidTime12h(timeBoundEndTime) &&
+      to24h(timeBoundStartTime, startAmPm) < to24h(timeBoundEndTime, endAmPm));
 
-  const isTimeValid = !timeBoundType || (
-    timeBoundType === 'between'
+  const isTimeValid =
+    !timeBoundType ||
+    (timeBoundType === 'between'
       ? isValidTime12h(timeBoundStartTime) && isValidTime12h(timeBoundEndTime) && isTimeOrderValid
-      : isValidTime12h(timeBoundStartTime)
-  );
+      : isValidTime12h(timeBoundStartTime));
 
-  const timeOrderInvalid = timeBoundType === 'between' &&
-    isValidTime12h(timeBoundStartTime) && isValidTime12h(timeBoundEndTime) &&
+  const timeOrderInvalid =
+    timeBoundType === 'between' &&
+    isValidTime12h(timeBoundStartTime) &&
+    isValidTime12h(timeBoundEndTime) &&
     to24h(timeBoundStartTime, startAmPm) >= to24h(timeBoundEndTime, endAmPm);
 
-  const startInvalid = (timeBoundStartTime.length > 0 && !isValidTime12h(timeBoundStartTime)) || timeOrderInvalid;
-  const endInvalid = (timeBoundType === 'between' && timeBoundEndTime.length > 0 && !isValidTime12h(timeBoundEndTime)) || timeOrderInvalid;
+  const startInvalid =
+    (timeBoundStartTime.length > 0 && !isValidTime12h(timeBoundStartTime)) || timeOrderInvalid;
+  const endInvalid =
+    (timeBoundType === 'between' &&
+      timeBoundEndTime.length > 0 &&
+      !isValidTime12h(timeBoundEndTime)) ||
+    timeOrderInvalid;
 
   const hasUnsavedTimeChanges = () => {
     if (!selectedActivity || !timeBoundType) return false;
-    if (to24h(timeBoundStartTime, startAmPm) !== (selectedActivity.timeBoundStartTime || '')) return true;
-    if (timeBoundType === 'between' && to24h(timeBoundEndTime, endAmPm) !== (selectedActivity.timeBoundEndTime || '')) return true;
+    if (to24h(timeBoundStartTime, startAmPm) !== (selectedActivity.timeBoundStartTime || ''))
+      return true;
+    if (
+      timeBoundType === 'between' &&
+      to24h(timeBoundEndTime, endAmPm) !== (selectedActivity.timeBoundEndTime || '')
+    )
+      return true;
     return false;
   };
 
@@ -165,7 +170,7 @@ export const ActivitySettingsScreen: React.FC = () => {
       selectedActivity.sequenceMode,
       timeBoundType,
       newStart,
-      newEnd ?? undefined
+      newEnd ?? undefined,
     );
     await appendNote(selectedActivityId, todayStr(), noteText);
   };
@@ -180,7 +185,7 @@ export const ActivitySettingsScreen: React.FC = () => {
         selectedActivity.weeklyGoal,
         newTasks,
         selectedActivity.sequenceStartDate,
-        selectedActivity.sequenceMode || 'calendar'
+        selectedActivity.sequenceMode || 'calendar',
       );
     }
   };
@@ -199,7 +204,7 @@ export const ActivitySettingsScreen: React.FC = () => {
             if (selectedActivityId) resetActivityData(selectedActivityId);
           },
         },
-      ]
+      ],
     );
   };
 
@@ -218,7 +223,7 @@ export const ActivitySettingsScreen: React.FC = () => {
             completeActivity(selectedActivityId);
           },
         },
-      ]
+      ],
     );
   };
 
@@ -254,10 +259,7 @@ export const ActivitySettingsScreen: React.FC = () => {
         ]}
       >
         <TextInput
-          style={[
-            styles.input,
-            { color: invalid ? colors.danger : colors.textPrimary },
-          ]}
+          style={[styles.input, { color: invalid ? colors.danger : colors.textPrimary }]}
           placeholder="HH:MM"
           placeholderTextColor={colors.textDisabled}
           value={value}
@@ -304,9 +306,7 @@ export const ActivitySettingsScreen: React.FC = () => {
                 <FontAwesome5 name="trophy" size={18} color={colors.success} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.bannerTitle, { color: colors.success }]}>
-                  Habit completed
-                </Text>
+                <Text style={[styles.bannerTitle, { color: colors.success }]}>Habit completed</Text>
                 <Text style={[styles.bannerSub, { color: colors.textSecondary }]}>
                   Finished on {dayjs(selectedActivity.completedAt).format('MMMM D, YYYY')}. This
                   habit is now read-only and all history is preserved.

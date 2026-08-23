@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react';
-import { requestPermissionsAsync, rescheduleAllNotifications } from '../services/notificationService';
+import {
+  requestPermissionsAsync,
+  rescheduleAllNotifications,
+} from '../services/notificationService';
 import { useAttendanceStore } from '../store/attendanceStore';
 
 export function useNotifications() {
   const [hasPermissions, setHasPermissions] = useState(false);
-  
+
   // Observe state that dictates notification scheduling
   const activities = useAttendanceStore((state) => state.activities);
   const logs = useAttendanceStore((state) => state.logs);
@@ -18,9 +21,9 @@ export function useNotifications() {
         setHasPermissions(granted);
       }
     };
-    
+
     initNotifications();
-    
+
     return () => {
       mounted = false;
     };
@@ -29,7 +32,7 @@ export function useNotifications() {
   useEffect(() => {
     // Only reschedule when permissions are granted and initial hydration is done
     if (hasPermissions && !isLoading) {
-      rescheduleAllNotifications(activities, logs).catch(err => {
+      rescheduleAllNotifications(activities, logs).catch((err) => {
         console.error('Failed to reschedule notifications:', err);
       });
     }

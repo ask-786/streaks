@@ -2,14 +2,21 @@
   "name": "streak-counter",
   "version": "2.4.0",
   "main": "index.ts",
+  "packageManager": "pnpm@10.32.1",
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "tsc --noEmit",
     "version:patch": "npm version patch -m \"chore: bump version to %s\"",
     "version:minor": "npm version minor -m \"chore: bump version to %s\"",
-    "version:major": "npm version major -m \"chore: bump version to %s\""
+    "version:major": "npm version major -m \"chore: bump version to %s\"",
+    "prepare": "husky"
   },
   "dependencies": {
     "@expo/metro-runtime": "^55.0.9",
@@ -45,8 +52,25 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
+    "@commitlint/cli": "^21.2.2",
+    "@commitlint/config-conventional": "^21.2.2",
     "@types/react": "~19.2.2",
+    "@typescript-eslint/eslint-plugin": "^8.67.0",
+    "eslint": "^9.39.5",
+    "eslint-config-expo": "55.0.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.3.0",
+    "prettier": "^3.9.6",
     "typescript": "~5.9.2"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml}": [
+      "prettier --write"
+    ]
   },
   "private": true
 }

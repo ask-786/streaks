@@ -8,13 +8,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Text } from 'react-native-paper';
 import { FontAwesome5 } from '@expo/vector-icons';
-import {
-  BorderRadius,
-  Spacing,
-  Typography,
-  Spring,
-  alpha,
-} from '../constants';
+import { BorderRadius, Spacing, Typography, Spring, alpha } from '../constants';
 import { useTheme } from '../hooks/useTheme';
 import { haptics } from '../utils/haptics';
 import { PressableScale } from './ui';
@@ -54,10 +48,7 @@ export const LogButton: React.FC<LogButtonProps> = ({
   useEffect(() => {
     if (isLogged || isCompleted) {
       celebrate.value = 0;
-      celebrate.value = withSequence(
-        withSpring(1, Spring.bouncy),
-        withSpring(0, Spring.gentle),
-      );
+      celebrate.value = withSequence(withSpring(1, Spring.bouncy), withSpring(0, Spring.gentle));
     }
   }, [isLogged, isCompleted]);
 
@@ -78,13 +69,7 @@ export const LogButton: React.FC<LogButtonProps> = ({
     onPress();
   };
 
-  const state = isCompleted
-    ? 'completed'
-    : isLogged
-      ? 'logged'
-      : disabled
-        ? 'locked'
-        : 'ready';
+  const state = isCompleted ? 'completed' : isLogged ? 'logged' : disabled ? 'locked' : 'ready';
 
   const visuals = {
     ready: {
@@ -150,9 +135,7 @@ export const LogButton: React.FC<LogButtonProps> = ({
                   styles.iconChip,
                   {
                     backgroundColor:
-                      state === 'ready'
-                        ? alpha('#FFFFFF', 0.18)
-                        : alpha(visuals.fg, 0.14),
+                      state === 'ready' ? alpha('#FFFFFF', 0.18) : alpha(visuals.fg, 0.14),
                   },
                 ]}
               >
@@ -163,9 +146,7 @@ export const LogButton: React.FC<LogButtonProps> = ({
           </View>
 
           {state === 'locked' && disabledReason ? (
-            <Text style={[styles.hint, { color: colors.textTertiary }]}>
-              {disabledReason}
-            </Text>
+            <Text style={[styles.hint, { color: colors.textTertiary }]}>{disabledReason}</Text>
           ) : null}
         </PressableScale>
       </Animated.View>

@@ -18,7 +18,7 @@ import { todayStr, yesterdayStr } from './dateUtils';
 export const calculateCurrentStreak = (loggedDates: string[]): number => {
   if (loggedDates.length === 0) return 0;
 
-  const sanitizedDates = loggedDates.map(d => dayjs(d).format('YYYY-MM-DD'));
+  const sanitizedDates = loggedDates.map((d) => dayjs(d).format('YYYY-MM-DD'));
   const loggedSet = new Set(sanitizedDates);
   const today = todayStr();
   const yesterday = yesterdayStr();
@@ -56,7 +56,7 @@ export const calculateLongestStreak = (loggedDates: string[]): number => {
   if (loggedDates.length === 0) return 0;
 
   // Extract unique date strings to handle multiple logs per day safely
-  const sanitizedDates = Array.from(new Set(loggedDates.map(d => dayjs(d).format('YYYY-MM-DD'))));
+  const sanitizedDates = Array.from(new Set(loggedDates.map((d) => dayjs(d).format('YYYY-MM-DD'))));
 
   // Sort ascending
   const sorted = [...sanitizedDates].sort();
@@ -87,7 +87,7 @@ export const calculateLongestStreak = (loggedDates: string[]): number => {
  */
 export const isStreakActive = (loggedDates: string[]): boolean => {
   if (loggedDates.length === 0) return false;
-  const sanitizedDates = loggedDates.map(d => dayjs(d).format('YYYY-MM-DD'));
+  const sanitizedDates = loggedDates.map((d) => dayjs(d).format('YYYY-MM-DD'));
   const loggedSet = new Set(sanitizedDates);
   return loggedSet.has(todayStr()) || loggedSet.has(yesterdayStr());
 };
@@ -110,7 +110,7 @@ const getWeekStart = (dateStr: string): string => {
 const groupLogsByWeek = (loggedDates: string[]): Map<string, number> => {
   const map = new Map<string, number>();
   // Deduplicate by calendar day first so double-logging a day doesn't inflate the count
-  const uniqueDays = Array.from(new Set(loggedDates.map(d => dayjs(d).format('YYYY-MM-DD'))));
+  const uniqueDays = Array.from(new Set(loggedDates.map((d) => dayjs(d).format('YYYY-MM-DD'))));
   for (const day of uniqueDays) {
     const weekKey = getWeekStart(day);
     map.set(weekKey, (map.get(weekKey) ?? 0) + 1);

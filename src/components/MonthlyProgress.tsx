@@ -17,17 +17,13 @@ interface MonthlyProgressProps {
  * The percentage is the headline now rather than a footnote under the bar, and
  * it is colour-coded so a glance tells you whether the month is going well.
  */
-export const MonthlyProgress: React.FC<MonthlyProgressProps> = ({
-  loggedDays,
-  totalDays,
-}) => {
+export const MonthlyProgress: React.FC<MonthlyProgressProps> = ({ loggedDays, totalDays }) => {
   const { colors } = useTheme();
   const ratio = totalDays > 0 ? Math.min(loggedDays / totalDays, 1) : 0;
   const percent = Math.round(ratio * 100);
 
   // Three bands: struggling, holding, strong.
-  const tint =
-    percent >= 80 ? colors.success : percent >= 50 ? colors.primary : colors.warning;
+  const tint = percent >= 80 ? colors.success : percent >= 50 ? colors.primary : colors.warning;
   const verdict =
     percent >= 80 ? 'Excellent consistency' : percent >= 50 ? 'Holding steady' : 'Room to grow';
 

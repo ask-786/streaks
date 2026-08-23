@@ -1,10 +1,6 @@
 import React, { useCallback } from 'react';
 import { Pressable, PressableProps, StyleProp, ViewStyle } from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-} from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import { PressInDelay, Spring } from '../../constants';
 import { haptics } from '../../utils/haptics';
 

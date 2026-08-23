@@ -6,15 +6,15 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import dayjs from 'dayjs';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { buildMarkedDates } from '../utils/calendarUtils';
-import { useAttendanceStore, getTaskForDate, SequenceDrop, SequenceTask } from '../store/attendanceStore';
+import {
+  useAttendanceStore,
+  getTaskForDate,
+  SequenceDrop,
+  SequenceTask,
+} from '../store/attendanceStore';
 import { CalendarLegend } from '../components/CalendarLegend';
 import { LogDetailsModal } from '../components/LogDetailsModal';
-import {
-  Spacing,
-  Typography,
-  BorderRadius,
-  ScreenPadding,
-} from '../constants';
+import { Spacing, Typography, BorderRadius, ScreenPadding } from '../constants';
 import { useTheme } from '../hooks/useTheme';
 import { todayStr, formatTimeWithTz } from '../utils/dateUtils';
 import { haptics } from '../utils/haptics';
@@ -25,18 +25,38 @@ export const CalendarScreen: React.FC = () => {
   const [logDetailsVisible, setLogDetailsVisible] = React.useState(false);
   const [logModalDate, setLogModalDate] = React.useState('');
   const [logModalDateKey, setLogModalDateKey] = React.useState('');
-  const [logModalTime, setLogModalTime] = React.useState<{ time: string, tzDisplay: string | null } | null>(null);
+  const [logModalTime, setLogModalTime] = React.useState<{
+    time: string;
+    tzDisplay: string | null;
+  } | null>(null);
   const [logModalTask, setLogModalTask] = React.useState<SequenceTask | null>(null);
   const [logModalIsLogged, setLogModalIsLogged] = React.useState(false);
-  const [logModalTimeBoundKind, setLogModalTimeBoundKind] = React.useState<'too_early' | 'too_late' | undefined>(undefined);
+  const [logModalTimeBoundKind, setLogModalTimeBoundKind] = React.useState<
+    'too_early' | 'too_late' | undefined
+  >(undefined);
   const [logModalIsSequenceSkipped, setLogModalIsSequenceSkipped] = React.useState(false);
   const [logModalDroppedTasks, setLogModalDroppedTasks] = React.useState<SequenceDrop[]>([]);
 
-  const { logs, notes, taskHistory, sequenceSkips, sequenceDrops, selectedActivityId, activities, appendNote, editNote, isHideExtraDaysEnabled } = useAttendanceStore();
-  const selectedActivity = activities.find(a => a.id === selectedActivityId);
-  const loggedDates = selectedActivityId ? (logs[selectedActivityId] || []).map(e => e.date) : [];
-  const activitySequenceSkips: string[] = selectedActivityId ? (sequenceSkips[selectedActivityId] ?? []) : [];
-  const activityDrops: SequenceDrop[] = selectedActivityId ? (sequenceDrops[selectedActivityId] ?? []) : [];
+  const {
+    logs,
+    notes,
+    taskHistory,
+    sequenceSkips,
+    sequenceDrops,
+    selectedActivityId,
+    activities,
+    appendNote,
+    editNote,
+    isHideExtraDaysEnabled,
+  } = useAttendanceStore();
+  const selectedActivity = activities.find((a) => a.id === selectedActivityId);
+  const loggedDates = selectedActivityId ? (logs[selectedActivityId] || []).map((e) => e.date) : [];
+  const activitySequenceSkips: string[] = selectedActivityId
+    ? (sequenceSkips[selectedActivityId] ?? [])
+    : [];
+  const activityDrops: SequenceDrop[] = selectedActivityId
+    ? (sequenceDrops[selectedActivityId] ?? [])
+    : [];
   const today = todayStr();
   const markedDates = buildMarkedDates(
     loggedDates,
@@ -156,7 +176,7 @@ export const CalendarScreen: React.FC = () => {
                 // Use .date field (locked local date) instead of parsing the UTC timestamp,
                 // so the calendar day never shifts when the device's timezone changes.
                 const rawEntry = selectedActivityId
-                  ? (logs[selectedActivityId] || []).find(e => e.date === day.dateString)
+                  ? (logs[selectedActivityId] || []).find((e) => e.date === day.dateString)
                   : undefined;
                 const dateKey = day.dateString;
                 setLogModalDate(dayjs(day.dateString).format('MMMM D, YYYY'));
@@ -165,20 +185,22 @@ export const CalendarScreen: React.FC = () => {
                 // Tasks dropped on this day are worth showing whether or not
                 // the day itself was logged — a rest day can still be the day
                 // Leg left the cycle.
-                setLogModalDroppedTasks(activityDrops.filter(d => d.date === dateKey));
+                setLogModalDroppedTasks(activityDrops.filter((d) => d.date === dateKey));
                 if (rawEntry) {
                   // Show time in the timezone where it was originally logged
-                  setLogModalTime(rawEntry.ts.includes('T') ? formatTimeWithTz(rawEntry.ts, rawEntry.tz) : null);
+                  setLogModalTime(
+                    rawEntry.ts.includes('T') ? formatTimeWithTz(rawEntry.ts, rawEntry.tz) : null,
+                  );
                   // Compute which task was active on this day (accounting for skips)
                   let task: SequenceTask | null = null;
                   if (selectedActivityId) {
                     task = taskHistory[selectedActivityId]?.[day.dateString] || null;
                     if (!task && selectedActivity) {
-                      const actLogDates = (logs[selectedActivityId] || []).map(e => e.date);
+                      const actLogDates = (logs[selectedActivityId] || []).map((e) => e.date);
                       task = getTaskForDate(selectedActivity, day.dateString, {
                         logs: actLogDates,
                         postponed: activitySequenceSkips,
-                        dropped: activityDrops.map(d => d.date),
+                        dropped: activityDrops.map((d) => d.date),
                       });
                     }
                   }
@@ -192,13 +214,26 @@ export const CalendarScreen: React.FC = () => {
                   // Compute time-bound kind for unlogged today
                   if (day.dateString === today && selectedActivity?.timeBoundType) {
                     const currentTime = dayjs().format('HH:mm');
-                    const { timeBoundType, timeBoundStartTime, timeBoundEndTime } = selectedActivity;
+                    const { timeBoundType, timeBoundStartTime, timeBoundEndTime } =
+                      selectedActivity;
                     let kind: 'too_early' | 'too_late' | undefined;
-                    if (timeBoundType === 'before' && timeBoundStartTime && currentTime >= timeBoundStartTime) {
+                    if (
+                      timeBoundType === 'before' &&
+                      timeBoundStartTime &&
+                      currentTime >= timeBoundStartTime
+                    ) {
                       kind = 'too_late';
-                    } else if (timeBoundType === 'after' && timeBoundStartTime && currentTime < timeBoundStartTime) {
+                    } else if (
+                      timeBoundType === 'after' &&
+                      timeBoundStartTime &&
+                      currentTime < timeBoundStartTime
+                    ) {
                       kind = 'too_early';
-                    } else if (timeBoundType === 'between' && timeBoundStartTime && timeBoundEndTime) {
+                    } else if (
+                      timeBoundType === 'between' &&
+                      timeBoundStartTime &&
+                      timeBoundEndTime
+                    ) {
                       if (currentTime < timeBoundStartTime) kind = 'too_early';
                       else if (currentTime >= timeBoundEndTime) kind = 'too_late';
                     }

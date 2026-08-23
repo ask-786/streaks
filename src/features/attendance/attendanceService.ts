@@ -83,9 +83,9 @@ export interface Activity {
  * timezone changes (e.g. the user travels to another country).
  */
 export interface LogEntry {
-  ts: string;   // UTC ISO string, e.g. "2026-07-10T08:45:00.000Z"
+  ts: string; // UTC ISO string, e.g. "2026-07-10T08:45:00.000Z"
   date: string; // Local YYYY-MM-DD at the time of logging, e.g. "2026-07-10"
-  tz?: string;  // IANA timezone name at time of logging, e.g. "Asia/Kolkata"
+  tz?: string; // IANA timezone name at time of logging, e.g. "Asia/Kolkata"
 }
 
 export interface NoteEntry {
@@ -152,11 +152,11 @@ export function normalizeSequenceTask(value: unknown): SequenceTask | null {
   if (!value || typeof value !== 'object') return null;
 
   const raw = value as Record<string, unknown>;
-  const titleSource = [raw.title, raw.text, raw.name].find(v => typeof v === 'string');
+  const titleSource = [raw.title, raw.text, raw.name].find((v) => typeof v === 'string');
   const title = typeof titleSource === 'string' ? titleSource.trim() : '';
   if (!title) return null;
 
-  const descSource = [raw.description, raw.notes, raw.detail].find(v => typeof v === 'string');
+  const descSource = [raw.description, raw.notes, raw.detail].find((v) => typeof v === 'string');
   const description = typeof descSource === 'string' ? descSource.trim() : '';
 
   return description ? { title, description } : { title };
@@ -165,9 +165,7 @@ export function normalizeSequenceTask(value: unknown): SequenceTask | null {
 /** Normalizes a whole stored sequence, dropping entries with no usable title. */
 export function normalizeSequenceTasks(value: unknown): SequenceTask[] {
   if (!Array.isArray(value)) return [];
-  return value
-    .map(normalizeSequenceTask)
-    .filter((t): t is SequenceTask => t !== null);
+  return value.map(normalizeSequenceTask).filter((t): t is SequenceTask => t !== null);
 }
 
 /**
@@ -219,7 +217,7 @@ export const attendanceService = {
       const parsed = JSON.parse(raw) as Activity[];
       // Migrate: sequences used to be plain strings, before tasks gained a
       // description. Normalizing here means nothing downstream sees both forms.
-      return parsed.map(activity => {
+      return parsed.map((activity) => {
         if (!activity.taskSequence) return activity;
         return { ...activity, taskSequence: normalizeSequenceTasks(activity.taskSequence) };
       });
@@ -234,7 +232,7 @@ export const attendanceService = {
 
   updateActivity: async (id: string, newName: string): Promise<void> => {
     const activities = await attendanceService.getActivities();
-    const updated = activities.map(a => (a.id === id ? { ...a, name: newName } : a));
+    const updated = activities.map((a) => (a.id === id ? { ...a, name: newName } : a));
     await attendanceService.saveActivities(updated);
   },
 
@@ -248,7 +246,7 @@ export const attendanceService = {
       // Wrap them in LogEntry objects, computing the local date from the timestamp.
       const result: Record<string, LogEntry[]> = {};
       for (const actId of Object.keys(parsed)) {
-        result[actId] = (parsed[actId] ?? []).map(entry => {
+        result[actId] = (parsed[actId] ?? []).map((entry) => {
           if (typeof entry === 'string') {
             // Old format: string is either a UTC ISO string or a bare YYYY-MM-DD date.
             const ts = entry.includes('T') ? entry : `${entry}T00:00:00.000Z`;
@@ -356,7 +354,7 @@ export const attendanceService = {
     const today = todayStr();
 
     const activityLogs = logs[activityId] || [];
-    if (activityLogs.some(entry => entry.date === today)) {
+    if (activityLogs.some((entry) => entry.date === today)) {
       return false; // already logged today
     }
 
@@ -368,7 +366,9 @@ export const attendanceService = {
     if (note && note.trim()) {
       const notes = await attendanceService.getNotes();
       if (!notes[activityId]) notes[activityId] = {};
-      notes[activityId][today] = [{ text: note.trim(), time: dayjs().toISOString(), tz: getCurrentTz() }];
+      notes[activityId][today] = [
+        { text: note.trim(), time: dayjs().toISOString(), tz: getCurrentTz() },
+      ];
       await attendanceService.saveNotes(notes);
     }
 
@@ -461,9 +461,7 @@ export const attendanceService = {
       // Sequence drops are optional too, and normalized on the way in — a bad
       // date here would silently shift every task in the sequence.
       if (parsed.sequenceDrops && typeof parsed.sequenceDrops === 'object') {
-        await attendanceService.saveSequenceDrops(
-          normalizeSequenceDropsMap(parsed.sequenceDrops),
-        );
+        await attendanceService.saveSequenceDrops(normalizeSequenceDropsMap(parsed.sequenceDrops));
       }
 
       return true;
@@ -526,7 +524,7 @@ export function getTaskForDate(
 
   const { logs = [], postponed = [], dropped = [] } = context;
   const n = sequence.length;
-  const dropsOnOrBefore = dropped.filter(d => d <= dateStr).length;
+  const dropsOnOrBefore = dropped.filter((d) => d <= dateStr).length;
   let index: number;
 
   if (activity.sequenceMode === 'log') {
@@ -534,17 +532,13 @@ export function getTaskForDate(
     // excluding days where the sequence task was postponed.
     // `logs` contains pre-sanitized YYYY-MM-DD date strings.
     const postponedSet = new Set(postponed);
-    const uniqueLogDays = new Set(
-      logs.filter(d => d < dateStr && !postponedSet.has(d)),
-    );
+    const uniqueLogDays = new Set(logs.filter((d) => d < dateStr && !postponedSet.has(d)));
     index = (uniqueLogDays.size + dropsOnOrBefore) % n;
   } else {
     // calendar (default)
-    const start =
-      activity.sequenceStartDate ??
-      dayjs(activity.createdAt).format('YYYY-MM-DD');
+    const start = activity.sequenceStartDate ?? dayjs(activity.createdAt).format('YYYY-MM-DD');
     const rawOffset = dayjs(dateStr).diff(dayjs(start), 'day');
-    const postponedOnOrBefore = postponed.filter(d => d <= dateStr).length;
+    const postponedOnOrBefore = postponed.filter((d) => d <= dateStr).length;
     const offset = rawOffset - postponedOnOrBefore + dropsOnOrBefore;
     index = ((offset % n) + n) % n; // handles negative offset correctly
   }

@@ -1,6 +1,18 @@
 import { create } from 'zustand';
 import dayjs from 'dayjs';
-import { attendanceService, Activity, NotesMap, NoteEntry, LogEntry, getTaskForDate, TaskHistoryMap, SequenceSkipsMap, SequenceDrop, SequenceDropsMap, SequenceTask } from '../features/attendance/attendanceService';
+import {
+  attendanceService,
+  Activity,
+  NotesMap,
+  NoteEntry,
+  LogEntry,
+  getTaskForDate,
+  TaskHistoryMap,
+  SequenceSkipsMap,
+  SequenceDrop,
+  SequenceDropsMap,
+  SequenceTask,
+} from '../features/attendance/attendanceService';
 import {
   calculateCurrentStreak,
   calculateLongestStreak,
@@ -134,7 +146,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       const { StorageKeys } = await import('../constants/storage');
       const confettiStr = await AsyncStorage.getItem(StorageKeys.CONFETTI);
       const isConfettiEnabled = confettiStr ? JSON.parse(confettiStr) : true;
-      
+
       const hideExtraDaysStr = await AsyncStorage.getItem(StorageKeys.HIDE_EXTRA_DAYS);
       const isHideExtraDaysEnabled = hideExtraDaysStr ? JSON.parse(hideExtraDaysStr) : true;
 
@@ -144,9 +156,31 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       // mirror of this flag rather than subscribing to the store.
       applyHapticsPreference(isHapticsEnabled);
 
-      set({ activities, logs, notes, taskHistory, sequenceSkips, sequenceDrops, isConfettiEnabled, isHideExtraDaysEnabled, isHapticsEnabled, isLoading: false });
+      set({
+        activities,
+        logs,
+        notes,
+        taskHistory,
+        sequenceSkips,
+        sequenceDrops,
+        isConfettiEnabled,
+        isHideExtraDaysEnabled,
+        isHapticsEnabled,
+        isLoading: false,
+      });
     } catch {
-      set({ activities, logs, notes, taskHistory, sequenceSkips, sequenceDrops, isConfettiEnabled: true, isHideExtraDaysEnabled: true, isHapticsEnabled: true, isLoading: false });
+      set({
+        activities,
+        logs,
+        notes,
+        taskHistory,
+        sequenceSkips,
+        sequenceDrops,
+        isConfettiEnabled: true,
+        isHideExtraDaysEnabled: true,
+        isHapticsEnabled: true,
+        isLoading: false,
+      });
     }
   },
 
@@ -201,7 +235,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     timeBoundEndTime?: string | null,
   ) => {
     const { activities } = get();
-    const updatedActivities = activities.map(a => {
+    const updatedActivities = activities.map((a) => {
       if (a.id !== id) return a;
       const updated = { ...a, name };
       if (description !== undefined) {
@@ -233,7 +267,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       }
       if (sequenceStartDate !== undefined) updated.sequenceStartDate = sequenceStartDate;
       if (sequenceMode !== undefined) updated.sequenceMode = sequenceMode;
-      
+
       if (timeBoundType !== undefined) {
         if (timeBoundType !== null) {
           updated.timeBoundType = timeBoundType;
@@ -271,17 +305,25 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
   deleteActivities: async (ids: string[]) => {
     if (ids.length === 0) return;
     const doomed = new Set(ids);
-    const { activities, logs, notes, taskHistory, sequenceSkips, sequenceDrops, selectedActivityId } = get();
+    const {
+      activities,
+      logs,
+      notes,
+      taskHistory,
+      sequenceSkips,
+      sequenceDrops,
+      selectedActivityId,
+    } = get();
 
     // Every per-activity map is keyed the same way, so one helper drops all of
     // the doomed ids from each of them in a single copy.
-    const without = <T,>(map: Record<string, T>): Record<string, T> => {
+    const without = <T>(map: Record<string, T>): Record<string, T> => {
       const next = { ...map };
       for (const id of doomed) delete next[id];
       return next;
     };
 
-    const updatedActivities = activities.filter(a => !doomed.has(a.id));
+    const updatedActivities = activities.filter((a) => !doomed.has(a.id));
     const updatedLogs = without(logs);
     const updatedNotes = without(notes);
     const updatedTaskHistory = without(taskHistory);
@@ -320,8 +362,8 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     const target = new Set(ids);
     const completedAt = Date.now();
     const { activities } = get();
-    const updatedActivities = activities.map(a =>
-      target.has(a.id) && !a.completedAt ? { ...a, completedAt } : a
+    const updatedActivities = activities.map((a) =>
+      target.has(a.id) && !a.completedAt ? { ...a, completedAt } : a,
     );
     await attendanceService.saveActivities(updatedActivities);
     set({ activities: updatedActivities });
@@ -361,23 +403,26 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     const { logs, notes, taskHistory, activities, sequenceSkips, sequenceDrops } = get();
     const today = todayStr();
     const activityLogs = logs[activityId] || [];
-    if (activityLogs.some(entry => entry.date === today)) return;
+    if (activityLogs.some((entry) => entry.date === today)) return;
 
     set({ isLoading: true });
     await attendanceService.logToday(activityId, note);
 
     const updatedLogs = { ...logs };
-    updatedLogs[activityId] = [...activityLogs, { ts: dayjs().toISOString(), date: today, tz: getCurrentTz() }];
+    updatedLogs[activityId] = [
+      ...activityLogs,
+      { ts: dayjs().toISOString(), date: today, tz: getCurrentTz() },
+    ];
 
     // Compute and lock in the task history for this specific day
     const updatedTaskHistory = { ...taskHistory };
-    const activity = activities.find(a => a.id === activityId);
+    const activity = activities.find((a) => a.id === activityId);
     if (activity && activity.taskSequence && activity.taskSequence.length > 0) {
       // getTaskForDate expects plain YYYY-MM-DD date strings
       const task = getTaskForDate(activity, today, {
-        logs: updatedLogs[activityId].map(e => e.date),
+        logs: updatedLogs[activityId].map((e) => e.date),
         postponed: sequenceSkips[activityId] ?? [],
-        dropped: (sequenceDrops[activityId] ?? []).map(d => d.date),
+        dropped: (sequenceDrops[activityId] ?? []).map((d) => d.date),
       });
       if (task) {
         if (!updatedTaskHistory[activityId]) updatedTaskHistory[activityId] = {};
@@ -402,34 +447,41 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
 
     // Auto-complete goal-based activities when streakGoal is reached
     let updatedActivities = activities;
-    const freshActivity = activities.find(a => a.id === activityId);
+    const freshActivity = activities.find((a) => a.id === activityId);
     if (
       freshActivity &&
       freshActivity.activityType === 'goal' &&
       freshActivity.streakGoal &&
       !freshActivity.completedAt
     ) {
-      const { calculateCurrentStreak, calculateCurrentWeeklyStreak } = await import('../utils/streakUtils');
-      const logDates = updatedLogs[activityId].map(e => e.date);
+      const { calculateCurrentStreak, calculateCurrentWeeklyStreak } =
+        await import('../utils/streakUtils');
+      const logDates = updatedLogs[activityId].map((e) => e.date);
       const newStreak = freshActivity.weeklyGoal
         ? calculateCurrentWeeklyStreak(logDates, freshActivity.weeklyGoal)
         : calculateCurrentStreak(logDates);
       if (newStreak >= freshActivity.streakGoal) {
-        updatedActivities = activities.map(a =>
-          a.id === activityId ? { ...a, completedAt: Date.now() } : a
+        updatedActivities = activities.map((a) =>
+          a.id === activityId ? { ...a, completedAt: Date.now() } : a,
         );
         await attendanceService.saveActivities(updatedActivities);
       }
     }
 
-    set({ logs: updatedLogs, notes: updatedNotes, taskHistory: updatedTaskHistory, activities: updatedActivities, isLoading: false });
+    set({
+      logs: updatedLogs,
+      notes: updatedNotes,
+      taskHistory: updatedTaskHistory,
+      activities: updatedActivities,
+      isLoading: false,
+    });
   },
 
   logTodayWithSequenceSkip: async (activityId: string, note?: string) => {
     const { logs, notes, sequenceSkips } = get();
     const today = todayStr();
     const activityLogs = logs[activityId] || [];
-    if (activityLogs.some(entry => entry.date === today)) return;
+    if (activityLogs.some((entry) => entry.date === today)) return;
 
     set({ isLoading: true });
 
@@ -437,7 +489,10 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     await attendanceService.logToday(activityId, note);
 
     const updatedLogs = { ...logs };
-    updatedLogs[activityId] = [...activityLogs, { ts: dayjs().toISOString(), date: today, tz: getCurrentTz() }];
+    updatedLogs[activityId] = [
+      ...activityLogs,
+      { ts: dayjs().toISOString(), date: today, tz: getCurrentTz() },
+    ];
 
     // Record the sequence skip
     const updatedSkips = { ...sequenceSkips };
@@ -464,19 +519,19 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
 
   dropSequenceTask: async (activityId: string, note?: string) => {
     const { logs, activities, sequenceSkips, sequenceDrops } = get();
-    const activity = activities.find(a => a.id === activityId);
+    const activity = activities.find((a) => a.id === activityId);
     if (!activity || !activity.taskSequence?.length || activity.completedAt) return;
 
     const today = todayStr();
     // Dropping after logging would skip the *next* task rather than today's,
     // which is never what the button appears to promise.
-    if ((logs[activityId] ?? []).some(entry => entry.date === today)) return;
+    if ((logs[activityId] ?? []).some((entry) => entry.date === today)) return;
 
     const activityDrops = sequenceDrops[activityId] ?? [];
     const droppedTask = getTaskForDate(activity, today, {
-      logs: (logs[activityId] ?? []).map(e => e.date),
+      logs: (logs[activityId] ?? []).map((e) => e.date),
       postponed: sequenceSkips[activityId] ?? [],
-      dropped: activityDrops.map(d => d.date),
+      dropped: activityDrops.map((d) => d.date),
     });
 
     const drop: SequenceDrop = {
@@ -499,11 +554,11 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
 
     // Once today is logged its task is locked into taskHistory. Putting the
     // drop back would shift every following day out from under that record.
-    if ((logs[activityId] ?? []).some(entry => entry.date === today)) return;
+    if ((logs[activityId] ?? []).some((entry) => entry.date === today)) return;
 
     // Only today's drops are undoable — rolling back an older one would
     // reshuffle every task logged since.
-    const lastToday = activityDrops.map(d => d.date).lastIndexOf(today);
+    const lastToday = activityDrops.map((d) => d.date).lastIndexOf(today);
     if (lastToday === -1) return;
 
     const remaining = activityDrops.filter((_, i) => i !== lastToday);
@@ -572,7 +627,13 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     delete updatedSequenceDrops[id];
     await attendanceService.saveSequenceDrops(updatedSequenceDrops);
 
-    set({ logs: updatedLogs, notes: updatedNotes, taskHistory: updatedTaskHistory, sequenceSkips: updatedSequenceSkips, sequenceDrops: updatedSequenceDrops });
+    set({
+      logs: updatedLogs,
+      notes: updatedNotes,
+      taskHistory: updatedTaskHistory,
+      sequenceSkips: updatedSequenceSkips,
+      sequenceDrops: updatedSequenceDrops,
+    });
   },
 
   exportData: async () => {
@@ -595,9 +656,9 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
 
   getActivityStats: (activityId: string) => {
     const logEntries = get().logs[activityId] || [];
-    const logs = logEntries.map(e => e.date); // plain YYYY-MM-DD strings for streak utils
-    const activity = get().activities.find(a => a.id === activityId);
-    const isTodayLogged = logEntries.some(e => e.date === todayStr());
+    const logs = logEntries.map((e) => e.date); // plain YYYY-MM-DD strings for streak utils
+    const activity = get().activities.find((a) => a.id === activityId);
+    const isTodayLogged = logEntries.some((e) => e.date === todayStr());
 
     if (activity?.weeklyGoal) {
       const goal = activity.weeklyGoal;

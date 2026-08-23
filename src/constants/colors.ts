@@ -89,8 +89,8 @@ export interface ThemePalette {
   // Brand
   primary: string;
   primaryHover: string;
-  primaryMuted: string;      // tinted fill behind primary content
-  primarySubtle: string;     // faintest brand wash
+  primaryMuted: string; // tinted fill behind primary content
+  primarySubtle: string; // faintest brand wash
   onPrimary: string;
   primaryBorder: string;
 
@@ -303,7 +303,13 @@ export const Colors = {
 /** Composes a hex colour with an alpha channel (0–1). */
 export const alpha = (hex: string, a: number): string => {
   const clean = hex.replace('#', '');
-  const full = clean.length === 3 ? clean.split('').map(c => c + c).join('') : clean;
+  const full =
+    clean.length === 3
+      ? clean
+          .split('')
+          .map((c) => c + c)
+          .join('')
+      : clean;
   const value = Math.round(Math.max(0, Math.min(1, a)) * 255)
     .toString(16)
     .padStart(2, '0');

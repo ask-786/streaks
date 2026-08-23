@@ -6,19 +6,9 @@ import dayjs from 'dayjs';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { useAttendanceStore } from '../store/attendanceStore';
 import { MonthlyProgress } from '../components/MonthlyProgress';
-import {
-  Spacing,
-  Typography,
-  BorderRadius,
-  ScreenPadding,
-  alpha,
-} from '../constants';
+import { Spacing, Typography, BorderRadius, ScreenPadding, alpha } from '../constants';
 import { useTheme } from '../hooks/useTheme';
-import {
-  loggedDaysThisMonth,
-  totalDaysPassedThisMonth,
-  todayStr,
-} from '../utils/dateUtils';
+import { loggedDaysThisMonth, totalDaysPassedThisMonth, todayStr } from '../utils/dateUtils';
 import { Card, EmptyState, ProgressBar, StatTile } from '../components/ui';
 
 interface DetailRowProps {
@@ -35,7 +25,10 @@ const DetailRow: React.FC<DetailRowProps> = ({ icon, label, value, tint, isLast 
     <View
       style={[
         styles.detailRow,
-        !isLast && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.divider },
+        !isLast && {
+          borderBottomWidth: StyleSheet.hairlineWidth,
+          borderBottomColor: colors.divider,
+        },
       ]}
     >
       <View style={[styles.detailIcon, { backgroundColor: alpha(tint, 0.12) }]}>
@@ -51,10 +44,10 @@ export const StatsScreen: React.FC = () => {
   const { colors } = useTheme();
   const { logs, selectedActivityId, activities, getActivityStats } = useAttendanceStore();
 
-  const selectedActivity = activities.find(a => a.id === selectedActivityId);
+  const selectedActivity = activities.find((a) => a.id === selectedActivityId);
   const logEntries = selectedActivityId ? logs[selectedActivityId] || [] : [];
   // Extract the locked local date strings for all stats/display purposes
-  const logDateStrings = logEntries.map(e => e.date);
+  const logDateStrings = logEntries.map((e) => e.date);
   const stats = selectedActivityId
     ? getActivityStats(selectedActivityId)
     : {
@@ -78,14 +71,13 @@ export const StatsScreen: React.FC = () => {
   const daysSinceStart = selectedActivity
     ? Math.max(1, dayjs(todayStr()).diff(dayjs(selectedActivity.createdAt), 'day') + 1)
     : 0;
-  const lifetimeRate =
-    daysSinceStart > 0 ? Math.min(1, totalLogged / daysSinceStart) : 0;
+  const lifetimeRate = daysSinceStart > 0 ? Math.min(1, totalLogged / daysSinceStart) : 0;
 
   const thisWeekCount = (() => {
     const d = dayjs(todayStr());
     const weekStart = d.subtract((d.day() + 6) % 7, 'day').format('YYYY-MM-DD');
     const weekEnd = dayjs(weekStart).add(6, 'day').format('YYYY-MM-DD');
-    return new Set(logDateStrings.filter(dt => dt >= weekStart && dt <= weekEnd)).size;
+    return new Set(logDateStrings.filter((dt) => dt >= weekStart && dt <= weekEnd)).size;
   })();
 
   if (totalLogged === 0) {
@@ -154,9 +146,7 @@ export const StatsScreen: React.FC = () => {
         <Animated.View entering={FadeInDown.delay(180).springify()} style={styles.block}>
           <Card elevation="low">
             <View style={styles.weekHeader}>
-              <View
-                style={[styles.detailIcon, { backgroundColor: alpha(colors.primary, 0.12) }]}
-              >
+              <View style={[styles.detailIcon, { backgroundColor: alpha(colors.primary, 0.12) }]}>
                 <FontAwesome5 name="calendar-check" size={12} color={colors.primary} />
               </View>
               <Text style={[styles.weekLabel, { color: colors.textTertiary }]}>
@@ -182,9 +172,7 @@ export const StatsScreen: React.FC = () => {
       <Animated.View entering={FadeInDown.delay(220).springify()} style={styles.block}>
         <Card elevation="low">
           <View style={styles.weekHeader}>
-            <View
-              style={[styles.detailIcon, { backgroundColor: alpha(colors.success, 0.12) }]}
-            >
+            <View style={[styles.detailIcon, { backgroundColor: alpha(colors.success, 0.12) }]}>
               <FontAwesome5 name="bullseye" size={12} color={colors.success} />
             </View>
             <Text style={[styles.weekLabel, { color: colors.textTertiary }]}>
@@ -233,11 +221,7 @@ export const StatsScreen: React.FC = () => {
           <DetailRow
             icon="seedling"
             label="Tracking since"
-            value={
-              selectedActivity
-                ? dayjs(selectedActivity.createdAt).format('MMM D, YYYY')
-                : '—'
-            }
+            value={selectedActivity ? dayjs(selectedActivity.createdAt).format('MMM D, YYYY') : '—'}
             tint={colors.warning}
             isLast
           />

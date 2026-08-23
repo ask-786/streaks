@@ -3,11 +3,7 @@ import { View, StyleSheet, Pressable, LayoutChangeEvent } from 'react-native';
 import { Text } from 'react-native-paper';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, {
-  useAnimatedStyle,
-  withSpring,
-  useDerivedValue,
-} from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, withSpring, useDerivedValue } from 'react-native-reanimated';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { BorderRadius, Spacing, Typography, Spring, ScreenPadding } from '../constants';
 import { useTheme } from '../hooks/useTheme';
@@ -34,9 +30,7 @@ export const TabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, naviga
   const count = state.routes.length;
   const tabWidth = barWidth > 0 ? (barWidth - PAD * 2) / count : 0;
 
-  const offset = useDerivedValue(() =>
-    withSpring(state.index * tabWidth, Spring.gentle),
-  );
+  const offset = useDerivedValue(() => withSpring(state.index * tabWidth, Spring.gentle));
 
   const thumbStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: offset.value }],
@@ -47,27 +41,16 @@ export const TabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, naviga
 
   return (
     <View
-      style={[
-        styles.container,
-        { paddingBottom: Math.max(insets.bottom, Spacing.sm) },
-      ]}
+      style={[styles.container, { paddingBottom: Math.max(insets.bottom, Spacing.sm) }]}
       pointerEvents="box-none"
     >
       <View
         onLayout={handleLayout}
-        style={[
-          styles.bar,
-          elevation.high,
-          { backgroundColor: colors.surface },
-        ]}
+        style={[styles.bar, elevation.high, { backgroundColor: colors.surface }]}
       >
         {tabWidth > 0 ? (
           <Animated.View
-            style={[
-              styles.thumb,
-              thumbStyle,
-              { backgroundColor: colors.primaryMuted },
-            ]}
+            style={[styles.thumb, thumbStyle, { backgroundColor: colors.primaryMuted }]}
           />
         ) : null}
 

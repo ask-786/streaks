@@ -57,7 +57,7 @@ const scheduleEveningReminder = async (date: Date, pending: Activity[]) => {
     pending.length > 0
       ? {
           title: 'Evening Check-in 🌙',
-          body: `Don't forget to log: ${pending.map(a => a.name).join(', ')}`,
+          body: `Don't forget to log: ${pending.map((a) => a.name).join(', ')}`,
         }
       : {
           title: 'Great job today! 🎉',
@@ -80,7 +80,7 @@ const scheduleEveningReminder = async (date: Date, pending: Activity[]) => {
 
 export const rescheduleAllNotifications = async (
   activities: Activity[],
-  logs: Record<string, LogEntry[]>
+  logs: Record<string, LogEntry[]>,
 ) => {
   // 1. Cancel all existing notifications
   await Notifications.cancelAllScheduledNotificationsAsync();
@@ -103,14 +103,14 @@ export const rescheduleAllNotifications = async (
 
   // Completed activities are no longer being tracked, so they can never count
   // as "unlogged" and must never be named in a reminder.
-  const activeActivities = activities.filter(a => !a.completedAt);
+  const activeActivities = activities.filter((a) => !a.completedAt);
   if (activeActivities.length === 0) return;
 
   const today = todayStr();
-  const unloggedToday = activeActivities.filter(a => {
+  const unloggedToday = activeActivities.filter((a) => {
     const activityLogs = logs[a.id] || [];
     // Use the locked .date field — no timezone parsing needed
-    return !activityLogs.some(entry => entry.date === today);
+    return !activityLogs.some((entry) => entry.date === today);
   });
 
   // 3. Evening reminders — exactly one per evening, each a one-shot so its body
@@ -130,9 +130,6 @@ export const rescheduleAllNotifications = async (
     // Only today's state is known. Nothing can get logged on a later day
     // without the app being opened, and opening it rebuilds this window, so
     // every active activity is still outstanding on those days.
-    await scheduleEveningReminder(
-      fireAt,
-      dayOffset === 0 ? unloggedToday : activeActivities
-    );
+    await scheduleEveningReminder(fireAt, dayOffset === 0 ? unloggedToday : activeActivities);
   }
 };

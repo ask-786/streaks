@@ -7,13 +7,7 @@ import { FontAwesome5 } from '@expo/vector-icons';
 import { useAttendanceStore, getTaskForDate } from '../store/attendanceStore';
 import { LogButton } from '../components/LogButton';
 import { NoteInputModal } from '../components/NoteInputModal';
-import {
-  Spacing,
-  Typography,
-  BorderRadius,
-  ScreenPadding,
-  alpha,
-} from '../constants';
+import { Spacing, Typography, BorderRadius, ScreenPadding, alpha } from '../constants';
 import { formatDisplayDate, todayStr, formatTime12h } from '../utils/dateUtils';
 import { useTheme } from '../hooks/useTheme';
 import ConfettiCannon from 'react-native-confetti-cannon';
@@ -38,7 +32,7 @@ export const DashboardScreen: React.FC = () => {
     isConfettiEnabled,
   } = useAttendanceStore();
 
-  const selectedActivity = activities.find(a => a.id === selectedActivityId);
+  const selectedActivity = activities.find((a) => a.id === selectedActivityId);
   const isCompleted = !!selectedActivity?.completedAt;
   const stats = selectedActivityId
     ? getActivityStats(selectedActivityId)
@@ -185,11 +179,11 @@ export const DashboardScreen: React.FC = () => {
 
   // Tasks dropped out of the cycle entirely.
   const activityDrops = selectedActivityId ? (sequenceDrops[selectedActivityId] ?? []) : [];
-  const activityDropDates = activityDrops.map(d => d.date);
-  const todayDrops = activityDrops.filter(d => d.date === today);
+  const activityDropDates = activityDrops.map((d) => d.date);
+  const todayDrops = activityDrops.filter((d) => d.date === today);
 
   const sequenceContext = {
-    logs: selectedActivityId ? (allLogs[selectedActivityId] ?? []).map(e => e.date) : [],
+    logs: selectedActivityId ? (allLogs[selectedActivityId] ?? []).map((e) => e.date) : [],
     postponed: activitySequenceSkips,
     dropped: activityDropDates,
   };
@@ -311,12 +305,8 @@ export const DashboardScreen: React.FC = () => {
                   {isWeekly ? 'Week streak' : 'Current streak'}
                 </Text>
                 <View style={styles.heroValueRow}>
-                  <Text style={[styles.heroValue, { color: streakTint }]}>
-                    {currentStreak}
-                  </Text>
-                  <Text style={[styles.heroUnit, { color: colors.textTertiary }]}>
-                    {unitLabel}
-                  </Text>
+                  <Text style={[styles.heroValue, { color: streakTint }]}>{currentStreak}</Text>
+                  <Text style={[styles.heroUnit, { color: colors.textTertiary }]}>{unitLabel}</Text>
                   {currentStreak >= (isWeekly ? 4 : 7) ? (
                     <FontAwesome5
                       name="fire"
@@ -339,11 +329,7 @@ export const DashboardScreen: React.FC = () => {
             {/* Climb toward record or goal */}
             {climbTarget > 0 && !isCompleted ? (
               <View style={styles.climb}>
-                <ProgressBar
-                  value={currentStreak / climbTarget}
-                  color={streakTint}
-                  height={6}
-                />
+                <ProgressBar value={currentStreak / climbTarget} color={streakTint} height={6} />
                 <Text style={[styles.climbLabel, { color: colors.textTertiary }]}>
                   {Math.max(0, climbTarget - currentStreak)} more {climbLabel}
                 </Text>
@@ -402,14 +388,10 @@ export const DashboardScreen: React.FC = () => {
                 isCompleted={isCompleted}
                 isLoading={isLoading}
                 disabled={isTimeBoundDisabled || isCompleted}
-                disabledReason={
-                  isCompleted ? "You've conquered this one" : timeBoundDisabledReason
-                }
+                disabledReason={isCompleted ? "You've conquered this one" : timeBoundDisabledReason}
                 disabledKind={isCompleted ? undefined : timeBoundKind}
               />
-              <Text style={[styles.statusLine, { color: colors.textTertiary }]}>
-                {statusLine}
-              </Text>
+              <Text style={[styles.statusLine, { color: colors.textTertiary }]}>{statusLine}</Text>
             </View>
           </Card>
         </Animated.View>
@@ -419,17 +401,10 @@ export const DashboardScreen: React.FC = () => {
           <Animated.View entering={FadeInDown.delay(140).springify()} style={styles.block}>
             <Card elevation="low">
               <View style={styles.taskHeader}>
-                <View
-                  style={[
-                    styles.taskIcon,
-                    { backgroundColor: alpha(colors.primary, 0.12) },
-                  ]}
-                >
+                <View style={[styles.taskIcon, { backgroundColor: alpha(colors.primary, 0.12) }]}>
                   <FontAwesome5 name="list-ol" size={12} color={colors.primary} />
                 </View>
-                <Text style={[styles.taskLabel, { color: colors.textTertiary }]}>
-                  Today's task
-                </Text>
+                <Text style={[styles.taskLabel, { color: colors.textTertiary }]}>Today's task</Text>
 
                 {canAdjustSequence ? (
                   <>
@@ -467,18 +442,14 @@ export const DashboardScreen: React.FC = () => {
                   </>
                 ) : null}
 
-                {isTodayPostponed ? (
-                  <Chip label="Doing later" icon="clock" tone="warning" />
-                ) : null}
+                {isTodayPostponed ? <Chip label="Doing later" icon="clock" tone="warning" /> : null}
               </View>
 
               <Text
                 style={[
                   styles.taskText,
                   {
-                    color: isTodayPostponed
-                      ? colors.textTertiary
-                      : colors.textPrimary,
+                    color: isTodayPostponed ? colors.textTertiary : colors.textPrimary,
                     textDecorationLine: isTodayPostponed ? 'line-through' : 'none',
                   },
                 ]}
@@ -491,9 +462,7 @@ export const DashboardScreen: React.FC = () => {
                   style={[
                     styles.taskDescription,
                     {
-                      color: isTodayPostponed
-                        ? colors.textDisabled
-                        : colors.textSecondary,
+                      color: isTodayPostponed ? colors.textDisabled : colors.textSecondary,
                     },
                   ]}
                 >
@@ -502,12 +471,7 @@ export const DashboardScreen: React.FC = () => {
               ) : null}
 
               {isTodayPostponed ? (
-                <View
-                  style={[
-                    styles.taskBanner,
-                    { backgroundColor: colors.surfaceVariant },
-                  ]}
-                >
+                <View style={[styles.taskBanner, { backgroundColor: colors.surfaceVariant }]}>
                   <FontAwesome5
                     name={todayPostponeNote ? 'sticky-note' : 'info-circle'}
                     size={11}
@@ -520,17 +484,12 @@ export const DashboardScreen: React.FC = () => {
               ) : null}
 
               {todayDrops.length > 0 ? (
-                <View
-                  style={[
-                    styles.taskBanner,
-                    { backgroundColor: colors.surfaceVariant },
-                  ]}
-                >
+                <View style={[styles.taskBanner, { backgroundColor: colors.surfaceVariant }]}>
                   <FontAwesome5 name="forward" size={11} color={colors.textTertiary} />
                   <Text style={[styles.taskBannerText, { color: colors.textSecondary }]}>
                     Skipped{' '}
                     <Text style={{ fontWeight: '700' }}>
-                      {todayDrops.map(d => d.task?.title ?? 'a task').join(', ')}
+                      {todayDrops.map((d) => d.task?.title ?? 'a task').join(', ')}
                     </Text>
                     {' — '}
                     {todayDrops.length > 1 ? 'they are ' : 'it is '}
@@ -561,9 +520,7 @@ export const DashboardScreen: React.FC = () => {
           <Animated.View entering={FadeInDown.delay(180).springify()} style={styles.block}>
             <Card elevation="low">
               <View style={styles.weekHeader}>
-                <Text style={[styles.taskLabel, { color: colors.textTertiary }]}>
-                  This week
-                </Text>
+                <Text style={[styles.taskLabel, { color: colors.textTertiary }]}>This week</Text>
                 <Text style={[styles.weekValue, { color: colors.textPrimary }]}>
                   {stats.thisWeekCount}
                   <Text style={{ color: colors.textTertiary }}> / {stats.weeklyGoal}</Text>
@@ -603,9 +560,7 @@ export const DashboardScreen: React.FC = () => {
 
         {/* ── Motivation ────────────────────────────────────────────────────── */}
         <Animated.View entering={FadeInDown.delay(280).springify()}>
-          <Text style={[styles.motivation, { color: colors.textTertiary }]}>
-            {motivation}
-          </Text>
+          <Text style={[styles.motivation, { color: colors.textTertiary }]}>{motivation}</Text>
         </Animated.View>
       </ScrollView>
 

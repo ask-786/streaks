@@ -1,6 +1,11 @@
 packages:
   - '.'
 
+# Native resolver used by eslint-import-resolver-typescript; without its build
+# step pnpm prints an "ignored build scripts" warning on every install.
+onlyBuiltDependencies:
+  - unrs-resolver
+
 overrides:
   '@xmldom/xmldom@<0.8.12': '^0.8.12'
   brace-expansion@<1.1.13: '^1.1.13'
