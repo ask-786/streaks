@@ -435,7 +435,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                               {/* Label row: text left, skipped pill right */}
                               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                                 <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>
-                                  {isSequenceSkipped ? 'Sequence Task' : 'Task that day'}
+                                  {isSequenceSkipped ? 'Task kept for later' : 'Task that day'}
                                 </Text>
                                 {isSequenceSkipped && (
                                   <View style={[

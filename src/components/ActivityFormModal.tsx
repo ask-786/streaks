@@ -692,7 +692,7 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
             </View>
             <Text style={[styles.modeHint, { color: colors.textSecondary }]}>
               {sequenceMode === 'calendar'
-                ? 'Task advances every day, even if you skip.'
+                ? 'Task advances every day, even if you miss one.'
                 : 'Task advances only after you log.'}
             </Text>
 
