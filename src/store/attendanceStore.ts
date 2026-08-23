@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import dayjs from 'dayjs';
-import { attendanceService, Activity, NotesMap, NoteEntry, LogEntry, getTaskForDate, TaskHistoryMap, SequenceSkipsMap, SequenceTask } from '../features/attendance/attendanceService';
+import { attendanceService, Activity, NotesMap, NoteEntry, LogEntry, getTaskForDate, TaskHistoryMap, SequenceSkipsMap, SequenceDrop, SequenceDropsMap, SequenceTask } from '../features/attendance/attendanceService';
 import {
   calculateCurrentStreak,
   calculateLongestStreak,
@@ -32,6 +32,7 @@ interface AttendanceState {
   notes: NotesMap;
   taskHistory: TaskHistoryMap;
   sequenceSkips: SequenceSkipsMap;
+  sequenceDrops: SequenceDropsMap;
   selectedActivityId: string | null;
   isLoading: boolean;
   isConfettiEnabled: boolean;
@@ -80,6 +81,15 @@ interface AttendanceState {
   logToday: (activityId: string, note?: string) => Promise<void>;
   /** Logs today AND marks the sequence task as skipped. Streak is maintained but sequence does not advance. */
   logTodayWithSequenceSkip: (activityId: string, note?: string) => Promise<void>;
+  /**
+   * Drops today's sequence task out of the current cycle without doing it, so
+   * the next session lands on the task after it. Deliberately independent of
+   * logging: drop then log to record a different task today, or drop alone to
+   * take the day off with the task gone.
+   */
+  dropSequenceTask: (activityId: string, note?: string) => Promise<void>;
+  /** Removes the most recent drop made today. No-op if there isn't one. */
+  undoSequenceDrop: (activityId: string) => Promise<void>;
   resetActivityData: (id: string) => Promise<void>;
   /** Appends a new note entry to the activity's journal for the given date. */
   appendNote: (activityId: string, dateStr: string, text: string) => Promise<void>;
@@ -94,7 +104,7 @@ interface AttendanceState {
 }
 
 export { NoteEntry, getTaskForDate };
-export type { LogEntry, SequenceSkipsMap, SequenceTask };
+export type { LogEntry, SequenceSkipsMap, SequenceDrop, SequenceDropsMap, SequenceTask };
 
 export const useAttendanceStore = create<AttendanceState>((set, get) => ({
   activities: [],
@@ -102,6 +112,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
   notes: {},
   taskHistory: {},
   sequenceSkips: {},
+  sequenceDrops: {},
   selectedActivityId: null,
   isLoading: false,
   isConfettiEnabled: true,
@@ -115,6 +126,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     const notes = await attendanceService.getNotes();
     const taskHistory = await attendanceService.getTaskHistory();
     const sequenceSkips = await attendanceService.getSequenceSkips();
+    const sequenceDrops = await attendanceService.getSequenceDrops();
 
     // Load confetti setting (default to true)
     try {
@@ -132,9 +144,9 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       // mirror of this flag rather than subscribing to the store.
       applyHapticsPreference(isHapticsEnabled);
 
-      set({ activities, logs, notes, taskHistory, sequenceSkips, isConfettiEnabled, isHideExtraDaysEnabled, isHapticsEnabled, isLoading: false });
+      set({ activities, logs, notes, taskHistory, sequenceSkips, sequenceDrops, isConfettiEnabled, isHideExtraDaysEnabled, isHapticsEnabled, isLoading: false });
     } catch {
-      set({ activities, logs, notes, taskHistory, sequenceSkips, isConfettiEnabled: true, isHideExtraDaysEnabled: true, isHapticsEnabled: true, isLoading: false });
+      set({ activities, logs, notes, taskHistory, sequenceSkips, sequenceDrops, isConfettiEnabled: true, isHideExtraDaysEnabled: true, isHapticsEnabled: true, isLoading: false });
     }
   },
 
@@ -259,7 +271,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
   deleteActivities: async (ids: string[]) => {
     if (ids.length === 0) return;
     const doomed = new Set(ids);
-    const { activities, logs, notes, taskHistory, sequenceSkips, selectedActivityId } = get();
+    const { activities, logs, notes, taskHistory, sequenceSkips, sequenceDrops, selectedActivityId } = get();
 
     // Every per-activity map is keyed the same way, so one helper drops all of
     // the doomed ids from each of them in a single copy.
@@ -274,12 +286,14 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     const updatedNotes = without(notes);
     const updatedTaskHistory = without(taskHistory);
     const updatedSequenceSkips = without(sequenceSkips);
+    const updatedSequenceDrops = without(sequenceDrops);
 
     await attendanceService.saveActivities(updatedActivities);
     await attendanceService.saveLogs(updatedLogs);
     await attendanceService.saveNotes(updatedNotes);
     await attendanceService.saveTaskHistory(updatedTaskHistory);
     await attendanceService.saveSequenceSkips(updatedSequenceSkips);
+    await attendanceService.saveSequenceDrops(updatedSequenceDrops);
 
     set({
       activities: updatedActivities,
@@ -287,6 +301,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       notes: updatedNotes,
       taskHistory: updatedTaskHistory,
       sequenceSkips: updatedSequenceSkips,
+      sequenceDrops: updatedSequenceDrops,
       selectedActivityId:
         selectedActivityId && doomed.has(selectedActivityId) ? null : selectedActivityId,
     });
@@ -343,7 +358,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
   },
 
   logToday: async (activityId: string, note?: string) => {
-    const { logs, notes, taskHistory, activities, sequenceSkips } = get();
+    const { logs, notes, taskHistory, activities, sequenceSkips, sequenceDrops } = get();
     const today = todayStr();
     const activityLogs = logs[activityId] || [];
     if (activityLogs.some(entry => entry.date === today)) return;
@@ -358,10 +373,12 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     const updatedTaskHistory = { ...taskHistory };
     const activity = activities.find(a => a.id === activityId);
     if (activity && activity.taskSequence && activity.taskSequence.length > 0) {
-      const activitySkips = sequenceSkips[activityId] ?? [];
       // getTaskForDate expects plain YYYY-MM-DD date strings
-      const logDates = updatedLogs[activityId].map(e => e.date);
-      const task = getTaskForDate(activity, today, logDates, activitySkips);
+      const task = getTaskForDate(activity, today, {
+        logs: updatedLogs[activityId].map(e => e.date),
+        postponed: sequenceSkips[activityId] ?? [],
+        dropped: (sequenceDrops[activityId] ?? []).map(d => d.date),
+      });
       if (task) {
         if (!updatedTaskHistory[activityId]) updatedTaskHistory[activityId] = {};
         updatedTaskHistory[activityId] = {
@@ -445,6 +462,61 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     set({ logs: updatedLogs, notes: updatedNotes, sequenceSkips: updatedSkips, isLoading: false });
   },
 
+  dropSequenceTask: async (activityId: string, note?: string) => {
+    const { logs, activities, sequenceSkips, sequenceDrops } = get();
+    const activity = activities.find(a => a.id === activityId);
+    if (!activity || !activity.taskSequence?.length || activity.completedAt) return;
+
+    const today = todayStr();
+    // Dropping after logging would skip the *next* task rather than today's,
+    // which is never what the button appears to promise.
+    if ((logs[activityId] ?? []).some(entry => entry.date === today)) return;
+
+    const activityDrops = sequenceDrops[activityId] ?? [];
+    const droppedTask = getTaskForDate(activity, today, {
+      logs: (logs[activityId] ?? []).map(e => e.date),
+      postponed: sequenceSkips[activityId] ?? [],
+      dropped: activityDrops.map(d => d.date),
+    });
+
+    const drop: SequenceDrop = {
+      date: today,
+      ts: dayjs().toISOString(),
+      tz: getCurrentTz(),
+      ...(droppedTask ? { task: droppedTask } : {}),
+      ...(note && note.trim() ? { note: note.trim() } : {}),
+    };
+
+    const updatedDrops = { ...sequenceDrops, [activityId]: [...activityDrops, drop] };
+    await attendanceService.saveSequenceDrops(updatedDrops);
+    set({ sequenceDrops: updatedDrops });
+  },
+
+  undoSequenceDrop: async (activityId: string) => {
+    const { logs, sequenceDrops } = get();
+    const activityDrops = sequenceDrops[activityId] ?? [];
+    const today = todayStr();
+
+    // Once today is logged its task is locked into taskHistory. Putting the
+    // drop back would shift every following day out from under that record.
+    if ((logs[activityId] ?? []).some(entry => entry.date === today)) return;
+
+    // Only today's drops are undoable — rolling back an older one would
+    // reshuffle every task logged since.
+    const lastToday = activityDrops.map(d => d.date).lastIndexOf(today);
+    if (lastToday === -1) return;
+
+    const remaining = activityDrops.filter((_, i) => i !== lastToday);
+    const updatedDrops = { ...sequenceDrops };
+    if (remaining.length > 0) {
+      updatedDrops[activityId] = remaining;
+    } else {
+      delete updatedDrops[activityId];
+    }
+    await attendanceService.saveSequenceDrops(updatedDrops);
+    set({ sequenceDrops: updatedDrops });
+  },
+
   appendNote: async (activityId: string, dateStr: string, text: string) => {
     const { notes } = get();
     const trimmed = text.trim();
@@ -479,7 +551,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
   },
 
   resetActivityData: async (id: string) => {
-    const { logs, notes, taskHistory, sequenceSkips } = get();
+    const { logs, notes, taskHistory, sequenceSkips, sequenceDrops } = get();
     const updatedLogs = { ...logs };
     delete updatedLogs[id];
     await attendanceService.saveLogs(updatedLogs);
@@ -496,7 +568,11 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     delete updatedSequenceSkips[id];
     await attendanceService.saveSequenceSkips(updatedSequenceSkips);
 
-    set({ logs: updatedLogs, notes: updatedNotes, taskHistory: updatedTaskHistory, sequenceSkips: updatedSequenceSkips });
+    const updatedSequenceDrops = { ...sequenceDrops };
+    delete updatedSequenceDrops[id];
+    await attendanceService.saveSequenceDrops(updatedSequenceDrops);
+
+    set({ logs: updatedLogs, notes: updatedNotes, taskHistory: updatedTaskHistory, sequenceSkips: updatedSequenceSkips, sequenceDrops: updatedSequenceDrops });
   },
 
   exportData: async () => {
@@ -511,7 +587,8 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       const notes = await attendanceService.getNotes();
       const taskHistory = await attendanceService.getTaskHistory();
       const sequenceSkips = await attendanceService.getSequenceSkips();
-      set({ activities, logs, notes, taskHistory, sequenceSkips });
+      const sequenceDrops = await attendanceService.getSequenceDrops();
+      set({ activities, logs, notes, taskHistory, sequenceSkips, sequenceDrops });
     }
     return success;
   },

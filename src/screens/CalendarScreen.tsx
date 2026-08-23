@@ -6,7 +6,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import dayjs from 'dayjs';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { buildMarkedDates } from '../utils/calendarUtils';
-import { useAttendanceStore, getTaskForDate, SequenceTask } from '../store/attendanceStore';
+import { useAttendanceStore, getTaskForDate, SequenceDrop, SequenceTask } from '../store/attendanceStore';
 import { CalendarLegend } from '../components/CalendarLegend';
 import { LogDetailsModal } from '../components/LogDetailsModal';
 import {
@@ -30,11 +30,13 @@ export const CalendarScreen: React.FC = () => {
   const [logModalIsLogged, setLogModalIsLogged] = React.useState(false);
   const [logModalTimeBoundKind, setLogModalTimeBoundKind] = React.useState<'too_early' | 'too_late' | undefined>(undefined);
   const [logModalIsSequenceSkipped, setLogModalIsSequenceSkipped] = React.useState(false);
+  const [logModalDroppedTasks, setLogModalDroppedTasks] = React.useState<SequenceDrop[]>([]);
 
-  const { logs, notes, taskHistory, sequenceSkips, selectedActivityId, activities, appendNote, editNote, isHideExtraDaysEnabled } = useAttendanceStore();
+  const { logs, notes, taskHistory, sequenceSkips, sequenceDrops, selectedActivityId, activities, appendNote, editNote, isHideExtraDaysEnabled } = useAttendanceStore();
   const selectedActivity = activities.find(a => a.id === selectedActivityId);
   const loggedDates = selectedActivityId ? (logs[selectedActivityId] || []).map(e => e.date) : [];
   const activitySequenceSkips: string[] = selectedActivityId ? (sequenceSkips[selectedActivityId] ?? []) : [];
+  const activityDrops: SequenceDrop[] = selectedActivityId ? (sequenceDrops[selectedActivityId] ?? []) : [];
   const today = todayStr();
   const markedDates = buildMarkedDates(
     loggedDates,
@@ -160,6 +162,10 @@ export const CalendarScreen: React.FC = () => {
                 setLogModalDate(dayjs(day.dateString).format('MMMM D, YYYY'));
                 setLogModalDateKey(dateKey);
                 setLogModalIsLogged(!!rawEntry);
+                // Tasks dropped on this day are worth showing whether or not
+                // the day itself was logged — a rest day can still be the day
+                // Leg left the cycle.
+                setLogModalDroppedTasks(activityDrops.filter(d => d.date === dateKey));
                 if (rawEntry) {
                   // Show time in the timezone where it was originally logged
                   setLogModalTime(rawEntry.ts.includes('T') ? formatTimeWithTz(rawEntry.ts, rawEntry.tz) : null);
@@ -169,7 +175,11 @@ export const CalendarScreen: React.FC = () => {
                     task = taskHistory[selectedActivityId]?.[day.dateString] || null;
                     if (!task && selectedActivity) {
                       const actLogDates = (logs[selectedActivityId] || []).map(e => e.date);
-                      task = getTaskForDate(selectedActivity, day.dateString, actLogDates, activitySequenceSkips);
+                      task = getTaskForDate(selectedActivity, day.dateString, {
+                        logs: actLogDates,
+                        postponed: activitySequenceSkips,
+                        dropped: activityDrops.map(d => d.date),
+                      });
                     }
                   }
                   setLogModalTask(task);
@@ -245,6 +255,7 @@ export const CalendarScreen: React.FC = () => {
         requiresNote={selectedActivity?.requiresNote}
         taskForDay={logModalTask}
         isSequenceSkipped={logModalIsSequenceSkipped}
+        droppedTasks={logModalDroppedTasks}
         timeBoundKind={logModalTimeBoundKind}
         isActivityCompleted={!!selectedActivity?.completedAt}
         onNoteAppend={
