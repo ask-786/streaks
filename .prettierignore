@@ -1,0 +1,15 @@
+# Dependencies
+node_modules/
+
+# Build artifacts
+dist/
+web-build/
+.expo/
+
+# Generated native folders
+android/
+ios/
+
+# Generated files
+expo-env.d.ts
+pnpm-lock.yaml
