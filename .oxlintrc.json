@@ -1,0 +1,89 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["react", "import", "typescript", "unicorn", "oxc"],
+  "categories": { "correctness": "warn" },
+  "env": { "browser": true, "node": true, "es2022": true },
+  "globals": {
+    "__DEV__": "readonly",
+    "ErrorUtils": "readonly",
+    "requestAnimationFrame": "readonly",
+    "cancelAnimationFrame": "readonly",
+    "requestIdleCallback": "readonly",
+    "cancelIdleCallback": "readonly",
+    "setImmediate": "readonly",
+    "clearImmediate": "readonly"
+  },
+  // Mirrors the rules eslint-config-expo used to supply. Not covered by
+  // oxlint: the three `expo/*` rules (no plugin equivalent) and
+  // `import/no-unresolved` — unresolved imports are caught by `pnpm check`
+  // and by the Metro export job in CI.
+  "rules": {
+    "eqeqeq": ["warn", "smart"],
+    "no-dupe-class-members": "error",
+    "no-dupe-keys": "error",
+    "no-duplicate-case": "error",
+    "no-empty-character-class": "warn",
+    "no-empty-pattern": "warn",
+    "no-extend-native": "warn",
+    "no-extra-bind": "warn",
+    "no-redeclare": "warn",
+    "no-unreachable": "warn",
+    "no-unsafe-negation": "warn",
+    "no-unused-expressions": ["warn", { "allowShortCircuit": true, "enforceForJSX": true }],
+    "no-unused-labels": "warn",
+    // oxlint has a single unused-vars rule covering both JS and TS, so unlike
+    // the old ESLint setup there is no base/TS-aware pair to reconcile.
+    "no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }],
+    "no-var": "error",
+    "no-with": "warn",
+    "unicode-bom": ["warn", "never"],
+    "use-isnan": "error",
+    "valid-typeof": "error",
+
+    "import/export": "error",
+    "import/first": "warn",
+    "import/named": "error",
+    "import/namespace": "error",
+    "import/no-duplicates": "warn",
+
+    "react/no-unknown-property": "warn",
+    "react/no-this-in-sfc": "warn",
+    "react/react-in-jsx-scope": "off",
+    "react-hooks/exhaustive-deps": "warn",
+    "react-hooks/rules-of-hooks": "error",
+
+    "typescript/array-type": ["warn", { "default": "array" }],
+    "typescript/consistent-type-assertions": [
+      "warn",
+      { "assertionStyle": "as", "objectLiteralTypeAssertions": "allow" }
+    ],
+    "typescript/no-empty-object-type": "warn",
+    "typescript/no-extra-non-null-assertion": "warn",
+    "typescript/no-useless-constructor": "warn",
+    "typescript/no-wrapper-object-types": "warn",
+
+    // JSX text is entity-decoded at compile time either way, and in React
+    // Native these strings live in <Text>, not HTML — escaping apostrophes
+    // here only makes copy harder to read.
+    "react/no-unescaped-entities": "off",
+
+    // Reanimated's `useSharedValue()` is mutated through `.value` by design;
+    // this rule reads every such write as mutating a hook's return value and
+    // flags the entire animation layer.
+    "react/immutability": "off",
+
+    // Modals here seed local state from props when they open, which is a
+    // legitimate effect-driven setState this rule does not distinguish.
+    "react/set-state-in-effect": "off"
+  },
+  "ignorePatterns": [
+    "node_modules/",
+    "dist/",
+    "web-build/",
+    ".expo/",
+    "android/",
+    "ios/",
+    "expo-env.d.ts",
+    "scripts/flame-outlines.json"
+  ]
+}
