@@ -38,7 +38,7 @@
     "expo-status-bar": "~55.0.5",
     "react": "19.2.0",
     "react-dom": "19.2.0",
-    "react-native": "0.83.4",
+    "react-native": "0.83.10",
     "react-native-calendars": "^1.1314.0",
     "react-native-confetti-cannon": "^1.5.2",
     "react-native-draggable-flatlist": "^4.0.3",
