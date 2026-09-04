@@ -13,17 +13,30 @@ import { useTheme } from '../hooks/useTheme';
 export const CalendarLegend: React.FC = () => {
   const { colors, calendar } = useTheme();
 
-  const items = [
+  const items: { bg: string; fg: string; border?: string; label: string; sample: string }[] = [
     { bg: calendar.logged, fg: calendar.loggedText, label: 'Logged', sample: '1' },
     { bg: calendar.missed, fg: calendar.missedText, label: 'Missed', sample: '2' },
     { bg: calendar.today, fg: calendar.todayText, label: 'Today', sample: '3' },
+    {
+      bg: calendar.backfilled,
+      fg: calendar.backfilledText,
+      border: calendar.backfilledBorder,
+      label: 'Fixed later',
+      sample: '4',
+    },
   ];
 
   return (
     <View style={styles.row}>
-      {items.map(({ bg, fg, label, sample }) => (
+      {items.map(({ bg, fg, border, label, sample }) => (
         <View key={label} style={styles.item}>
-          <View style={[styles.swatch, { backgroundColor: bg }]}>
+          <View
+            style={[
+              styles.swatch,
+              { backgroundColor: bg },
+              border ? { borderWidth: 1, borderColor: border } : null,
+            ]}
+          >
             <Text style={[styles.swatchText, { color: fg }]}>{sample}</Text>
           </View>
           <Text style={[styles.label, { color: colors.textSecondary }]}>{label}</Text>
@@ -36,9 +49,11 @@ export const CalendarLegend: React.FC = () => {
 const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: Spacing.lg,
+    gap: Spacing.md,
+    rowGap: Spacing.sm,
     paddingVertical: Spacing.sm,
   },
   item: {

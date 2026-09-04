@@ -19,6 +19,9 @@ export type MarkedDates = {
  * Builds the markedDates object for react-native-calendars.
  *
  * - Logged days: solid success fill, white numeral.
+ * - Backfilled days: outlined success fill. They count toward the streak, but
+ *   the calendar keeps saying which days were logged live and which were fixed
+ *   afterwards — see `features/attendance/backfill.ts`.
  * - Missed days: soft tinted fill with a coloured numeral. A wall of solid red
  *   reads as an error state; a tint reads as information.
  * - Today: solid brand fill — only while the activity is still active.
@@ -34,6 +37,7 @@ export const buildMarkedDates = (
   activityCreatedAt?: number,
   completedAt?: number,
   palette: CalendarPalette = CalendarColors.light,
+  backfilledDates: string[] = [],
 ): MarkedDates => {
   // The last day we should evaluate as "active". For completed activities this
   // is the calendar-date of completion; for ongoing activities it is yesterday
@@ -43,11 +47,14 @@ export const buildMarkedDates = (
   // loggedDates are pre-sanitized YYYY-MM-DD strings (extracted from LogEntry.date by callers)
   const loggedSet = new Set(loggedDates);
 
-  const cell = (background: string, text: string, weight: '600' | '700') => ({
+  const backfilledSet = new Set(backfilledDates);
+
+  const cell = (background: string, text: string, weight: '600' | '700', border?: string) => ({
     customStyles: {
       container: {
         backgroundColor: background,
         borderRadius: BorderRadius.xs,
+        ...(border ? { borderWidth: 1, borderColor: border } : {}),
       },
       text: {
         color: text,
@@ -56,9 +63,11 @@ export const buildMarkedDates = (
     },
   });
 
-  // Mark all logged dates
+  // Mark all logged dates, fixed ones outlined rather than filled
   loggedDates.forEach((date) => {
-    marked[date] = cell(palette.logged, palette.loggedText, '700');
+    marked[date] = backfilledSet.has(date)
+      ? cell(palette.backfilled, palette.backfilledText, '700', palette.backfilledBorder)
+      : cell(palette.logged, palette.loggedText, '700');
   });
 
   // Mark missed days (from activity creation date up to the end of the active period)
