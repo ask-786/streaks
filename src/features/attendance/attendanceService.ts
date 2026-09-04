@@ -86,6 +86,17 @@ export interface LogEntry {
   ts: string; // UTC ISO string, e.g. "2026-07-10T08:45:00.000Z"
   date: string; // Local YYYY-MM-DD at the time of logging, e.g. "2026-07-10"
   tz?: string; // IANA timezone name at time of logging, e.g. "Asia/Kolkata"
+  /**
+   * True when the entry was added after the fact through the missed-day fix
+   * rather than on the day itself — the habit was done, the tap was forgotten.
+   * `ts` then holds the moment of the fix, not the moment of the habit, which
+   * is why a backfilled entry never shows a "time logged".
+   *
+   * The flag is permanent on purpose: a fixed day still counts toward the
+   * streak, but the calendar keeps showing which days were earned live. See
+   * `backfill.ts` for the rules that gate creating one.
+   */
+  backfilled?: boolean;
 }
 
 export interface NoteEntry {
@@ -373,6 +384,47 @@ export const attendanceService = {
     }
 
     return true;
+  },
+
+  /**
+   * Records a day the user completed but forgot to log.
+   *
+   * Callers must clear `getBackfillEligibility` first — this layer enforces
+   * only the invariant every log path shares (one entry per day) and the one
+   * this path adds (a reason is not optional). The reason is stored as an
+   * ordinary note so it shows up in the day's timeline and in exports.
+   *
+   * Entries are inserted in date order rather than appended, so the stored list
+   * stays ascending the way every other write leaves it.
+   */
+  logPastDate: async (
+    activityId: string,
+    dateStr: string,
+    reason: string,
+  ): Promise<LogEntry | null> => {
+    const trimmed = reason.trim();
+    if (!trimmed) return null;
+
+    const logs = await attendanceService.getLogs();
+    const activityLogs = logs[activityId] || [];
+    if (activityLogs.some((entry) => entry.date === dateStr)) return null;
+
+    const newEntry: LogEntry = {
+      ts: dayjs().toISOString(),
+      date: dateStr,
+      tz: getCurrentTz(),
+      backfilled: true,
+    };
+    const insertAt = activityLogs.findIndex((entry) => entry.date > dateStr);
+    logs[activityId] =
+      insertAt === -1
+        ? [...activityLogs, newEntry]
+        : [...activityLogs.slice(0, insertAt), newEntry, ...activityLogs.slice(insertAt)];
+    await attendanceService.saveLogs(logs);
+
+    await attendanceService.appendNote(activityId, dateStr, trimmed);
+
+    return newEntry;
   },
 
   /**

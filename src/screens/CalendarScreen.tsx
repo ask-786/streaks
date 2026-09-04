@@ -23,19 +23,12 @@ import { Card, PressableScale } from '../components/ui';
 export const CalendarScreen: React.FC = () => {
   const { colors, calendar: calendarColors } = useTheme();
   const [logDetailsVisible, setLogDetailsVisible] = React.useState(false);
-  const [logModalDate, setLogModalDate] = React.useState('');
   const [logModalDateKey, setLogModalDateKey] = React.useState('');
-  const [logModalTime, setLogModalTime] = React.useState<{
-    time: string;
-    tzDisplay: string | null;
-  } | null>(null);
-  const [logModalTask, setLogModalTask] = React.useState<SequenceTask | null>(null);
-  const [logModalIsLogged, setLogModalIsLogged] = React.useState(false);
+  // The only piece of sheet state that can't be derived: it depends on the
+  // wall-clock at the moment the day was tapped, not on stored data.
   const [logModalTimeBoundKind, setLogModalTimeBoundKind] = React.useState<
     'too_early' | 'too_late' | undefined
   >(undefined);
-  const [logModalIsSequenceSkipped, setLogModalIsSequenceSkipped] = React.useState(false);
-  const [logModalDroppedTasks, setLogModalDroppedTasks] = React.useState<SequenceDrop[]>([]);
 
   const {
     logs,
@@ -47,10 +40,14 @@ export const CalendarScreen: React.FC = () => {
     activities,
     appendNote,
     editNote,
+    logMissedDay,
+    getBackfillEligibility,
     isHideExtraDaysEnabled,
   } = useAttendanceStore();
   const selectedActivity = activities.find((a) => a.id === selectedActivityId);
-  const loggedDates = selectedActivityId ? (logs[selectedActivityId] || []).map((e) => e.date) : [];
+  const activityLogs = selectedActivityId ? (logs[selectedActivityId] ?? []) : [];
+  const loggedDates = activityLogs.map((e) => e.date);
+  const backfilledDates = activityLogs.filter((e) => e.backfilled).map((e) => e.date);
   const activitySequenceSkips: string[] = selectedActivityId
     ? (sequenceSkips[selectedActivityId] ?? [])
     : [];
@@ -64,6 +61,7 @@ export const CalendarScreen: React.FC = () => {
     selectedActivity?.createdAt,
     selectedActivity?.completedAt,
     calendarColors,
+    backfilledDates,
   );
 
   // Start / end date jump helpers
@@ -81,10 +79,42 @@ export const CalendarScreen: React.FC = () => {
 
   const isViewingCurrentMonth = dayjs(currentMonth).isSame(dayjs(today), 'month');
 
-  // Derive note entries reactively from the store so they stay fresh after appending
+  // Everything the sheet shows about the tapped day is derived from the store
+  // rather than snapshotted on press, so fixing a missed day (or adding a note)
+  // updates the open sheet instead of leaving it showing the old state.
   const logModalNotes =
     selectedActivityId && logModalDateKey
       ? notes[selectedActivityId]?.[logModalDateKey]
+      : undefined;
+  const logModalEntry = logModalDateKey
+    ? activityLogs.find((e) => e.date === logModalDateKey)
+    : undefined;
+  const logModalDate = logModalDateKey ? dayjs(logModalDateKey).format('MMMM D, YYYY') : '';
+  // A fixed day's timestamp is the moment of the fix, not of the habit — there
+  // is no honest "time logged" to show for it.
+  const logModalTime =
+    logModalEntry && !logModalEntry.backfilled && logModalEntry.ts.includes('T')
+      ? formatTimeWithTz(logModalEntry.ts, logModalEntry.tz)
+      : null;
+  const logModalTask: SequenceTask | null =
+    logModalEntry && selectedActivityId && selectedActivity
+      ? (taskHistory[selectedActivityId]?.[logModalDateKey] ??
+        getTaskForDate(selectedActivity, logModalDateKey, {
+          logs: loggedDates,
+          postponed: activitySequenceSkips,
+          dropped: activityDrops.map((d) => d.date),
+        }))
+      : null;
+  const logModalIsSequenceSkipped =
+    !!logModalEntry && activitySequenceSkips.includes(logModalDateKey);
+  // Tasks dropped on this day are worth showing whether or not the day itself
+  // was logged — a rest day can still be the day Leg left the cycle.
+  const logModalDroppedTasks = activityDrops.filter((d) => d.date === logModalDateKey);
+  // Only past, un-logged days get the fix affordance at all. Today has its own
+  // log button, so telling it the day "hasn't ended yet" would be pure noise.
+  const logModalBackfill =
+    selectedActivityId && logModalDateKey && !logModalEntry && logModalDateKey < today
+      ? getBackfillEligibility(selectedActivityId, logModalDateKey)
       : undefined;
 
   const jumpTo = (date: string) => {
@@ -173,75 +203,40 @@ export const CalendarScreen: React.FC = () => {
               hideExtraDays={isHideExtraDaysEnabled}
               onDayPress={(day) => {
                 haptics.light();
-                // Use .date field (locked local date) instead of parsing the UTC timestamp,
-                // so the calendar day never shifts when the device's timezone changes.
-                const rawEntry = selectedActivityId
-                  ? (logs[selectedActivityId] || []).find((e) => e.date === day.dateString)
-                  : undefined;
-                const dateKey = day.dateString;
-                setLogModalDate(dayjs(day.dateString).format('MMMM D, YYYY'));
-                setLogModalDateKey(dateKey);
-                setLogModalIsLogged(!!rawEntry);
-                // Tasks dropped on this day are worth showing whether or not
-                // the day itself was logged — a rest day can still be the day
-                // Leg left the cycle.
-                setLogModalDroppedTasks(activityDrops.filter((d) => d.date === dateKey));
-                if (rawEntry) {
-                  // Show time in the timezone where it was originally logged
-                  setLogModalTime(
-                    rawEntry.ts.includes('T') ? formatTimeWithTz(rawEntry.ts, rawEntry.tz) : null,
-                  );
-                  // Compute which task was active on this day (accounting for skips)
-                  let task: SequenceTask | null = null;
-                  if (selectedActivityId) {
-                    task = taskHistory[selectedActivityId]?.[day.dateString] || null;
-                    if (!task && selectedActivity) {
-                      const actLogDates = (logs[selectedActivityId] || []).map((e) => e.date);
-                      task = getTaskForDate(selectedActivity, day.dateString, {
-                        logs: actLogDates,
-                        postponed: activitySequenceSkips,
-                        dropped: activityDrops.map((d) => d.date),
-                      });
-                    }
-                  }
-                  setLogModalTask(task);
-                  setLogModalIsSequenceSkipped(activitySequenceSkips.includes(day.dateString));
-                  setLogModalTimeBoundKind(undefined);
-                } else {
-                  setLogModalTime(null);
-                  setLogModalTask(null);
-                  setLogModalIsSequenceSkipped(false);
-                  // Compute time-bound kind for unlogged today
-                  if (day.dateString === today && selectedActivity?.timeBoundType) {
-                    const currentTime = dayjs().format('HH:mm');
-                    const { timeBoundType, timeBoundStartTime, timeBoundEndTime } =
-                      selectedActivity;
-                    let kind: 'too_early' | 'too_late' | undefined;
-                    if (
-                      timeBoundType === 'before' &&
-                      timeBoundStartTime &&
-                      currentTime >= timeBoundStartTime
-                    ) {
-                      kind = 'too_late';
-                    } else if (
-                      timeBoundType === 'after' &&
-                      timeBoundStartTime &&
-                      currentTime < timeBoundStartTime
-                    ) {
-                      kind = 'too_early';
-                    } else if (
-                      timeBoundType === 'between' &&
-                      timeBoundStartTime &&
-                      timeBoundEndTime
-                    ) {
-                      if (currentTime < timeBoundStartTime) kind = 'too_early';
-                      else if (currentTime >= timeBoundEndTime) kind = 'too_late';
-                    }
-                    setLogModalTimeBoundKind(kind);
-                  } else {
-                    setLogModalTimeBoundKind(undefined);
+                // Match on the .date field (the locked local date) rather than
+                // parsing the UTC timestamp, so the calendar day never shifts
+                // when the device's timezone changes.
+                const isLogged = loggedDates.includes(day.dateString);
+                setLogModalDateKey(day.dateString);
+
+                // Time-bound state only means anything for an un-logged today,
+                // and only against the clock as it reads right now.
+                let kind: 'too_early' | 'too_late' | undefined;
+                if (!isLogged && day.dateString === today && selectedActivity?.timeBoundType) {
+                  const currentTime = dayjs().format('HH:mm');
+                  const { timeBoundType, timeBoundStartTime, timeBoundEndTime } = selectedActivity;
+                  if (
+                    timeBoundType === 'before' &&
+                    timeBoundStartTime &&
+                    currentTime >= timeBoundStartTime
+                  ) {
+                    kind = 'too_late';
+                  } else if (
+                    timeBoundType === 'after' &&
+                    timeBoundStartTime &&
+                    currentTime < timeBoundStartTime
+                  ) {
+                    kind = 'too_early';
+                  } else if (
+                    timeBoundType === 'between' &&
+                    timeBoundStartTime &&
+                    timeBoundEndTime
+                  ) {
+                    if (currentTime < timeBoundStartTime) kind = 'too_early';
+                    else if (currentTime >= timeBoundEndTime) kind = 'too_late';
                   }
                 }
+                setLogModalTimeBoundKind(kind);
                 setLogDetailsVisible(true);
               }}
               theme={{
@@ -286,13 +281,20 @@ export const CalendarScreen: React.FC = () => {
         activityName={selectedActivity?.name}
         dateKey={logModalDateKey}
         isToday={logModalDateKey === today}
-        isLogged={logModalIsLogged}
+        isLogged={!!logModalEntry}
         requiresNote={selectedActivity?.requiresNote}
         taskForDay={logModalTask}
         isSequenceSkipped={logModalIsSequenceSkipped}
         droppedTasks={logModalDroppedTasks}
         timeBoundKind={logModalTimeBoundKind}
         isActivityCompleted={!!selectedActivity?.completedAt}
+        isBackfilled={!!logModalEntry?.backfilled}
+        backfill={logModalBackfill}
+        onBackfill={
+          selectedActivityId && logModalDateKey
+            ? (reason) => logMissedDay(selectedActivityId, logModalDateKey, reason)
+            : undefined
+        }
         onNoteAppend={
           selectedActivityId
             ? async (text) => {
@@ -301,7 +303,7 @@ export const CalendarScreen: React.FC = () => {
             : undefined
         }
         onNoteEdit={
-          selectedActivityId && logModalIsLogged
+          selectedActivityId && logModalEntry
             ? async (index, text) => {
                 await editNote(selectedActivityId, logModalDateKey, index, text);
               }

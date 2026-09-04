@@ -26,6 +26,11 @@ import { Typography, Spacing, BorderRadius, alpha } from '../constants';
 import { FontAwesome5, Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 import { NoteEntry, SequenceDrop, SequenceTask } from '../features/attendance/attendanceService';
+import {
+  BackfillEligibility,
+  describeBackfillBlock,
+  BACKFILL_QUOTA,
+} from '../features/attendance/backfill';
 import { formatTimeWithTz } from '../utils/dateUtils';
 import { haptics } from '../utils/haptics';
 
@@ -51,6 +56,15 @@ export interface LogDetailsModalProps {
   timeBoundKind?: 'too_early' | 'too_late';
   /** Whether the overall activity has been marked as completed (goal reached or manual). */
   isActivityCompleted?: boolean;
+  /** Whether this day was logged after the fact rather than on the day itself. */
+  isBackfilled?: boolean;
+  /**
+   * Whether this un-logged past day can still be fixed, and why not if it
+   * can't. Omit to hide the fix affordance entirely.
+   */
+  backfill?: BackfillEligibility;
+  /** Records this day as done, with the reason the user typed. Resolves false if refused. */
+  onBackfill?: (reason: string) => Promise<boolean>;
   /** Appends a new note entry for today. */
   onNoteAppend?: (text: string) => Promise<void>;
   /** Edits an existing note entry by index. */
@@ -72,28 +86,37 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
   droppedTasks = [],
   timeBoundKind,
   isActivityCompleted = false,
+  isBackfilled = false,
+  backfill,
+  onBackfill,
   onNoteAppend,
   onNoteEdit,
   onClose,
 }) => {
   const { colors } = useTheme();
 
-  /** null = adding a new note; number = editing note at that index */
-  const [noteModalVisible, setNoteModalVisible] = React.useState(false);
-  const [editingIndex, setEditingIndex] = React.useState<number | null>(null);
+  /**
+   * What the stacked text sheet is currently for. `fix` writes the mandatory
+   * reason for a missed day rather than an ordinary note — same input, very
+   * different consequence, so the two are distinct modes rather than a flag.
+   */
+  type DraftMode = { kind: 'add' } | { kind: 'edit'; index: number } | { kind: 'fix' };
+
+  const [draftMode, setDraftMode] = React.useState<DraftMode | null>(null);
   const [draftNote, setDraftNote] = React.useState('');
   const [isSaving, setIsSaving] = React.useState(false);
   const [copiedIndex, setCopiedIndex] = React.useState<number | null>(null);
   const inputRef = React.useRef<TextInput>(null);
   const copyTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const isEditMode = editingIndex !== null;
+  const noteModalVisible = draftMode !== null;
+  const isEditMode = draftMode?.kind === 'edit';
+  const isFixMode = draftMode?.kind === 'fix';
 
   // Close note modal state when the main modal closes
   React.useEffect(() => {
     if (!visible) {
-      setNoteModalVisible(false);
-      setEditingIndex(null);
+      setDraftMode(null);
       setDraftNote('');
     }
   }, [visible]);
@@ -116,32 +139,47 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
 
   const openAdd = () => {
     haptics.medium();
-    setEditingIndex(null);
     setDraftNote('');
-    setNoteModalVisible(true);
+    setDraftMode({ kind: 'add' });
   };
 
   const openEdit = (index: number) => {
     haptics.medium();
-    setEditingIndex(index);
     setDraftNote(notes?.[index]?.text ?? '');
-    setNoteModalVisible(true);
+    setDraftMode({ kind: 'edit', index });
+  };
+
+  const openFix = () => {
+    haptics.medium();
+    setDraftNote('');
+    setDraftMode({ kind: 'fix' });
   };
 
   const handleSave = async () => {
     const trimmed = draftNote.trim();
-    if (!trimmed) return haptics.warning();
+    if (!trimmed || !draftMode) return haptics.warning();
     setIsSaving(true);
     try {
-      if (isEditMode) {
-        await onNoteEdit?.(editingIndex!, trimmed);
+      if (draftMode.kind === 'fix') {
+        // A refusal here means the rules changed under the sheet — the quota
+        // ran out elsewhere, or midnight pushed the day out of the window.
+        // Closing puts the reason why back in front of the user.
+        const done = await onBackfill?.(trimmed);
+        if (!done) {
+          haptics.error();
+          Keyboard.dismiss();
+          setDraftMode(null);
+          setDraftNote('');
+          return;
+        }
+      } else if (draftMode.kind === 'edit') {
+        await onNoteEdit?.(draftMode.index, trimmed);
       } else {
         await onNoteAppend?.(trimmed);
       }
       haptics.success();
       Keyboard.dismiss();
-      setNoteModalVisible(false);
-      setEditingIndex(null);
+      setDraftMode(null);
       setDraftNote('');
     } finally {
       setIsSaving(false);
@@ -151,8 +189,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
   const handleCloseNoteModal = () => {
     haptics.light();
     Keyboard.dismiss();
-    setNoteModalVisible(false);
-    setEditingIndex(null);
+    setDraftMode(null);
     setDraftNote('');
   };
 
@@ -283,29 +320,44 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                             style={[
                               styles.infoIconWrap,
                               {
-                                backgroundColor: timeData
-                                  ? colors.successMuted
-                                  : colors.surfaceVariant,
+                                backgroundColor: isBackfilled
+                                  ? colors.warningMuted
+                                  : timeData
+                                    ? colors.successMuted
+                                    : colors.surfaceVariant,
                               },
                             ]}
                           >
                             <FontAwesome5
-                              name="clock"
+                              name={isBackfilled ? 'history' : 'clock'}
                               size={13}
-                              color={timeData ? colors.success : colors.textSecondary}
+                              color={
+                                isBackfilled
+                                  ? colors.warning
+                                  : timeData
+                                    ? colors.success
+                                    : colors.textSecondary
+                              }
                             />
                           </View>
                           <View style={styles.infoTextWrap}>
                             <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>
-                              Time Logged
+                              {isBackfilled ? 'How it was logged' : 'Time Logged'}
                             </Text>
                             <Text
                               style={[
                                 styles.infoValue,
-                                { color: timeData ? colors.textPrimary : colors.textSecondary },
+                                {
+                                  color:
+                                    isBackfilled || !timeData
+                                      ? colors.textSecondary
+                                      : colors.textPrimary,
+                                },
                               ]}
                             >
-                              {timeData ? (
+                              {isBackfilled ? (
+                                'Added afterwards, not on the day'
+                              ) : timeData ? (
                                 <Text>
                                   {timeData.time}
                                   {timeData.tzDisplay && (
@@ -320,7 +372,16 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                               )}
                             </Text>
                           </View>
-                          {timeData ? (
+                          {isBackfilled ? (
+                            <View
+                              style={[styles.statusBadge, { backgroundColor: colors.warningMuted }]}
+                            >
+                              <Ionicons name="time-outline" size={14} color={colors.warning} />
+                              <Text style={[styles.statusBadgeText, { color: colors.warning }]}>
+                                Fixed
+                              </Text>
+                            </View>
+                          ) : timeData ? (
                             <View
                               style={[styles.statusBadge, { backgroundColor: colors.successMuted }]}
                             >
@@ -437,6 +498,78 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                           </View>
                         </View>
                       )}
+
+                      {/* ── Fixing a day that was done but never logged ── */}
+                      {!isLogged && backfill ? (
+                        <>
+                          <View
+                            style={[styles.divider, { backgroundColor: colors.surfaceVariant }]}
+                          />
+                          <View style={styles.infoRow}>
+                            <View
+                              style={[
+                                styles.infoIconWrap,
+                                {
+                                  backgroundColor: backfill.allowed
+                                    ? colors.primaryMuted
+                                    : colors.surfaceVariant,
+                                },
+                              ]}
+                            >
+                              <FontAwesome5
+                                name="history"
+                                size={13}
+                                color={backfill.allowed ? colors.primary : colors.textTertiary}
+                              />
+                            </View>
+                            <View style={styles.infoTextWrap}>
+                              <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>
+                                Did it, forgot to log?
+                              </Text>
+                              {backfill.allowed ? (
+                                <>
+                                  <Text
+                                    style={[styles.infoDescription, { color: colors.textTertiary }]}
+                                  >
+                                    You can still record it — but it stays marked as fixed
+                                    afterwards, and you get {BACKFILL_QUOTA} of these a month.
+                                    {backfill.remaining} left.
+                                  </Text>
+                                  <Pressable
+                                    style={({ pressed }) => [
+                                      styles.fixBtn,
+                                      {
+                                        backgroundColor: colors.primaryMuted,
+                                        borderColor: colors.primaryBorder,
+                                        opacity: pressed ? 0.7 : 1,
+                                      },
+                                    ]}
+                                    onPress={openFix}
+                                    android_ripple={{ color: colors.primary + '33', radius: 80 }}
+                                    accessibilityRole="button"
+                                    accessibilityLabel="Log this missed day"
+                                  >
+                                    <Ionicons
+                                      name="checkmark-done"
+                                      size={15}
+                                      color={colors.primary}
+                                    />
+                                    <Text style={[styles.fixBtnText, { color: colors.primary }]}>
+                                      I actually did this
+                                    </Text>
+                                  </Pressable>
+                                </>
+                              ) : (
+                                <Text
+                                  style={[styles.infoDescription, { color: colors.textTertiary }]}
+                                >
+                                  {describeBackfillBlock(backfill.block, backfill.used)}
+                                </Text>
+                              )}
+                            </View>
+                          </View>
+                        </>
+                      ) : null}
 
                       {/* ── Task that day ── */}
                       {taskForDay ? (
@@ -851,18 +984,18 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                         ]}
                       >
                         <FontAwesome5
-                          name={isEditMode ? 'pen' : 'pen'}
+                          name={isFixMode ? 'history' : 'pen'}
                           size={16}
                           color={colors.primary}
                         />
                       </View>
                       <View style={{ flex: 1 }}>
                         <Text style={[styles.addNoteTitle, { color: colors.textPrimary }]}>
-                          {isEditMode ? 'Edit Note' : 'Add Note'}
+                          {isFixMode ? 'Fix a missed day' : isEditMode ? 'Edit Note' : 'Add Note'}
                         </Text>
                         {activityName ? (
                           <Text style={[styles.addNoteSubtitle, { color: colors.primary }]}>
-                            {activityName}
+                            {isFixMode ? `${activityName} · ${dateStr}` : activityName}
                           </Text>
                         ) : null}
                       </View>
@@ -887,9 +1020,11 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                     </View>
 
                     <Text style={[styles.addNoteHint, { color: colors.textSecondary }]}>
-                      {isEditMode
-                        ? 'Update the note text below.'
-                        : 'Add a note for this day — e.g. reason for missing, what you covered, etc.'}
+                      {isFixMode
+                        ? 'Only if you genuinely did it that day. Write what you did and why it went unlogged — the note is kept with the day, and the day stays marked as fixed afterwards.'
+                        : isEditMode
+                          ? 'Update the note text below.'
+                          : 'Add a note for this day — e.g. reason for missing, what you covered, etc.'}
                     </Text>
 
                     {/* Input */}
@@ -904,7 +1039,11 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                         style={[styles.noteTextInput, { color: colors.textPrimary }]}
                         value={draftNote}
                         onChangeText={setDraftNote}
-                        placeholder="Write your note here…"
+                        placeholder={
+                          isFixMode
+                            ? 'e.g. Ran the 5k before work, phone was dead all evening'
+                            : 'Write your note here…'
+                        }
                         placeholderTextColor={colors.textSecondary}
                         multiline
                         maxLength={500}
@@ -956,9 +1095,17 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                           <ActivityIndicator size={16} color="#fff" />
                         ) : (
                           <>
-                            <Ionicons name="checkmark" size={16} color="#fff" />
+                            <Ionicons
+                              name={isFixMode ? 'checkmark-done' : 'checkmark'}
+                              size={16}
+                              color="#fff"
+                            />
                             <Text style={styles.saveBtnText}>
-                              {isEditMode ? 'Update Note' : 'Save Note'}
+                              {isFixMode
+                                ? 'Yes, I did this'
+                                : isEditMode
+                                  ? 'Update Note'
+                                  : 'Save Note'}
                             </Text>
                           </>
                         )}
@@ -1226,6 +1373,23 @@ const styles = StyleSheet.create({
     marginTop: Spacing.xs,
   },
   addNoteBtnText: {
+    ...Typography.labelMedium,
+    fontWeight: '700',
+  },
+  // Deliberately a modest outlined button rather than a filled call to action —
+  // fixing a missed day is a recovery path, not something to invite.
+  fixBtn: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    marginTop: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm - 2,
+    borderRadius: BorderRadius.full,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  fixBtnText: {
     ...Typography.labelMedium,
     fontWeight: '700',
   },

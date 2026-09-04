@@ -224,10 +224,17 @@ export const darkPalette: ThemePalette = {
 };
 
 // ─── Calendar day states ─────────────────────────────────────────────────────
+// A backfilled day — one the user fixed after the fact — is deliberately not
+// the solid logged fill. It reads as "counted, but not earned live": the same
+// green family, outlined rather than filled, so a streak of them is visible at
+// a glance without being shamed in red.
 export const CalendarColors = {
   light: {
     logged: Ramp.emerald[500],
     loggedText: '#FFFFFF',
+    backfilled: Ramp.emerald[100],
+    backfilledText: Ramp.emerald[700],
+    backfilledBorder: Ramp.emerald[400],
     missed: Ramp.rose[100],
     missedText: Ramp.rose[600],
     today: Ramp.indigo[600],
@@ -237,6 +244,9 @@ export const CalendarColors = {
   dark: {
     logged: Ramp.emerald[500],
     loggedText: '#04140E',
+    backfilled: '#0C2B22',
+    backfilledText: Ramp.emerald[300],
+    backfilledBorder: Ramp.emerald[600],
     missed: '#3A1220',
     missedText: Ramp.rose[300],
     today: Ramp.indigo[500],

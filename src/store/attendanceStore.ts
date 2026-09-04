@@ -13,6 +13,7 @@ import {
   SequenceDropsMap,
   SequenceTask,
 } from '../features/attendance/attendanceService';
+import { getBackfillEligibility, BackfillEligibility } from '../features/attendance/backfill';
 import {
   calculateCurrentStreak,
   calculateLongestStreak,
@@ -91,6 +92,12 @@ interface AttendanceState {
   setHideExtraDaysEnabled: (enabled: boolean) => Promise<void>;
   setHapticsEnabled: (enabled: boolean) => Promise<void>;
   logToday: (activityId: string, note?: string) => Promise<void>;
+  /**
+   * Logs a past day the user actually completed but forgot to record.
+   * Rejects (returning false) unless `getBackfillEligibility` allows it and a
+   * reason was written — the rules live in `features/attendance/backfill.ts`.
+   */
+  logMissedDay: (activityId: string, dateStr: string, reason: string) => Promise<boolean>;
   /** Logs today AND marks the sequence task as skipped. Streak is maintained but sequence does not advance. */
   logTodayWithSequenceSkip: (activityId: string, note?: string) => Promise<void>;
   /**
@@ -113,6 +120,8 @@ interface AttendanceState {
   // Derived getters
   getActivityStats: (activityId: string) => ActivityStats;
   getNoteEntries: (activityId: string, dateStr: string) => NoteEntry[] | undefined;
+  /** Whether a past day can still be fixed, and how much of the quota is left. */
+  getBackfillEligibility: (activityId: string, dateStr: string) => BackfillEligibility;
 }
 
 export { NoteEntry, getTaskForDate };
@@ -477,6 +486,85 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     });
   },
 
+  logMissedDay: async (activityId: string, dateStr: string, reason: string) => {
+    const { logs, notes, taskHistory, activities, sequenceSkips, sequenceDrops } = get();
+    const trimmedReason = reason.trim();
+    if (!trimmedReason) return false;
+
+    const activity = activities.find((a) => a.id === activityId);
+    const entries = logs[activityId] ?? [];
+    // Re-check here rather than trusting the screen: the quota can be spent in
+    // another tab, and midnight can pass while the sheet sits open.
+    if (!getBackfillEligibility(activity, entries, dateStr).allowed) return false;
+
+    set({ isLoading: true });
+    const newEntry = await attendanceService.logPastDate(activityId, dateStr, trimmedReason);
+    if (!newEntry) {
+      set({ isLoading: false });
+      return false;
+    }
+
+    // Keep the in-memory list ascending, the same way the service just did on disk.
+    const insertAt = entries.findIndex((entry) => entry.date > dateStr);
+    const updatedEntries =
+      insertAt === -1
+        ? [...entries, newEntry]
+        : [...entries.slice(0, insertAt), newEntry, ...entries.slice(insertAt)];
+    const updatedLogs = { ...logs, [activityId]: updatedEntries };
+
+    // Lock in the task for that day, exactly as logging it live would have. In
+    // 'log' mode this shifts the *upcoming* task by one step, which is correct:
+    // a session that happened is a session the sequence should have advanced on.
+    const updatedTaskHistory = { ...taskHistory };
+    if (activity?.taskSequence && activity.taskSequence.length > 0) {
+      const task = getTaskForDate(activity, dateStr, {
+        logs: updatedEntries.map((e) => e.date),
+        postponed: sequenceSkips[activityId] ?? [],
+        dropped: (sequenceDrops[activityId] ?? []).map((d) => d.date),
+      });
+      if (task) {
+        updatedTaskHistory[activityId] = { ...updatedTaskHistory[activityId], [dateStr]: task };
+        await attendanceService.saveTaskHistory(updatedTaskHistory);
+      }
+    }
+
+    // The reason is stored as an ordinary note, so mirror it like appendNote does.
+    const updatedNotes = { ...notes };
+    const existing = updatedNotes[activityId]?.[dateStr] ?? [];
+    updatedNotes[activityId] = {
+      ...updatedNotes[activityId],
+      [dateStr]: [
+        ...existing,
+        { text: trimmedReason, time: dayjs().toISOString(), tz: getCurrentTz() },
+      ],
+    };
+
+    // A fixed day can be the one that completes a goal — it stands for work
+    // that was actually done, so it settles the goal the same as any other log.
+    let updatedActivities = activities;
+    if (activity && activity.activityType === 'goal' && activity.streakGoal) {
+      const logDates = updatedEntries.map((e) => e.date);
+      const newStreak = activity.weeklyGoal
+        ? calculateCurrentWeeklyStreak(logDates, activity.weeklyGoal)
+        : calculateCurrentStreak(logDates);
+      if (newStreak >= activity.streakGoal) {
+        updatedActivities = activities.map((a) =>
+          a.id === activityId ? { ...a, completedAt: Date.now() } : a,
+        );
+        await attendanceService.saveActivities(updatedActivities);
+      }
+    }
+
+    set({
+      logs: updatedLogs,
+      notes: updatedNotes,
+      taskHistory: updatedTaskHistory,
+      activities: updatedActivities,
+      isLoading: false,
+    });
+    return true;
+  },
+
   logTodayWithSequenceSkip: async (activityId: string, note?: string) => {
     const { logs, notes, sequenceSkips } = get();
     const today = todayStr();
@@ -685,5 +773,14 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
 
   getNoteEntries: (activityId: string, dateStr: string) => {
     return get().notes[activityId]?.[dateStr];
+  },
+
+  getBackfillEligibility: (activityId: string, dateStr: string) => {
+    const { activities, logs } = get();
+    return getBackfillEligibility(
+      activities.find((a) => a.id === activityId),
+      logs[activityId] ?? [],
+      dateStr,
+    );
   },
 }));
