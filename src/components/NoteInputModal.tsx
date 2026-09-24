@@ -16,6 +16,15 @@ import { Typography, Spacing, BorderRadius, Duration, Ease, HitSlop, alpha } fro
 import { useTheme } from '../hooks/useTheme';
 import { haptics } from '../utils/haptics';
 import { PressableScale } from './ui';
+import { MetricValueInput } from './MetricValueInput';
+import {
+  HabitMetric,
+  METRIC_KINDS,
+  emptyValueDraft,
+  isMetricRequired,
+  metricTitle,
+  parseValueDraft,
+} from '../features/metrics/metrics';
 
 const MAX_LENGTH = 280;
 
@@ -30,8 +39,13 @@ export interface NoteInputModalProps {
   submitLabel?: string;
   /** When false, the note is optional and Submit is always enabled. Defaults to true. */
   noteRequired?: boolean;
+  /** When false, the note field is hidden and only the metric is asked for. Defaults to true. */
+  showNote?: boolean;
+  /** The habit's metric, when the sheet should also ask for the day's value. */
+  metric?: HabitMetric;
   onClose: () => void;
-  onSubmit: (note: string) => void;
+  /** `value` is in the metric's base unit; undefined when none was entered. */
+  onSubmit: (note: string, value?: number) => void;
 }
 
 export const NoteInputModal: React.FC<NoteInputModalProps> = ({
@@ -41,13 +55,17 @@ export const NoteInputModal: React.FC<NoteInputModalProps> = ({
   subtitle,
   submitLabel,
   noteRequired = true,
+  showNote = true,
+  metric,
   onClose,
   onSubmit,
 }) => {
   const { colors, elevation } = useTheme();
   const insets = useSafeAreaInsets();
   const [note, setNote] = useState('');
+  const [valueDraft, setValueDraft] = useState(emptyValueDraft);
   const inputRef = useRef<TextInput>(null);
+  const valueRef = useRef<TextInput>(null);
 
   // Hardware back closes the sheet.
   useEffect(() => {
@@ -62,22 +80,33 @@ export const NoteInputModal: React.FC<NoteInputModalProps> = ({
   useEffect(() => {
     if (visible) {
       setNote('');
+      setValueDraft(emptyValueDraft());
       // Focus after the sheet has finished sliding in — focusing immediately
       // fights the entrance animation and the keyboard lands mid-transition.
-      const t = setTimeout(() => inputRef.current?.focus(), Duration.normal + 60);
+      // The number comes first when there is one: it's the quicker thing to type.
+      const t = setTimeout(
+        () => (metric ? valueRef.current : inputRef.current)?.focus(),
+        Duration.normal + 60,
+      );
       return () => clearTimeout(t);
     }
-  }, [visible]);
+  }, [visible, metric]);
 
   const trimmed = note.trim();
-  const canSubmit = noteRequired ? trimmed.length > 0 : true;
+  const noteOk = !showNote || !noteRequired || trimmed.length > 0;
+  const parsedValue = metric ? parseValueDraft(metric, valueDraft) : null;
+  const valueOk =
+    !parsedValue ||
+    parsedValue.state === 'ok' ||
+    (parsedValue.state === 'empty' && !isMetricRequired(metric));
+  const canSubmit = noteOk && valueOk;
 
   const handleSubmit = () => {
     // Rejection is ours to signal; the *outcome* belongs to the caller, which
     // is the only thing that knows whether this logged a streak. Firing here
     // too would stack two pulses on one tap.
     if (!canSubmit) return haptics.warning();
-    onSubmit(trimmed);
+    onSubmit(showNote ? trimmed : '', parsedValue?.state === 'ok' ? parsedValue.value : undefined);
   };
 
   if (!visible) return null;
@@ -128,7 +157,13 @@ export const NoteInputModal: React.FC<NoteInputModalProps> = ({
             <View style={styles.header}>
               <View style={[styles.iconWrap, { backgroundColor: alpha(colors.primary, 0.12) }]}>
                 <FontAwesome5
-                  name={noteRequired ? 'sticky-note' : 'forward'}
+                  name={
+                    metric && !showNote
+                      ? METRIC_KINDS[metric.kind].icon
+                      : noteRequired
+                        ? 'sticky-note'
+                        : 'forward'
+                  }
                   size={15}
                   color={colors.primary}
                 />
@@ -162,43 +197,64 @@ export const NoteInputModal: React.FC<NoteInputModalProps> = ({
               {subtitle ?? 'A line about how it went. Future you will be glad it is here.'}
             </Text>
 
-            {/* Note input */}
-            <View
-              style={[
-                styles.inputWrapper,
-                {
-                  backgroundColor: colors.surfaceSunken,
-                  borderColor: colors.border,
-                },
-              ]}
-            >
-              <TextInput
-                ref={inputRef}
-                style={[styles.input, { color: colors.textPrimary }]}
-                placeholder="e.g. Read 15 pages of Clean Code"
-                placeholderTextColor={colors.textDisabled}
-                value={note}
-                onChangeText={setNote}
-                multiline
-                maxLength={MAX_LENGTH}
-                selectionColor={colors.primary}
-                textAlignVertical="top"
-                accessibilityLabel="Note text"
-              />
-            </View>
-
-            <View style={styles.metaRow}>
-              {noteRequired && trimmed.length === 0 ? (
-                <Text style={[styles.requiredHint, { color: colors.textTertiary }]}>
-                  A note is required for this habit
+            {metric ? (
+              <View style={styles.metricField}>
+                <Text style={[styles.metricLabel, { color: colors.textTertiary }]}>
+                  {metricTitle(metric)}
+                  {isMetricRequired(metric) ? '' : ' (optional)'}
                 </Text>
-              ) : (
-                <View style={{ flex: 1 }} />
-              )}
-              <Text style={[styles.charCount, { color: countColor }]}>
-                {note.length}/{MAX_LENGTH}
-              </Text>
-            </View>
+                <MetricValueInput
+                  metric={metric}
+                  draft={valueDraft}
+                  onChange={setValueDraft}
+                  fieldBackground={colors.surfaceSunken}
+                  inputRef={valueRef}
+                  accessibilityLabel={metricTitle(metric)}
+                />
+              </View>
+            ) : null}
+
+            {showNote ? (
+              <>
+                {/* Note input */}
+                <View
+                  style={[
+                    styles.inputWrapper,
+                    {
+                      backgroundColor: colors.surfaceSunken,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                >
+                  <TextInput
+                    ref={inputRef}
+                    style={[styles.input, { color: colors.textPrimary }]}
+                    placeholder="e.g. Read 15 pages of Clean Code"
+                    placeholderTextColor={colors.textDisabled}
+                    value={note}
+                    onChangeText={setNote}
+                    multiline
+                    maxLength={MAX_LENGTH}
+                    selectionColor={colors.primary}
+                    textAlignVertical="top"
+                    accessibilityLabel="Note text"
+                  />
+                </View>
+
+                <View style={styles.metaRow}>
+                  {noteRequired && trimmed.length === 0 ? (
+                    <Text style={[styles.requiredHint, { color: colors.textTertiary }]}>
+                      A note is required for this habit
+                    </Text>
+                  ) : (
+                    <View style={{ flex: 1 }} />
+                  )}
+                  <Text style={[styles.charCount, { color: countColor }]}>
+                    {note.length}/{MAX_LENGTH}
+                  </Text>
+                </View>
+              </>
+            ) : null}
 
             {/* Actions */}
             <View style={styles.actions}>
@@ -309,6 +365,14 @@ const styles = StyleSheet.create({
   subtitle: {
     ...Typography.bodyMedium,
     marginBottom: Spacing.md,
+  },
+  metricField: {
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  metricLabel: {
+    ...Typography.overline,
+    marginLeft: 2,
   },
   inputWrapper: {
     borderRadius: BorderRadius.md,

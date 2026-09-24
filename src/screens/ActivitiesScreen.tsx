@@ -10,6 +10,7 @@ import dayjs from 'dayjs';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { useAttendanceStore, SequenceTask, ActivityInput } from '../store/attendanceStore';
 import { HabitReminder } from '../features/attendance/attendanceService';
+import { HabitMetric } from '../features/metrics/metrics';
 import {
   Typography,
   Spacing,
@@ -83,6 +84,10 @@ export const ActivitiesScreen: React.FC = () => {
   );
   const [editingStreakGoal, setEditingStreakGoal] = useState<number | undefined>(undefined);
   const [editingReminder, setEditingReminder] = useState<HabitReminder | undefined>(undefined);
+  const [editingMetric, setEditingMetric] = useState<HabitMetric | undefined>(undefined);
+  const [editingPreviousMetric, setEditingPreviousMetric] = useState<HabitMetric | undefined>(
+    undefined,
+  );
 
   // Split active vs completed
   const activeActivities = activities.filter((a) => !a.completedAt);
@@ -147,6 +152,8 @@ export const ActivitiesScreen: React.FC = () => {
     setEditingActivityType(activity?.activityType);
     setEditingStreakGoal(activity?.streakGoal);
     setEditingReminder(activity.reminders?.[0]);
+    setEditingMetric(activity.metric);
+    setEditingPreviousMetric(activity.previousMetric);
     setSelectedIds([]);
     setIsModalVisible(true);
   };
@@ -166,6 +173,8 @@ export const ActivitiesScreen: React.FC = () => {
     setEditingActivityType(undefined);
     setEditingStreakGoal(undefined);
     setEditingReminder(undefined);
+    setEditingMetric(undefined);
+    setEditingPreviousMetric(undefined);
   };
 
   const clearSelection = () => setSelectedIds([]);
@@ -589,6 +598,13 @@ export const ActivitiesScreen: React.FC = () => {
         initialActivityType={editingActivityType}
         initialStreakGoal={editingStreakGoal}
         initialReminder={editingReminder}
+        initialMetric={editingMetric}
+        previousMetric={editingPreviousMetric}
+        metricKindLocked={
+          !!editingItemId &&
+          !!(editingMetric ?? editingPreviousMetric) &&
+          (logs[editingItemId] ?? []).some((e) => e.value !== undefined)
+        }
         onClose={closeModal}
         onSave={handleSaveActivity}
       />

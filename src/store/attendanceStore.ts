@@ -13,6 +13,7 @@ import {
   SequenceDrop,
   SequenceDropsMap,
   SequenceTask,
+  withLogValue,
 } from '../features/attendance/attendanceService';
 import { getBackfillEligibility, BackfillEligibility } from '../features/attendance/backfill';
 import {
@@ -25,6 +26,7 @@ import {
 } from '../utils/streakUtils';
 import { todayStr, getCurrentTz } from '../utils/dateUtils';
 import { setHapticsEnabled as applyHapticsPreference } from '../utils/haptics';
+import { HabitMetric, combineValues } from '../features/metrics/metrics';
 
 interface ActivityStats {
   currentStreak: number;
@@ -55,13 +57,15 @@ export interface ActivityInput {
   activityType?: 'goal' | 'endless';
   streakGoal?: number;
   reminders?: HabitReminder[];
+  /** Clearing it keeps a copy as `previousMetric`; the logged values stay either way. */
+  metric?: HabitMetric | null;
 }
 
 /**
  * A partial update to an existing habit. Undefined fields are left alone. To
  * clear one: `weeklyGoal: 0`, an empty `taskSequence` or `reminders`, and
- * `null` for the time bound fields. The activity type and streak goal are
- * fixed once a habit exists.
+ * `null` for the time bound fields and `metric`. The activity type and streak
+ * goal are fixed once a habit exists.
  */
 export type ActivityChanges = Partial<Omit<ActivityInput, 'activityType' | 'streakGoal'>>;
 
@@ -92,15 +96,21 @@ interface AttendanceState {
   setConfettiEnabled: (enabled: boolean) => Promise<void>;
   setHideExtraDaysEnabled: (enabled: boolean) => Promise<void>;
   setHapticsEnabled: (enabled: boolean) => Promise<void>;
-  logToday: (activityId: string, note?: string) => Promise<void>;
+  /** `value` is the day's metric value in base units, when the habit tracks one. */
+  logToday: (activityId: string, note?: string, value?: number) => Promise<void>;
   /**
    * Logs a past day the user actually completed but forgot to record.
    * Rejects (returning false) unless `getBackfillEligibility` allows it and a
    * reason was written — the rules live in `features/attendance/backfill.ts`.
    */
-  logMissedDay: (activityId: string, dateStr: string, reason: string) => Promise<boolean>;
+  logMissedDay: (
+    activityId: string,
+    dateStr: string,
+    reason: string,
+    value?: number,
+  ) => Promise<boolean>;
   /** Logs today AND marks the sequence task as skipped. Streak is maintained but sequence does not advance. */
-  logTodayWithSequenceSkip: (activityId: string, note?: string) => Promise<void>;
+  logTodayWithSequenceSkip: (activityId: string, note?: string, value?: number) => Promise<void>;
   /**
    * Drops today's sequence task out of the current cycle without doing it, so
    * the next session lands on the task after it. Deliberately independent of
@@ -111,6 +121,17 @@ interface AttendanceState {
   /** Removes the most recent drop made today. No-op if there isn't one. */
   undoSequenceDrop: (activityId: string) => Promise<void>;
   resetActivityData: (id: string) => Promise<void>;
+  /**
+   * Records a metric value on a day that's already logged. `mode: 'add'`
+   * combines it with the day's value per the metric's rule (sum or latest);
+   * `'set'` replaces it. A null value clears it.
+   */
+  setLogValue: (
+    activityId: string,
+    dateStr: string,
+    value: number | null,
+    mode?: 'add' | 'set',
+  ) => Promise<void>;
   /** Appends a new note entry to the activity's journal for the given date. */
   appendNote: (activityId: string, dateStr: string, text: string) => Promise<void>;
   /** Edits the text of an existing note entry by index. The original timestamp is preserved. */
@@ -208,6 +229,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     activityType,
     streakGoal,
     reminders,
+    metric,
   }) => {
     const { activities } = get();
     const newActivity: Activity = {
@@ -226,6 +248,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       ...(timeBoundStartTime ? { timeBoundStartTime } : {}),
       ...(timeBoundEndTime ? { timeBoundEndTime } : {}),
       ...(reminders && reminders.length > 0 ? { reminders } : {}),
+      ...(metric ? { metric } : {}),
     };
 
     const updatedActivities = [...activities, newActivity];
@@ -247,6 +270,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       timeBoundStartTime,
       timeBoundEndTime,
       reminders,
+      metric,
     },
   ) => {
     const { activities } = get();
@@ -312,6 +336,15 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
           updated.reminders = reminders;
         } else {
           delete updated.reminders;
+        }
+      }
+      if (metric !== undefined) {
+        if (metric !== null) {
+          updated.metric = metric;
+          delete updated.previousMetric;
+        } else if (updated.metric) {
+          updated.previousMetric = updated.metric;
+          delete updated.metric;
         }
       }
 
@@ -422,19 +455,24 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     set({ isHapticsEnabled: enabled });
   },
 
-  logToday: async (activityId: string, note?: string) => {
+  logToday: async (activityId: string, note?: string, value?: number) => {
     const { logs, notes, taskHistory, activities, sequenceSkips, sequenceDrops } = get();
     const today = todayStr();
     const activityLogs = logs[activityId] || [];
     if (activityLogs.some((entry) => entry.date === today)) return;
 
     set({ isLoading: true });
-    await attendanceService.logToday(activityId, note);
+    await attendanceService.logToday(activityId, note, value);
 
     const updatedLogs = { ...logs };
     updatedLogs[activityId] = [
       ...activityLogs,
-      { ts: dayjs().toISOString(), date: today, tz: getCurrentTz() },
+      {
+        ts: dayjs().toISOString(),
+        date: today,
+        tz: getCurrentTz(),
+        ...(value !== undefined ? { value } : {}),
+      },
     ];
 
     // Compute and lock in the task history for this specific day
@@ -500,7 +538,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     });
   },
 
-  logMissedDay: async (activityId: string, dateStr: string, reason: string) => {
+  logMissedDay: async (activityId: string, dateStr: string, reason: string, value?: number) => {
     const { logs, notes, taskHistory, activities, sequenceSkips, sequenceDrops } = get();
     const trimmedReason = reason.trim();
     if (!trimmedReason) return false;
@@ -512,7 +550,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     if (!getBackfillEligibility(activity, entries, dateStr).allowed) return false;
 
     set({ isLoading: true });
-    const newEntry = await attendanceService.logPastDate(activityId, dateStr, trimmedReason);
+    const newEntry = await attendanceService.logPastDate(activityId, dateStr, trimmedReason, value);
     if (!newEntry) {
       set({ isLoading: false });
       return false;
@@ -579,7 +617,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     return true;
   },
 
-  logTodayWithSequenceSkip: async (activityId: string, note?: string) => {
+  logTodayWithSequenceSkip: async (activityId: string, note?: string, value?: number) => {
     const { logs, notes, sequenceSkips } = get();
     const today = todayStr();
     const activityLogs = logs[activityId] || [];
@@ -588,12 +626,17 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     set({ isLoading: true });
 
     // Perform the normal log (saves to AsyncStorage)
-    await attendanceService.logToday(activityId, note);
+    await attendanceService.logToday(activityId, note, value);
 
     const updatedLogs = { ...logs };
     updatedLogs[activityId] = [
       ...activityLogs,
-      { ts: dayjs().toISOString(), date: today, tz: getCurrentTz() },
+      {
+        ts: dayjs().toISOString(),
+        date: today,
+        tz: getCurrentTz(),
+        ...(value !== undefined ? { value } : {}),
+      },
     ];
 
     // Record the sequence skip
@@ -672,6 +715,23 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     }
     await attendanceService.saveSequenceDrops(updatedDrops);
     set({ sequenceDrops: updatedDrops });
+  },
+
+  setLogValue: async (activityId, dateStr, value, mode = 'set') => {
+    const { logs, activities } = get();
+    const entries = logs[activityId];
+    const entry = entries?.find((e) => e.date === dateStr);
+    if (!entry) return;
+    const metric = activities.find((a) => a.id === activityId)?.metric;
+
+    const next =
+      value !== null && mode === 'add' && metric
+        ? combineValues(metric, entry.value, value)
+        : value;
+
+    await attendanceService.setLogValue(activityId, dateStr, next);
+    const updatedEntries = entries.map((e) => (e.date === dateStr ? withLogValue(e, next) : e));
+    set({ logs: { ...logs, [activityId]: updatedEntries } });
   },
 
   appendNote: async (activityId: string, dateStr: string, text: string) => {

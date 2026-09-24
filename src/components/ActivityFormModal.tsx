@@ -33,7 +33,15 @@ import {
   fromReminderDraft,
   isReminderDraftValid,
 } from './ReminderEditor';
+import {
+  MetricEditor,
+  MetricDraft,
+  toMetricDraft,
+  fromMetricDraft,
+  isMetricDraftValid,
+} from './MetricEditor';
 import { HabitReminder, SequenceTask } from '../features/attendance/attendanceService';
+import { HabitMetric, METRIC_KINDS, metricTitle } from '../features/metrics/metrics';
 import type { ActivityInput } from '../store/attendanceStore';
 import { to12h, to24h, isValidTime12h } from '../utils/dateUtils';
 import { haptics } from '../utils/haptics';
@@ -53,6 +61,11 @@ export interface ActivityFormModalProps {
   initialActivityType?: 'goal' | 'endless';
   initialStreakGoal?: number;
   initialReminder?: HabitReminder;
+  initialMetric?: HabitMetric;
+  /** A metric turned off earlier; the panel starts from it if turned back on. */
+  previousMetric?: HabitMetric;
+  /** The habit already has logged values, so its metric type can't change. */
+  metricKindLocked?: boolean;
   onClose: () => void;
   /**
    * Cleared settings come through as their clearing values (empty arrays,
@@ -65,6 +78,9 @@ const GOAL_OPTIONS = [1, 2, 3, 4, 5, 6, 7];
 
 /** Ceiling for the reminder panel's open animation; tall enough for every notice it can show. */
 const REMINDER_MAX_HEIGHT = 560;
+
+/** Same idea for the metric panel: every kind pill wrapped, plus the target field. */
+const METRIC_MAX_HEIGHT = 900;
 
 export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
   visible,
@@ -81,6 +97,9 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
   initialActivityType,
   initialStreakGoal,
   initialReminder,
+  initialMetric,
+  previousMetric,
+  metricKindLocked = false,
   onClose,
   onSave,
 }) => {
@@ -109,6 +128,9 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
   const [reminderEnabled, setReminderEnabled] = useState(false);
   const [reminderDraft, setReminderDraft] = useState<ReminderDraft>(() => toReminderDraft());
 
+  const [metricEnabled, setMetricEnabled] = useState(false);
+  const [metricDraft, setMetricDraft] = useState<MetricDraft>(() => toMetricDraft());
+
   const inputRef = useRef<TextInput>(null);
 
   const pickerHeight = useSharedValue(0);
@@ -119,6 +141,8 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
   const timeBoundOpacity = useSharedValue(0);
   const reminderHeight = useSharedValue(0);
   const reminderOpacity = useSharedValue(0);
+  const metricHeight = useSharedValue(0);
+  const metricOpacity = useSharedValue(0);
 
   const pickerStyle = useAnimatedStyle(() => ({
     height: pickerHeight.value,
@@ -141,6 +165,12 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
   const reminderStyle = useAnimatedStyle(() => ({
     maxHeight: reminderHeight.value,
     opacity: reminderOpacity.value,
+    overflow: 'hidden',
+  }));
+
+  const metricStyle = useAnimatedStyle(() => ({
+    maxHeight: metricHeight.value,
+    opacity: metricOpacity.value,
     overflow: 'hidden',
   }));
 
@@ -179,6 +209,10 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
       setReminderEnabled(hasReminder);
       setReminderDraft(toReminderDraft(initialReminder));
 
+      const hasMetric = !!initialMetric;
+      setMetricEnabled(hasMetric);
+      setMetricDraft(toMetricDraft(initialMetric ?? previousMetric));
+
       // Animate pickers to correct state immediately (no animation on open)
       pickerHeight.value = hasGoal ? 60 : 0;
       pickerOpacity.value = hasGoal ? 1 : 0;
@@ -188,6 +222,8 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
       timeBoundOpacity.value = hasTimeBound ? 1 : 0;
       reminderHeight.value = hasReminder ? REMINDER_MAX_HEIGHT : 0;
       reminderOpacity.value = hasReminder ? 1 : 0;
+      metricHeight.value = hasMetric ? METRIC_MAX_HEIGHT : 0;
+      metricOpacity.value = hasMetric ? 1 : 0;
     }
   }, [
     visible,
@@ -203,6 +239,8 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
     initialActivityType,
     initialStreakGoal,
     initialReminder,
+    initialMetric,
+    previousMetric,
   ]);
 
   const handleWeeklyToggle = (val: boolean) => {
@@ -232,6 +270,13 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
     setReminderEnabled(val);
     reminderHeight.value = withTiming(val ? REMINDER_MAX_HEIGHT : 0, { duration: 300 });
     reminderOpacity.value = withTiming(val ? 1 : 0, { duration: 250 });
+  };
+
+  const handleMetricToggle = (val: boolean) => {
+    haptics.toggle(val);
+    setMetricEnabled(val);
+    metricHeight.value = withTiming(val ? METRIC_MAX_HEIGHT : 0, { duration: 300 });
+    metricOpacity.value = withTiming(val ? 1 : 0, { duration: 250 });
   };
 
   /**
@@ -292,6 +337,7 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
       activityType,
       streakGoal: activityType === 'goal' ? streakGoal : undefined,
       reminders: reminderEnabled ? [fromReminderDraft(reminderDraft)] : [],
+      metric: metricEnabled ? fromMetricDraft(metricDraft) : null,
     });
   };
 
@@ -312,7 +358,9 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
 
   const isStreakGoalValid = activityType !== 'goal' || streakGoal >= 1;
   const isReminderValid = !reminderEnabled || isReminderDraftValid(reminderDraft);
-  const canSave = name.trim().length > 0 && isTimeValid && isStreakGoalValid && isReminderValid;
+  const isMetricValid = !metricEnabled || isMetricDraftValid(metricDraft);
+  const canSave =
+    name.trim().length > 0 && isTimeValid && isStreakGoalValid && isReminderValid && isMetricValid;
 
   const timeOrderInvalid =
     timeBoundEnabled &&
@@ -739,6 +787,61 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
               />
             </View>
 
+            {/* ── Progress metric toggle ─────────────────────────────────────── */}
+            <View
+              style={[
+                styles.toggleRow,
+                {
+                  backgroundColor: metricEnabled ? colors.primarySubtle : colors.background,
+                  borderColor: metricEnabled ? colors.primary : colors.border,
+                  marginBottom: Spacing.sm,
+                },
+              ]}
+            >
+              <View
+                style={[
+                  styles.toggleIconWrap,
+                  {
+                    backgroundColor: metricEnabled ? colors.primaryMuted : colors.surfaceVariant,
+                  },
+                ]}
+              >
+                <FontAwesome5
+                  name={metricEnabled ? METRIC_KINDS[metricDraft.kind].icon : 'chart-line'}
+                  size={13}
+                  color={metricEnabled ? colors.primary : colors.textSecondary}
+                />
+              </View>
+              <View style={styles.toggleTextWrap}>
+                <Text style={[styles.toggleLabel, { color: colors.textPrimary }]}>
+                  Track progress
+                </Text>
+                <Text style={[styles.toggleSub, { color: colors.textSecondary }]}>
+                  {metricEnabled
+                    ? `${metricTitle(fromMetricDraft(metricDraft))} · ${metricDraft.required ? 'required' : 'optional'} when logging`
+                    : 'Record time, distance, reps… each time you log'}
+                </Text>
+              </View>
+              <Switch
+                value={metricEnabled}
+                onValueChange={handleMetricToggle}
+                trackColor={{ false: colors.surfaceVariant, true: colors.primaryMuted }}
+                thumbColor={metricEnabled ? colors.primary : colors.textSecondary}
+              />
+            </View>
+
+            {/* Metric fields — animates open */}
+            <Animated.View style={metricStyle}>
+              <View style={styles.panelBody}>
+                <MetricEditor
+                  draft={metricDraft}
+                  onChange={setMetricDraft}
+                  kindLocked={metricKindLocked}
+                  fieldBackground={colors.background}
+                />
+              </View>
+            </Animated.View>
+
             {/* ── Task Sequence toggle ───────────────────────────────────────── */}
             <View
               style={[
@@ -1075,7 +1178,7 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
 
             {/* Reminder fields — animates open */}
             <Animated.View style={reminderStyle}>
-              <View style={styles.reminderBody}>
+              <View style={styles.panelBody}>
                 <ReminderEditor
                   draft={reminderDraft}
                   onChange={setReminderDraft}
@@ -1325,7 +1428,7 @@ const styles = StyleSheet.create({
     ...Typography.bodySmall,
     marginBottom: Spacing.sm,
   },
-  reminderBody: {
+  panelBody: {
     paddingTop: Spacing.xs,
     paddingBottom: Spacing.md,
   },

@@ -33,6 +33,18 @@ import {
 } from '../features/attendance/backfill';
 import { formatTimeWithTz } from '../utils/dateUtils';
 import { haptics } from '../utils/haptics';
+import { SegmentedControl } from './ui';
+import { MetricValueInput } from './MetricValueInput';
+import {
+  HabitMetric,
+  METRIC_KINDS,
+  emptyValueDraft,
+  draftFromBase,
+  formatMetricValue,
+  isMetricRequired,
+  metricTitle,
+  parseValueDraft,
+} from '../features/metrics/metrics';
 
 export interface LogDetailsModalProps {
   visible: boolean;
@@ -64,7 +76,16 @@ export interface LogDetailsModalProps {
    */
   backfill?: BackfillEligibility;
   /** Records this day as done, with the reason the user typed. Resolves false if refused. */
-  onBackfill?: (reason: string) => Promise<boolean>;
+  onBackfill?: (reason: string, value?: number) => Promise<boolean>;
+  /** The habit's progress metric, if it tracks one. */
+  metric?: HabitMetric;
+  /** This day's metric value, in base units. */
+  value?: number;
+  /**
+   * Saves a value on this (logged) day. `add` combines with the existing value
+   * per the metric's rule; `set` replaces it, and a null value clears it.
+   */
+  onValueSave?: (value: number | null, mode: 'add' | 'set') => Promise<void>;
   /** Appends a new note entry for today. */
   onNoteAppend?: (text: string) => Promise<void>;
   /** Edits an existing note entry by index. */
@@ -89,6 +110,9 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
   isBackfilled = false,
   backfill,
   onBackfill,
+  metric,
+  value,
+  onValueSave,
   onNoteAppend,
   onNoteEdit,
   onClose,
@@ -100,10 +124,14 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
    * reason for a missed day rather than an ordinary note — same input, very
    * different consequence, so the two are distinct modes rather than a flag.
    */
-  type DraftMode = { kind: 'add' } | { kind: 'edit'; index: number } | { kind: 'fix' };
+  type DraftMode =
+    { kind: 'add' } | { kind: 'edit'; index: number } | { kind: 'fix' } | { kind: 'value' };
 
   const [draftMode, setDraftMode] = React.useState<DraftMode | null>(null);
   const [draftNote, setDraftNote] = React.useState('');
+  const [valueDraft, setValueDraft] = React.useState(emptyValueDraft);
+  /** Whether the value sheet adds to the day's value or replaces it. */
+  const [valueMode, setValueMode] = React.useState<'add' | 'set'>('set');
   const [isSaving, setIsSaving] = React.useState(false);
   const [copiedIndex, setCopiedIndex] = React.useState<number | null>(null);
   const inputRef = React.useRef<TextInput>(null);
@@ -112,6 +140,24 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
   const noteModalVisible = draftMode !== null;
   const isEditMode = draftMode?.kind === 'edit';
   const isFixMode = draftMode?.kind === 'fix';
+  const isValueMode = draftMode?.kind === 'value';
+  /** Adding only differs from replacing for summed metrics on a day that has a value. */
+  const canAddToValue = metric?.combine === 'sum' && value !== undefined;
+
+  const parsedValue = metric ? parseValueDraft(metric, valueDraft) : null;
+  const isValueEntryOk = (() => {
+    if (!parsedValue) return true;
+    if (parsedValue.state === 'ok') return true;
+    if (parsedValue.state === 'invalid') return false;
+    // Empty: fine when the metric is optional, except that adding nothing is no edit.
+    if (isValueMode && valueMode === 'add') return false;
+    return !isMetricRequired(metric);
+  })();
+  const canSaveDraft = isValueMode
+    ? isValueEntryOk
+    : isFixMode
+      ? !!draftNote.trim() && isValueEntryOk
+      : !!draftNote.trim();
 
   // Close note modal state when the main modal closes
   React.useEffect(() => {
@@ -152,19 +198,40 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
   const openFix = () => {
     haptics.medium();
     setDraftNote('');
+    setValueDraft(emptyValueDraft());
     setDraftMode({ kind: 'fix' });
+  };
+
+  const openValue = () => {
+    if (!metric) return;
+    haptics.medium();
+    // A summed day with a value starts on "add more" — the common case is a
+    // second session. Otherwise the field opens on the value to correct it.
+    const adding = metric.combine === 'sum' && value !== undefined;
+    setValueMode(adding ? 'add' : 'set');
+    setValueDraft(adding ? emptyValueDraft() : draftFromBase(metric, value));
+    setDraftMode({ kind: 'value' });
+  };
+
+  const switchValueMode = (mode: 'add' | 'set') => {
+    if (!metric) return;
+    setValueMode(mode);
+    setValueDraft(mode === 'add' ? emptyValueDraft() : draftFromBase(metric, value));
   };
 
   const handleSave = async () => {
     const trimmed = draftNote.trim();
-    if (!trimmed || !draftMode) return haptics.warning();
+    if (!draftMode || !canSaveDraft) return haptics.warning();
+    const enteredValue = parsedValue?.state === 'ok' ? parsedValue.value : undefined;
     setIsSaving(true);
     try {
-      if (draftMode.kind === 'fix') {
+      if (draftMode.kind === 'value') {
+        await onValueSave?.(enteredValue ?? null, valueMode);
+      } else if (draftMode.kind === 'fix') {
         // A refusal here means the rules changed under the sheet — the quota
         // ran out elsewhere, or midnight pushed the day out of the window.
         // Closing puts the reason why back in front of the user.
-        const done = await onBackfill?.(trimmed);
+        const done = await onBackfill?.(trimmed, enteredValue);
         if (!done) {
           haptics.error();
           Keyboard.dismiss();
@@ -498,6 +565,91 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                           </View>
                         </View>
                       )}
+
+                      {/* ── Progress metric ── */}
+                      {isLogged && metric ? (
+                        <>
+                          <View
+                            style={[styles.divider, { backgroundColor: colors.surfaceVariant }]}
+                          />
+                          <View style={styles.infoRow}>
+                            <View
+                              style={[
+                                styles.infoIconWrap,
+                                {
+                                  backgroundColor:
+                                    value !== undefined
+                                      ? colors.primaryMuted
+                                      : colors.surfaceVariant,
+                                },
+                              ]}
+                            >
+                              <FontAwesome5
+                                name={METRIC_KINDS[metric.kind].icon}
+                                size={13}
+                                color={value !== undefined ? colors.primary : colors.textSecondary}
+                              />
+                            </View>
+                            <View style={styles.infoTextWrap}>
+                              <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>
+                                {metricTitle(metric)}
+                              </Text>
+                              <Text
+                                style={[
+                                  styles.infoValue,
+                                  {
+                                    color:
+                                      value !== undefined
+                                        ? colors.textPrimary
+                                        : colors.textSecondary,
+                                  },
+                                ]}
+                              >
+                                {value !== undefined
+                                  ? formatMetricValue(metric, value)
+                                  : 'Not recorded'}
+                              </Text>
+                              {metric.target ? (
+                                <Text
+                                  style={[styles.infoDescription, { color: colors.textTertiary }]}
+                                >
+                                  {value !== undefined && value >= metric.target
+                                    ? `Target of ${formatMetricValue(metric, metric.target)} reached`
+                                    : `Target ${formatMetricValue(metric, metric.target)}`}
+                                </Text>
+                              ) : null}
+                            </View>
+                            {onValueSave && !isActivityCompleted ? (
+                              <Pressable
+                                onPress={openValue}
+                                hitSlop={8}
+                                style={({ pressed }) => [
+                                  styles.valueEditBtn,
+                                  {
+                                    backgroundColor: colors.primaryMuted,
+                                    opacity: pressed ? 0.7 : 1,
+                                  },
+                                ]}
+                                accessibilityRole="button"
+                                accessibilityLabel={
+                                  value !== undefined
+                                    ? `Edit ${metricTitle(metric)}`
+                                    : `Add ${metricTitle(metric)}`
+                                }
+                              >
+                                <FontAwesome5
+                                  name={value !== undefined ? 'pen' : 'plus'}
+                                  size={11}
+                                  color={colors.primary}
+                                />
+                                <Text style={[styles.valueEditText, { color: colors.primary }]}>
+                                  {value !== undefined ? 'Edit' : 'Add'}
+                                </Text>
+                              </Pressable>
+                            ) : null}
+                          </View>
+                        </>
+                      ) : null}
 
                       {/* ── Fixing a day that was done but never logged ── */}
                       {!isLogged && backfill ? (
@@ -984,18 +1136,32 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                         ]}
                       >
                         <FontAwesome5
-                          name={isFixMode ? 'history' : 'pen'}
+                          name={
+                            isValueMode && metric
+                              ? METRIC_KINDS[metric.kind].icon
+                              : isFixMode
+                                ? 'history'
+                                : 'pen'
+                          }
                           size={16}
                           color={colors.primary}
                         />
                       </View>
                       <View style={{ flex: 1 }}>
                         <Text style={[styles.addNoteTitle, { color: colors.textPrimary }]}>
-                          {isFixMode ? 'Fix a missed day' : isEditMode ? 'Edit Note' : 'Add Note'}
+                          {isValueMode && metric
+                            ? metricTitle(metric)
+                            : isFixMode
+                              ? 'Fix a missed day'
+                              : isEditMode
+                                ? 'Edit Note'
+                                : 'Add Note'}
                         </Text>
                         {activityName ? (
                           <Text style={[styles.addNoteSubtitle, { color: colors.primary }]}>
-                            {isFixMode ? `${activityName} · ${dateStr}` : activityName}
+                            {isFixMode || isValueMode
+                              ? `${activityName} · ${dateStr}`
+                              : activityName}
                           </Text>
                         ) : null}
                       </View>
@@ -1020,48 +1186,91 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                     </View>
 
                     <Text style={[styles.addNoteHint, { color: colors.textSecondary }]}>
-                      {isFixMode
-                        ? 'Only if you genuinely did it that day. Write what you did and why it went unlogged — the note is kept with the day, and the day stays marked as fixed afterwards.'
-                        : isEditMode
-                          ? 'Update the note text below.'
-                          : 'Add a note for this day — e.g. reason for missing, what you covered, etc.'}
+                      {isValueMode
+                        ? valueMode === 'add'
+                          ? `Adds to the ${formatMetricValue(metric!, value ?? 0)} already recorded for this day.`
+                          : isMetricRequired(metric)
+                            ? 'Correct the value recorded for this day.'
+                            : 'Correct the value, or clear it to leave the day without one.'
+                        : isFixMode
+                          ? 'Only if you genuinely did it that day. Write what you did and why it went unlogged — the note is kept with the day, and the day stays marked as fixed afterwards.'
+                          : isEditMode
+                            ? 'Update the note text below.'
+                            : 'Add a note for this day — e.g. reason for missing, what you covered, etc.'}
                     </Text>
+
+                    {isValueMode && canAddToValue ? (
+                      <View style={styles.valueModeRow}>
+                        <SegmentedControl
+                          options={[
+                            { value: 'add' as const, label: 'Add more', icon: 'plus' },
+                            { value: 'set' as const, label: 'Change total', icon: 'pen' },
+                          ]}
+                          value={valueMode}
+                          onChange={switchValueMode}
+                        />
+                      </View>
+                    ) : null}
+
+                    {metric && (isValueMode || isFixMode) ? (
+                      <View style={styles.valueField}>
+                        {isFixMode ? (
+                          <Text style={[styles.valueFieldLabel, { color: colors.textTertiary }]}>
+                            {metricTitle(metric)}
+                            {isMetricRequired(metric) ? '' : ' (optional)'}
+                          </Text>
+                        ) : null}
+                        <MetricValueInput
+                          key={valueMode}
+                          metric={metric}
+                          draft={valueDraft}
+                          onChange={setValueDraft}
+                          fieldBackground={colors.background}
+                          autoFocus={isValueMode}
+                          accessibilityLabel={metricTitle(metric)}
+                        />
+                      </View>
+                    ) : null}
 
                     {/* Input */}
-                    <View
-                      style={[
-                        styles.inputWrapper,
-                        { backgroundColor: colors.background, borderColor: colors.primary },
-                      ]}
-                    >
-                      <TextInput
-                        ref={inputRef}
-                        style={[styles.noteTextInput, { color: colors.textPrimary }]}
-                        value={draftNote}
-                        onChangeText={setDraftNote}
-                        placeholder={
-                          isFixMode
-                            ? 'e.g. Ran the 5k before work, phone was dead all evening'
-                            : 'Write your note here…'
-                        }
-                        placeholderTextColor={colors.textSecondary}
-                        multiline
-                        maxLength={500}
-                        scrollEnabled={false}
-                        textAlignVertical="top"
-                        selectionColor={colors.primary}
-                      />
-                    </View>
+                    {isValueMode ? null : (
+                      <View
+                        style={[
+                          styles.inputWrapper,
+                          { backgroundColor: colors.background, borderColor: colors.primary },
+                        ]}
+                      >
+                        <TextInput
+                          ref={inputRef}
+                          style={[styles.noteTextInput, { color: colors.textPrimary }]}
+                          value={draftNote}
+                          onChangeText={setDraftNote}
+                          placeholder={
+                            isFixMode
+                              ? 'e.g. Ran the 5k before work, phone was dead all evening'
+                              : 'Write your note here…'
+                          }
+                          placeholderTextColor={colors.textSecondary}
+                          multiline
+                          maxLength={500}
+                          scrollEnabled={false}
+                          textAlignVertical="top"
+                          selectionColor={colors.primary}
+                        />
+                      </View>
+                    )}
 
                     {/* Character count */}
-                    <Text
-                      style={[
-                        styles.charCount,
-                        { color: draftNote.length > 450 ? colors.warning : colors.textSecondary },
-                      ]}
-                    >
-                      {draftNote.length}/500
-                    </Text>
+                    {isValueMode ? null : (
+                      <Text
+                        style={[
+                          styles.charCount,
+                          { color: draftNote.length > 450 ? colors.warning : colors.textSecondary },
+                        ]}
+                      >
+                        {draftNote.length}/500
+                      </Text>
+                    )}
 
                     {/* Actions */}
                     <View style={styles.addNoteActions}>
@@ -1084,11 +1293,11 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                           styles.saveBtn,
                           {
                             backgroundColor: colors.primary,
-                            opacity: !draftNote.trim() || isSaving ? 0.5 : pressed ? 0.85 : 1,
+                            opacity: !canSaveDraft || isSaving ? 0.5 : pressed ? 0.85 : 1,
                           },
                         ]}
                         onPress={handleSave}
-                        disabled={isSaving || !draftNote.trim()}
+                        disabled={isSaving || !canSaveDraft}
                         android_ripple={{ color: '#ffffff33' }}
                       >
                         {isSaving ? (
@@ -1101,11 +1310,15 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                               color="#fff"
                             />
                             <Text style={styles.saveBtnText}>
-                              {isFixMode
-                                ? 'Yes, I did this'
-                                : isEditMode
-                                  ? 'Update Note'
-                                  : 'Save Note'}
+                              {isValueMode
+                                ? valueMode === 'add'
+                                  ? 'Add'
+                                  : 'Save'
+                                : isFixMode
+                                  ? 'Yes, I did this'
+                                  : isEditMode
+                                    ? 'Update Note'
+                                    : 'Save Note'}
                             </Text>
                           </>
                         )}
@@ -1125,6 +1338,29 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
 const styles = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
+  },
+  valueEditBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: Spacing.sm + 2,
+    paddingVertical: 6,
+    borderRadius: BorderRadius.full,
+  },
+  valueEditText: {
+    ...Typography.labelMedium,
+    fontWeight: '700',
+  },
+  valueModeRow: {
+    marginBottom: Spacing.md,
+  },
+  valueField: {
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  valueFieldLabel: {
+    ...Typography.overline,
+    marginLeft: 2,
   },
   kvWrapper: {
     flex: 1,
