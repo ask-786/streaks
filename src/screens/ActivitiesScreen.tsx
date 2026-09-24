@@ -9,6 +9,7 @@ import { FontAwesome5 } from '@expo/vector-icons';
 import dayjs from 'dayjs';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { useAttendanceStore, SequenceTask } from '../store/attendanceStore';
+import { HabitReminder } from '../features/attendance/attendanceService';
 import {
   Typography,
   Spacing,
@@ -81,6 +82,7 @@ export const ActivitiesScreen: React.FC = () => {
     undefined,
   );
   const [editingStreakGoal, setEditingStreakGoal] = useState<number | undefined>(undefined);
+  const [editingReminder, setEditingReminder] = useState<HabitReminder | undefined>(undefined);
 
   // Split active vs completed
   const activeActivities = activities.filter((a) => !a.completedAt);
@@ -122,6 +124,7 @@ export const ActivitiesScreen: React.FC = () => {
     timeBoundEndTime?: string | null,
     activityType?: 'goal' | 'endless',
     streakGoal?: number,
+    reminders?: HabitReminder[],
   ) => {
     if (editingItemId) {
       editActivity(
@@ -136,6 +139,7 @@ export const ActivitiesScreen: React.FC = () => {
         timeBoundType,
         timeBoundStartTime,
         timeBoundEndTime,
+        reminders,
       );
     } else {
       createActivity(
@@ -151,6 +155,7 @@ export const ActivitiesScreen: React.FC = () => {
         timeBoundEndTime,
         activityType,
         streakGoal,
+        reminders,
       );
     }
     closeModal();
@@ -180,6 +185,7 @@ export const ActivitiesScreen: React.FC = () => {
     setEditingTimeBoundEndTime(activity?.timeBoundEndTime);
     setEditingActivityType(activity?.activityType);
     setEditingStreakGoal(activity?.streakGoal);
+    setEditingReminder(activity.reminders?.[0]);
     setSelectedIds([]);
     setIsModalVisible(true);
   };
@@ -198,6 +204,7 @@ export const ActivitiesScreen: React.FC = () => {
     setEditingTimeBoundEndTime(undefined);
     setEditingActivityType(undefined);
     setEditingStreakGoal(undefined);
+    setEditingReminder(undefined);
   };
 
   const clearSelection = () => setSelectedIds([]);
@@ -620,6 +627,7 @@ export const ActivitiesScreen: React.FC = () => {
         initialTimeBoundEndTime={editingTimeBoundEndTime}
         initialActivityType={editingActivityType}
         initialStreakGoal={editingStreakGoal}
+        initialReminder={editingReminder}
         onClose={closeModal}
         onSave={handleSaveActivity}
       />

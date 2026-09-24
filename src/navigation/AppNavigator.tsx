@@ -1,5 +1,11 @@
 import React, { useMemo } from 'react';
-import { NavigationContainer, DefaultTheme, DarkTheme, Theme } from '@react-navigation/native';
+import {
+  NavigationContainer,
+  DefaultTheme,
+  DarkTheme,
+  Theme,
+  createNavigationContainerRef,
+} from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { View, StyleSheet } from 'react-native';
@@ -28,6 +34,9 @@ export type TabParamList = {
   Calendar: undefined;
   Stats: undefined;
 };
+
+/** For navigating from outside a screen, e.g. when an alarm opens the app on a habit. */
+export const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<TabParamList>();
@@ -130,7 +139,7 @@ export const AppNavigator: React.FC = () => {
   }, [isDark, colors]);
 
   return (
-    <NavigationContainer theme={navTheme}>
+    <NavigationContainer ref={navigationRef} theme={navTheme}>
       <Stack.Navigator
         initialRouteName="Activities"
         screenOptions={{

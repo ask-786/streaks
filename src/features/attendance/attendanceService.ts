@@ -16,6 +16,19 @@ export interface SequenceTask {
   description?: string;
 }
 
+/** A daily push notification nudging the user to do one habit. */
+export interface HabitReminder {
+  time: string; // "HH:mm", 24h local time
+  /** Notification body. Falls back to a generic line naming the habit. */
+  message?: string;
+  /**
+   * Alarm style: rings on the alarm channel (alarm volume, can break through
+   * Do Not Disturb), can't be swiped away, and re-fires a few times until the
+   * habit is logged.
+   */
+  alarm?: boolean;
+}
+
 export interface Activity {
   id: string;
   name: string;
@@ -74,6 +87,12 @@ export interface Activity {
    * Presence of this field means the activity is in the Completed state.
    */
   completedAt?: number;
+
+  /**
+   * Per-habit reminders. Skipped on days the habit is already logged, and
+   * never sent once the habit is completed.
+   */
+  reminders?: HabitReminder[];
 }
 
 /**

@@ -12,3 +12,4 @@ export * from './SegmentedControl';
 export * from './SelectionActionBar';
 export * from './SelectionCheck';
 export * from './StatTile';
+export * from './UnsavedChangesBar';

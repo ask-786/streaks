@@ -1,11 +1,11 @@
-import 'react-native-gesture-handler';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import React, { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { PaperProvider } from 'react-native-paper';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useAttendanceStore } from './src/store/attendanceStore';
 import { useNotifications } from './src/hooks/useNotifications';
+import { useAlarmActions } from './src/hooks/useAlarmActions';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { ThemeProvider, useTheme } from './src/hooks/useTheme';
 
@@ -22,6 +22,8 @@ function AppContent() {
 
   // Initialize and observe notifications
   useNotifications();
+  // Log habits marked done from a ringing alarm
+  useAlarmActions();
 
   useEffect(() => {
     // Load all persisted logged dates on app launch

@@ -3,6 +3,7 @@ import dayjs from 'dayjs';
 import {
   attendanceService,
   Activity,
+  HabitReminder,
   NotesMap,
   NoteEntry,
   LogEntry,
@@ -67,6 +68,7 @@ interface AttendanceState {
     timeBoundEndTime?: string | null,
     activityType?: 'goal' | 'endless',
     streakGoal?: number,
+    reminders?: HabitReminder[],
   ) => Promise<void>;
   editActivity: (
     id: string,
@@ -80,6 +82,8 @@ interface AttendanceState {
     timeBoundType?: 'before' | 'after' | 'between' | null,
     timeBoundStartTime?: string | null,
     timeBoundEndTime?: string | null,
+    /** An empty array clears reminders; undefined leaves them unchanged. */
+    reminders?: HabitReminder[],
   ) => Promise<void>;
   deleteActivity: (id: string) => Promise<void>;
   /** Bulk delete. One persistence pass, so selecting ten habits is one write. */
@@ -206,6 +210,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     timeBoundEndTime?: string | null,
     activityType?: 'goal' | 'endless',
     streakGoal?: number,
+    reminders?: HabitReminder[],
   ) => {
     const { activities } = get();
     const newActivity: Activity = {
@@ -223,6 +228,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       ...(timeBoundType ? { timeBoundType } : {}),
       ...(timeBoundStartTime ? { timeBoundStartTime } : {}),
       ...(timeBoundEndTime ? { timeBoundEndTime } : {}),
+      ...(reminders && reminders.length > 0 ? { reminders } : {}),
     };
 
     const updatedActivities = [...activities, newActivity];
@@ -242,6 +248,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     timeBoundType?: 'before' | 'after' | 'between' | null,
     timeBoundStartTime?: string | null,
     timeBoundEndTime?: string | null,
+    reminders?: HabitReminder[],
   ) => {
     const { activities } = get();
     const updatedActivities = activities.map((a) => {
@@ -298,6 +305,13 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
           updated.timeBoundEndTime = timeBoundEndTime;
         } else {
           delete updated.timeBoundEndTime;
+        }
+      }
+      if (reminders !== undefined) {
+        if (reminders.length > 0) {
+          updated.reminders = reminders;
+        } else {
+          delete updated.reminders;
         }
       }
 

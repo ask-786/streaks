@@ -26,7 +26,14 @@ import { Typography, Spacing, BorderRadius, HitSlop, alpha } from '../constants'
 import { FontAwesome5 } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 import { TaskSequenceEditor } from './TaskSequenceEditor';
-import { SequenceTask } from '../features/attendance/attendanceService';
+import {
+  ReminderEditor,
+  ReminderDraft,
+  toReminderDraft,
+  fromReminderDraft,
+  isReminderDraftValid,
+} from './ReminderEditor';
+import { HabitReminder, SequenceTask } from '../features/attendance/attendanceService';
 import { to12h, to24h, isValidTime12h } from '../utils/dateUtils';
 import { haptics } from '../utils/haptics';
 
@@ -44,6 +51,7 @@ export interface ActivityFormModalProps {
   initialTimeBoundEndTime?: string;
   initialActivityType?: 'goal' | 'endless';
   initialStreakGoal?: number;
+  initialReminder?: HabitReminder;
   onClose: () => void;
   onSave: (
     name: string,
@@ -57,10 +65,14 @@ export interface ActivityFormModalProps {
     timeBoundEndTime?: string | null,
     activityType?: 'goal' | 'endless',
     streakGoal?: number,
+    reminders?: HabitReminder[],
   ) => void;
 }
 
 const GOAL_OPTIONS = [1, 2, 3, 4, 5, 6, 7];
+
+/** Ceiling for the reminder panel's open animation; tall enough for every notice it can show. */
+const REMINDER_MAX_HEIGHT = 560;
 
 export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
   visible,
@@ -76,6 +88,7 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
   initialTimeBoundEndTime,
   initialActivityType,
   initialStreakGoal,
+  initialReminder,
   onClose,
   onSave,
 }) => {
@@ -101,6 +114,9 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
   const [timeBoundEndTime, setTimeBoundEndTime] = useState('');
   const [endAmPm, setEndAmPm] = useState<'AM' | 'PM'>('AM');
 
+  const [reminderEnabled, setReminderEnabled] = useState(false);
+  const [reminderDraft, setReminderDraft] = useState<ReminderDraft>(() => toReminderDraft());
+
   const inputRef = useRef<TextInput>(null);
 
   const pickerHeight = useSharedValue(0);
@@ -109,6 +125,8 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
   const taskSeqOpacity = useSharedValue(0);
   const timeBoundHeight = useSharedValue(0);
   const timeBoundOpacity = useSharedValue(0);
+  const reminderHeight = useSharedValue(0);
+  const reminderOpacity = useSharedValue(0);
 
   const pickerStyle = useAnimatedStyle(() => ({
     height: pickerHeight.value,
@@ -125,6 +143,12 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
   const timeBoundStyle = useAnimatedStyle(() => ({
     maxHeight: timeBoundHeight.value,
     opacity: timeBoundOpacity.value,
+    overflow: 'hidden',
+  }));
+
+  const reminderStyle = useAnimatedStyle(() => ({
+    maxHeight: reminderHeight.value,
+    opacity: reminderOpacity.value,
     overflow: 'hidden',
   }));
 
@@ -159,6 +183,10 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
       setTimeBoundEndTime(end12.time);
       setEndAmPm(end12.ampm);
 
+      const hasReminder = !!initialReminder;
+      setReminderEnabled(hasReminder);
+      setReminderDraft(toReminderDraft(initialReminder));
+
       // Animate pickers to correct state immediately (no animation on open)
       pickerHeight.value = hasGoal ? 60 : 0;
       pickerOpacity.value = hasGoal ? 1 : 0;
@@ -166,6 +194,8 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
       taskSeqOpacity.value = hasTasks ? 1 : 0;
       timeBoundHeight.value = hasTimeBound ? 320 : 0;
       timeBoundOpacity.value = hasTimeBound ? 1 : 0;
+      reminderHeight.value = hasReminder ? REMINDER_MAX_HEIGHT : 0;
+      reminderOpacity.value = hasReminder ? 1 : 0;
     }
   }, [
     visible,
@@ -180,6 +210,7 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
     initialTimeBoundEndTime,
     initialActivityType,
     initialStreakGoal,
+    initialReminder,
   ]);
 
   const handleWeeklyToggle = (val: boolean) => {
@@ -202,6 +233,13 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
     setTimeBoundEnabled(val);
     timeBoundHeight.value = withTiming(val ? 320 : 0, { duration: 300 });
     timeBoundOpacity.value = withTiming(val ? 1 : 0, { duration: 250 });
+  };
+
+  const handleReminderToggle = (val: boolean) => {
+    haptics.toggle(val);
+    setReminderEnabled(val);
+    reminderHeight.value = withTiming(val ? REMINDER_MAX_HEIGHT : 0, { duration: 300 });
+    reminderOpacity.value = withTiming(val ? 1 : 0, { duration: 250 });
   };
 
   /**
@@ -260,6 +298,7 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
       timeBoundEnabled && timeBoundType === 'between' ? to24h(timeBoundEndTime, endAmPm) : null,
       activityType,
       activityType === 'goal' ? streakGoal : undefined,
+      reminderEnabled ? [fromReminderDraft(reminderDraft)] : [],
     );
   };
 
@@ -279,7 +318,8 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
       : isValidTime12h(timeBoundStartTime));
 
   const isStreakGoalValid = activityType !== 'goal' || streakGoal >= 1;
-  const canSave = name.trim().length > 0 && isTimeValid && isStreakGoalValid;
+  const isReminderValid = !reminderEnabled || isReminderDraftValid(reminderDraft);
+  const canSave = name.trim().length > 0 && isTimeValid && isStreakGoalValid && isReminderValid;
 
   const timeOrderInvalid =
     timeBoundEnabled &&
@@ -998,6 +1038,59 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
               )}
               <View style={{ height: Spacing.md }} />
             </Animated.View>
+
+            {/* ── Reminder toggle ─────────────────────────────────────────── */}
+            <View
+              style={[
+                styles.toggleRow,
+                {
+                  backgroundColor: reminderEnabled ? colors.primarySubtle : colors.background,
+                  borderColor: reminderEnabled ? colors.primary : colors.border,
+                  marginBottom: Spacing.sm,
+                },
+              ]}
+            >
+              <View
+                style={[
+                  styles.toggleIconWrap,
+                  {
+                    backgroundColor: reminderEnabled ? colors.primaryMuted : colors.surfaceVariant,
+                  },
+                ]}
+              >
+                <FontAwesome5
+                  name="bell"
+                  size={13}
+                  color={reminderEnabled ? colors.primary : colors.textSecondary}
+                />
+              </View>
+              <View style={styles.toggleTextWrap}>
+                <Text style={[styles.toggleLabel, { color: colors.textPrimary }]}>Reminder</Text>
+                <Text style={[styles.toggleSub, { color: colors.textSecondary }]}>
+                  {reminderEnabled && isReminderDraftValid(reminderDraft)
+                    ? `${reminderDraft.mode === 'alarm' ? 'Alarm' : 'Notification'} daily at ${reminderDraft.time} ${reminderDraft.ampm}`
+                    : 'Get a notification at a set time'}
+                </Text>
+              </View>
+              <Switch
+                value={reminderEnabled}
+                onValueChange={handleReminderToggle}
+                trackColor={{ false: colors.surfaceVariant, true: colors.primaryMuted }}
+                thumbColor={reminderEnabled ? colors.primary : colors.textSecondary}
+              />
+            </View>
+
+            {/* Reminder fields — animates open */}
+            <Animated.View style={reminderStyle}>
+              <View style={styles.reminderBody}>
+                <ReminderEditor
+                  draft={reminderDraft}
+                  onChange={setReminderDraft}
+                  habitName={name}
+                  fieldBackground={colors.background}
+                />
+              </View>
+            </Animated.View>
           </ScrollView>
 
           {/* Actions */}
@@ -1238,6 +1331,10 @@ const styles = StyleSheet.create({
   modeHint: {
     ...Typography.bodySmall,
     marginBottom: Spacing.sm,
+  },
+  reminderBody: {
+    paddingTop: Spacing.xs,
+    paddingBottom: Spacing.md,
   },
   amPmToggle: {
     paddingHorizontal: Spacing.sm,
