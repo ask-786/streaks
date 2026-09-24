@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import dayjs from 'dayjs';
 import { todayStr, getCurrentTz } from '../../utils/dateUtils';
 import { StorageKeys } from '../../constants';
+import { HabitMetric, isValidMetricValue, normalizeMetric } from '../metrics/metrics';
 
 /**
  * One step of a habit's task sequence.
@@ -93,6 +94,18 @@ export interface Activity {
    * never sent once the habit is completed.
    */
   reminders?: HabitReminder[];
+
+  /**
+   * Optional number recorded with each log — minutes, km, pages. Values live
+   * on the log entries; removing the metric hides them but keeps them, so
+   * turning it back on brings the history back.
+   */
+  metric?: HabitMetric;
+  /**
+   * The metric as it was when it was turned off, so turning it back on starts
+   * from the same kind and unit the logged values were recorded in.
+   */
+  previousMetric?: HabitMetric;
 }
 
 /**
@@ -116,6 +129,19 @@ export interface LogEntry {
    * `backfill.ts` for the rules that gate creating one.
    */
   backfilled?: boolean;
+  /**
+   * The day's metric value, in the metric's base unit (see `features/metrics`).
+   * Absent when the habit has no metric or the day was logged without one.
+   */
+  value?: number;
+}
+
+/** A copy of `entry` carrying `value`, or carrying none when it's null. */
+export function withLogValue(entry: LogEntry, value: number | null): LogEntry {
+  const copy = { ...entry };
+  if (value === null) delete copy.value;
+  else copy.value = value;
+  return copy;
 }
 
 export interface NoteEntry {
@@ -379,7 +405,7 @@ export const attendanceService = {
     await AsyncStorage.setItem(StorageKeys.SEQUENCE_DROPS, JSON.stringify(drops));
   },
 
-  logToday: async (activityId: string, note?: string): Promise<boolean> => {
+  logToday: async (activityId: string, note?: string, value?: number): Promise<boolean> => {
     const logs = await attendanceService.getLogs();
     const today = todayStr();
 
@@ -388,7 +414,12 @@ export const attendanceService = {
       return false; // already logged today
     }
 
-    const newEntry: LogEntry = { ts: dayjs().toISOString(), date: today, tz: getCurrentTz() };
+    const newEntry: LogEntry = {
+      ts: dayjs().toISOString(),
+      date: today,
+      tz: getCurrentTz(),
+      ...(value !== undefined ? { value } : {}),
+    };
     logs[activityId] = [...activityLogs, newEntry];
     await attendanceService.saveLogs(logs);
 
@@ -420,6 +451,7 @@ export const attendanceService = {
     activityId: string,
     dateStr: string,
     reason: string,
+    value?: number,
   ): Promise<LogEntry | null> => {
     const trimmed = reason.trim();
     if (!trimmed) return null;
@@ -433,6 +465,7 @@ export const attendanceService = {
       date: dateStr,
       tz: getCurrentTz(),
       backfilled: true,
+      ...(value !== undefined ? { value } : {}),
     };
     const insertAt = activityLogs.findIndex((entry) => entry.date > dateStr);
     logs[activityId] =
@@ -444,6 +477,20 @@ export const attendanceService = {
     await attendanceService.appendNote(activityId, dateStr, trimmed);
 
     return newEntry;
+  },
+
+  /**
+   * Sets or clears the metric value on an existing log entry. Callers combine
+   * with the previous value first when adding to a day (`combineValues`).
+   */
+  setLogValue: async (activityId: string, dateStr: string, value: number | null): Promise<void> => {
+    const logs = await attendanceService.getLogs();
+    const activityLogs = logs[activityId];
+    if (!activityLogs?.some((entry) => entry.date === dateStr)) return;
+    logs[activityId] = activityLogs.map((entry) => {
+      return entry.date === dateStr ? withLogValue(entry, value) : entry;
+    });
+    await attendanceService.saveLogs(logs);
   },
 
   /**
@@ -511,8 +558,31 @@ export const attendanceService = {
         if (!act.id || !act.name) return false;
       }
 
-      await attendanceService.saveActivities(parsed.activities);
-      await attendanceService.saveLogs(parsed.logs);
+      // Metrics and log values are dropped when malformed rather than failing
+      // the import: a bad unit shouldn't cost someone their whole history.
+      const activities = (parsed.activities as Activity[]).map((act) => {
+        const { metric, previousMetric, ...rest } = act;
+        const current = normalizeMetric(metric);
+        const previous = normalizeMetric(previousMetric);
+        return {
+          ...rest,
+          ...(current ? { metric: current } : {}),
+          ...(previous ? { previousMetric: previous } : {}),
+        };
+      });
+      const logs: Record<string, unknown> = {};
+      for (const [actId, entries] of Object.entries(parsed.logs as Record<string, unknown>)) {
+        logs[actId] = Array.isArray(entries)
+          ? entries.map((entry) => {
+              if (!entry || typeof entry !== 'object' || !('value' in entry)) return entry;
+              const { value, ...rest } = entry as LogEntry;
+              return isValidMetricValue(value) ? { ...rest, value } : rest;
+            })
+          : entries;
+      }
+
+      await attendanceService.saveActivities(activities);
+      await attendanceService.saveLogs(logs as Record<string, LogEntry[]>);
 
       // Notes are optional (older exports won't have them)
       if (parsed.notes && typeof parsed.notes === 'object') {

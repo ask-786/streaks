@@ -6,6 +6,7 @@ import { Activity } from '../features/attendance/attendanceService';
 import { navigationRef } from '../navigation/AppNavigator';
 import { useAttendanceStore } from '../store/attendanceStore';
 import { todayStr } from '../utils/dateUtils';
+import { isMetricRequired } from '../features/metrics/metrics';
 
 /** Same window rule the dashboard's log button enforces. */
 const isInsideTimeBound = (activity: Activity): boolean => {
@@ -22,8 +23,8 @@ const isInsideTimeBound = (activity: Activity): boolean => {
  * can't touch the store, so the native module queues those taps and this
  * drains the queue whenever the app is in the foreground.
  *
- * A habit that needs a note, or is outside its time window, can't be logged
- * blindly; for those the app opens on the habit so the user can finish there.
+ * A habit that needs a note or a metric value, or is outside its time window,
+ * can't be logged blindly; for those the app opens on the habit so the user can finish there.
  */
 export function useAlarmActions() {
   const isLoading = useAttendanceStore((state) => state.isLoading);
@@ -46,7 +47,11 @@ export function useAlarmActions() {
         if (!activity) continue;
         if ((logs[activityId] ?? []).some((entry) => entry.date === today)) continue;
 
-        if (activity.requiresNote || !isInsideTimeBound(activity)) {
+        if (
+          activity.requiresNote ||
+          isMetricRequired(activity.metric) ||
+          !isInsideTimeBound(activity)
+        ) {
           needsAttention = activityId;
         } else {
           logToday(activityId);

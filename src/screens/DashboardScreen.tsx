@@ -13,6 +13,7 @@ import { useTheme } from '../hooks/useTheme';
 import ConfettiCannon from 'react-native-confetti-cannon';
 import { Card, Chip, ProgressBar, PressableScale, StatTile } from '../components/ui';
 import { haptics } from '../utils/haptics';
+import { METRIC_KINDS, formatMetricValue } from '../features/metrics/metrics';
 
 export const DashboardScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
@@ -47,6 +48,21 @@ export const DashboardScreen: React.FC = () => {
       };
   const { isTodayLogged, currentStreak, longestStreak, unit, isThisWeekGoalMet } = stats;
   const isWeekly = unit === 'week';
+
+  const metric = selectedActivity?.metric;
+  const todayValue = selectedActivityId
+    ? (allLogs[selectedActivityId] ?? []).find((e) => e.date === todayStr())?.value
+    : undefined;
+  /** Today's value, against the daily target when there is one. */
+  const metricChipLabel = !metric
+    ? null
+    : todayValue !== undefined
+      ? metric.target
+        ? `${formatMetricValue(metric, todayValue)} of ${formatMetricValue(metric, metric.target)} today`
+        : `${formatMetricValue(metric, todayValue)} today`
+      : metric.target && !isCompleted
+        ? `Daily target ${formatMetricValue(metric, metric.target)}`
+        : null;
 
   const [noteModalVisible, setNoteModalVisible] = React.useState(false);
   const [laterModalVisible, setLaterModalVisible] = React.useState(false);
@@ -115,7 +131,7 @@ export const DashboardScreen: React.FC = () => {
     if (!selectedActivityId || !selectedActivity) return;
     if (isTimeBoundDisabled || isCompleted) return;
 
-    if (selectedActivity.requiresNote) {
+    if (selectedActivity.requiresNote || selectedActivity.metric) {
       haptics.medium(); // committing to the flow, not finishing it
       setNoteModalVisible(true);
     } else {
@@ -125,11 +141,11 @@ export const DashboardScreen: React.FC = () => {
     }
   };
 
-  const handleNoteSubmit = (note: string) => {
+  const handleNoteSubmit = (note: string, value?: number) => {
     if (!selectedActivityId) return;
     setNoteModalVisible(false);
     haptics.success();
-    logToday(selectedActivityId, note);
+    logToday(selectedActivityId, note || undefined, value);
     triggerConfetti();
   };
 
@@ -140,11 +156,11 @@ export const DashboardScreen: React.FC = () => {
     setLaterModalVisible(true);
   };
 
-  const handleLaterSubmit = (note: string) => {
+  const handleLaterSubmit = (note: string, value?: number) => {
     if (!selectedActivityId) return;
     setLaterModalVisible(false);
     haptics.success();
-    logTodayWithSequenceSkip(selectedActivityId, note || undefined);
+    logTodayWithSequenceSkip(selectedActivityId, note || undefined, value);
     triggerConfetti();
   };
 
@@ -340,7 +356,8 @@ export const DashboardScreen: React.FC = () => {
             {(!isTodayLogged && !isCompleted && selectedActivity?.timeBoundType) ||
             (selectedActivity?.activityType === 'goal' &&
               selectedActivity?.streakGoal &&
-              !isCompleted) ? (
+              !isCompleted) ||
+            (metric && metricChipLabel) ? (
               <View style={styles.chipRow}>
                 {!isTodayLogged && !isCompleted && selectedActivity?.timeBoundType ? (
                   <Chip
@@ -375,6 +392,18 @@ export const DashboardScreen: React.FC = () => {
                           ? 'day'
                           : 'days'
                     }`}
+                  />
+                ) : null}
+
+                {metric && metricChipLabel ? (
+                  <Chip
+                    icon={METRIC_KINDS[metric.kind].icon}
+                    tone={
+                      todayValue !== undefined && (!metric.target || todayValue >= metric.target)
+                        ? 'success'
+                        : 'neutral'
+                    }
+                    label={metricChipLabel}
                   />
                 ) : null}
               </View>
@@ -575,6 +604,17 @@ export const DashboardScreen: React.FC = () => {
       <NoteInputModal
         visible={noteModalVisible}
         activityName={selectedActivity?.name}
+        title={selectedActivity?.requiresNote ? undefined : 'Log today'}
+        subtitle={
+          selectedActivity?.requiresNote
+            ? undefined
+            : metric?.optional
+              ? 'Add today’s number now, or leave it blank and add it later from the calendar.'
+              : 'How much today?'
+        }
+        submitLabel={selectedActivity?.requiresNote ? undefined : 'Log'}
+        showNote={!!selectedActivity?.requiresNote}
+        metric={metric}
         onClose={() => setNoteModalVisible(false)}
         onSubmit={handleNoteSubmit}
       />
@@ -591,6 +631,7 @@ export const DashboardScreen: React.FC = () => {
         }
         submitLabel="Log & Do Later"
         noteRequired
+        metric={metric}
         onClose={() => setLaterModalVisible(false)}
         onSubmit={handleLaterSubmit}
       />

@@ -41,6 +41,7 @@ export const CalendarScreen: React.FC = () => {
     appendNote,
     editNote,
     logMissedDay,
+    setLogValue,
     getBackfillEligibility,
     isHideExtraDaysEnabled,
   } = useAttendanceStore();
@@ -292,7 +293,14 @@ export const CalendarScreen: React.FC = () => {
         backfill={logModalBackfill}
         onBackfill={
           selectedActivityId && logModalDateKey
-            ? (reason) => logMissedDay(selectedActivityId, logModalDateKey, reason)
+            ? (reason, value) => logMissedDay(selectedActivityId, logModalDateKey, reason, value)
+            : undefined
+        }
+        metric={selectedActivity?.metric}
+        value={logModalEntry?.value}
+        onValueSave={
+          selectedActivityId && logModalEntry
+            ? (value, mode) => setLogValue(selectedActivityId, logModalDateKey, value, mode)
             : undefined
         }
         onNoteAppend={

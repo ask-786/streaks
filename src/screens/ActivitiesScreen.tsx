@@ -8,8 +8,9 @@ import Animated, { FadeIn, FadeInDown, FadeOut } from 'react-native-reanimated';
 import { FontAwesome5 } from '@expo/vector-icons';
 import dayjs from 'dayjs';
 import { RootStackParamList } from '../navigation/AppNavigator';
-import { useAttendanceStore, SequenceTask } from '../store/attendanceStore';
+import { useAttendanceStore, SequenceTask, ActivityInput } from '../store/attendanceStore';
 import { HabitReminder } from '../features/attendance/attendanceService';
+import { HabitMetric } from '../features/metrics/metrics';
 import {
   Typography,
   Spacing,
@@ -83,6 +84,10 @@ export const ActivitiesScreen: React.FC = () => {
   );
   const [editingStreakGoal, setEditingStreakGoal] = useState<number | undefined>(undefined);
   const [editingReminder, setEditingReminder] = useState<HabitReminder | undefined>(undefined);
+  const [editingMetric, setEditingMetric] = useState<HabitMetric | undefined>(undefined);
+  const [editingPreviousMetric, setEditingPreviousMetric] = useState<HabitMetric | undefined>(
+    undefined,
+  );
 
   // Split active vs completed
   const activeActivities = activities.filter((a) => !a.completedAt);
@@ -112,51 +117,12 @@ export const ActivitiesScreen: React.FC = () => {
     return map;
   }, [activities, logs]);
 
-  const handleSaveActivity = (
-    name: string,
-    description: string,
-    requiresNote: boolean,
-    weeklyGoal?: number,
-    taskSequence?: SequenceTask[],
-    sequenceMode?: 'calendar' | 'log',
-    timeBoundType?: 'before' | 'after' | 'between' | null,
-    timeBoundStartTime?: string | null,
-    timeBoundEndTime?: string | null,
-    activityType?: 'goal' | 'endless',
-    streakGoal?: number,
-    reminders?: HabitReminder[],
-  ) => {
+  const handleSaveActivity = (input: ActivityInput) => {
     if (editingItemId) {
-      editActivity(
-        editingItemId,
-        name,
-        description,
-        requiresNote,
-        weeklyGoal,
-        taskSequence,
-        undefined,
-        sequenceMode,
-        timeBoundType,
-        timeBoundStartTime,
-        timeBoundEndTime,
-        reminders,
-      );
+      // Type and streak goal are fixed once a habit exists; editActivity ignores them.
+      editActivity(editingItemId, input);
     } else {
-      createActivity(
-        name,
-        description,
-        requiresNote,
-        weeklyGoal,
-        taskSequence,
-        undefined,
-        sequenceMode,
-        timeBoundType,
-        timeBoundStartTime,
-        timeBoundEndTime,
-        activityType,
-        streakGoal,
-        reminders,
-      );
+      createActivity(input);
     }
     closeModal();
   };
@@ -186,6 +152,8 @@ export const ActivitiesScreen: React.FC = () => {
     setEditingActivityType(activity?.activityType);
     setEditingStreakGoal(activity?.streakGoal);
     setEditingReminder(activity.reminders?.[0]);
+    setEditingMetric(activity.metric);
+    setEditingPreviousMetric(activity.previousMetric);
     setSelectedIds([]);
     setIsModalVisible(true);
   };
@@ -205,6 +173,8 @@ export const ActivitiesScreen: React.FC = () => {
     setEditingActivityType(undefined);
     setEditingStreakGoal(undefined);
     setEditingReminder(undefined);
+    setEditingMetric(undefined);
+    setEditingPreviousMetric(undefined);
   };
 
   const clearSelection = () => setSelectedIds([]);
@@ -628,6 +598,13 @@ export const ActivitiesScreen: React.FC = () => {
         initialActivityType={editingActivityType}
         initialStreakGoal={editingStreakGoal}
         initialReminder={editingReminder}
+        initialMetric={editingMetric}
+        previousMetric={editingPreviousMetric}
+        metricKindLocked={
+          !!editingItemId &&
+          !!(editingMetric ?? editingPreviousMetric) &&
+          (logs[editingItemId] ?? []).some((e) => e.value !== undefined)
+        }
         onClose={closeModal}
         onSave={handleSaveActivity}
       />
