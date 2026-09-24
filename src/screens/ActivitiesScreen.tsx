@@ -8,7 +8,7 @@ import Animated, { FadeIn, FadeInDown, FadeOut } from 'react-native-reanimated';
 import { FontAwesome5 } from '@expo/vector-icons';
 import dayjs from 'dayjs';
 import { RootStackParamList } from '../navigation/AppNavigator';
-import { useAttendanceStore, SequenceTask } from '../store/attendanceStore';
+import { useAttendanceStore, SequenceTask, ActivityInput } from '../store/attendanceStore';
 import { HabitReminder } from '../features/attendance/attendanceService';
 import {
   Typography,
@@ -112,51 +112,12 @@ export const ActivitiesScreen: React.FC = () => {
     return map;
   }, [activities, logs]);
 
-  const handleSaveActivity = (
-    name: string,
-    description: string,
-    requiresNote: boolean,
-    weeklyGoal?: number,
-    taskSequence?: SequenceTask[],
-    sequenceMode?: 'calendar' | 'log',
-    timeBoundType?: 'before' | 'after' | 'between' | null,
-    timeBoundStartTime?: string | null,
-    timeBoundEndTime?: string | null,
-    activityType?: 'goal' | 'endless',
-    streakGoal?: number,
-    reminders?: HabitReminder[],
-  ) => {
+  const handleSaveActivity = (input: ActivityInput) => {
     if (editingItemId) {
-      editActivity(
-        editingItemId,
-        name,
-        description,
-        requiresNote,
-        weeklyGoal,
-        taskSequence,
-        undefined,
-        sequenceMode,
-        timeBoundType,
-        timeBoundStartTime,
-        timeBoundEndTime,
-        reminders,
-      );
+      // Type and streak goal are fixed once a habit exists; editActivity ignores them.
+      editActivity(editingItemId, input);
     } else {
-      createActivity(
-        name,
-        description,
-        requiresNote,
-        weeklyGoal,
-        taskSequence,
-        undefined,
-        sequenceMode,
-        timeBoundType,
-        timeBoundStartTime,
-        timeBoundEndTime,
-        activityType,
-        streakGoal,
-        reminders,
-      );
+      createActivity(input);
     }
     closeModal();
   };

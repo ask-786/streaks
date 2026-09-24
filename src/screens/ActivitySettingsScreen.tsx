@@ -131,20 +131,9 @@ export const ActivitySettingsScreen: React.FC = () => {
     if (!isReminderValid) return haptics.warning();
 
     haptics.success();
-    await editActivity(
-      selectedActivityId,
-      selectedActivity.name,
-      selectedActivity.description,
-      selectedActivity.requiresNote,
-      selectedActivity.weeklyGoal,
-      selectedActivity.taskSequence,
-      selectedActivity.sequenceStartDate,
-      selectedActivity.sequenceMode,
-      undefined,
-      undefined,
-      undefined,
-      reminderEnabled ? [fromReminderDraft(reminderDraft)] : [],
-    );
+    await editActivity(selectedActivityId, {
+      reminders: reminderEnabled ? [fromReminderDraft(reminderDraft)] : [],
+    });
   };
 
   const isTimeOrderValid =
@@ -220,34 +209,21 @@ export const ActivitySettingsScreen: React.FC = () => {
     const noteText = `Time constraint changed from ${oldDesc} to ${newDesc}`;
 
     haptics.success();
-    await editActivity(
-      selectedActivityId,
-      selectedActivity.name,
-      selectedActivity.description,
-      selectedActivity.requiresNote,
-      selectedActivity.weeklyGoal,
-      selectedActivity.taskSequence,
-      selectedActivity.sequenceStartDate,
-      selectedActivity.sequenceMode,
+    await editActivity(selectedActivityId, {
       timeBoundType,
-      newStart,
-      newEnd ?? undefined,
-    );
+      timeBoundStartTime: newStart,
+      timeBoundEndTime: newEnd ?? undefined,
+    });
     await appendNote(selectedActivityId, todayStr(), noteText);
   };
 
   const handleTaskSequenceChange = (newTasks: SequenceTask[]) => {
     if (selectedActivityId && selectedActivity) {
-      editActivity(
-        selectedActivityId,
-        selectedActivity.name,
-        selectedActivity.description,
-        selectedActivity.requiresNote,
-        selectedActivity.weeklyGoal,
-        newTasks,
-        selectedActivity.sequenceStartDate,
-        selectedActivity.sequenceMode || 'calendar',
-      );
+      editActivity(selectedActivityId, {
+        taskSequence: newTasks,
+        sequenceStartDate: selectedActivity.sequenceStartDate,
+        sequenceMode: selectedActivity.sequenceMode || 'calendar',
+      });
     }
   };
 

@@ -40,6 +40,31 @@ interface ActivityStats {
   thisWeekCount: number;
 }
 
+/** Everything a new habit can be created with. */
+export interface ActivityInput {
+  name: string;
+  description?: string;
+  requiresNote?: boolean;
+  weeklyGoal?: number;
+  taskSequence?: SequenceTask[];
+  sequenceStartDate?: string;
+  sequenceMode?: 'calendar' | 'log';
+  timeBoundType?: 'before' | 'after' | 'between' | null;
+  timeBoundStartTime?: string | null;
+  timeBoundEndTime?: string | null;
+  activityType?: 'goal' | 'endless';
+  streakGoal?: number;
+  reminders?: HabitReminder[];
+}
+
+/**
+ * A partial update to an existing habit. Undefined fields are left alone. To
+ * clear one: `weeklyGoal: 0`, an empty `taskSequence` or `reminders`, and
+ * `null` for the time bound fields. The activity type and streak goal are
+ * fixed once a habit exists.
+ */
+export type ActivityChanges = Partial<Omit<ActivityInput, 'activityType' | 'streakGoal'>>;
+
 interface AttendanceState {
   activities: Activity[];
   logs: Record<string, LogEntry[]>;
@@ -55,36 +80,8 @@ interface AttendanceState {
 
   // Actions
   hydrate: () => Promise<void>;
-  createActivity: (
-    name: string,
-    description?: string,
-    requiresNote?: boolean,
-    weeklyGoal?: number,
-    taskSequence?: SequenceTask[],
-    sequenceStartDate?: string,
-    sequenceMode?: 'calendar' | 'log',
-    timeBoundType?: 'before' | 'after' | 'between' | null,
-    timeBoundStartTime?: string | null,
-    timeBoundEndTime?: string | null,
-    activityType?: 'goal' | 'endless',
-    streakGoal?: number,
-    reminders?: HabitReminder[],
-  ) => Promise<void>;
-  editActivity: (
-    id: string,
-    name: string,
-    description?: string,
-    requiresNote?: boolean,
-    weeklyGoal?: number,
-    taskSequence?: SequenceTask[],
-    sequenceStartDate?: string,
-    sequenceMode?: 'calendar' | 'log',
-    timeBoundType?: 'before' | 'after' | 'between' | null,
-    timeBoundStartTime?: string | null,
-    timeBoundEndTime?: string | null,
-    /** An empty array clears reminders; undefined leaves them unchanged. */
-    reminders?: HabitReminder[],
-  ) => Promise<void>;
+  createActivity: (input: ActivityInput) => Promise<void>;
+  editActivity: (id: string, changes: ActivityChanges) => Promise<void>;
   deleteActivity: (id: string) => Promise<void>;
   /** Bulk delete. One persistence pass, so selecting ten habits is one write. */
   deleteActivities: (ids: string[]) => Promise<void>;
@@ -197,21 +194,21 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     }
   },
 
-  createActivity: async (
-    name: string,
-    description?: string,
-    requiresNote?: boolean,
-    weeklyGoal?: number,
-    taskSequence?: SequenceTask[],
-    sequenceStartDate?: string,
-    sequenceMode?: 'calendar' | 'log',
-    timeBoundType?: 'before' | 'after' | 'between' | null,
-    timeBoundStartTime?: string | null,
-    timeBoundEndTime?: string | null,
-    activityType?: 'goal' | 'endless',
-    streakGoal?: number,
-    reminders?: HabitReminder[],
-  ) => {
+  createActivity: async ({
+    name,
+    description,
+    requiresNote,
+    weeklyGoal,
+    taskSequence,
+    sequenceStartDate,
+    sequenceMode,
+    timeBoundType,
+    timeBoundStartTime,
+    timeBoundEndTime,
+    activityType,
+    streakGoal,
+    reminders,
+  }) => {
     const { activities } = get();
     const newActivity: Activity = {
       id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
@@ -237,23 +234,26 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
   },
 
   editActivity: async (
-    id: string,
-    name: string,
-    description?: string,
-    requiresNote?: boolean,
-    weeklyGoal?: number,
-    taskSequence?: SequenceTask[],
-    sequenceStartDate?: string,
-    sequenceMode?: 'calendar' | 'log',
-    timeBoundType?: 'before' | 'after' | 'between' | null,
-    timeBoundStartTime?: string | null,
-    timeBoundEndTime?: string | null,
-    reminders?: HabitReminder[],
+    id,
+    {
+      name,
+      description,
+      requiresNote,
+      weeklyGoal,
+      taskSequence,
+      sequenceStartDate,
+      sequenceMode,
+      timeBoundType,
+      timeBoundStartTime,
+      timeBoundEndTime,
+      reminders,
+    },
   ) => {
     const { activities } = get();
     const updatedActivities = activities.map((a) => {
       if (a.id !== id) return a;
-      const updated = { ...a, name };
+      const updated = { ...a };
+      if (name !== undefined) updated.name = name;
       if (description !== undefined) {
         const trimmed = description.trim();
         if (trimmed) {

@@ -34,6 +34,7 @@ import {
   isReminderDraftValid,
 } from './ReminderEditor';
 import { HabitReminder, SequenceTask } from '../features/attendance/attendanceService';
+import type { ActivityInput } from '../store/attendanceStore';
 import { to12h, to24h, isValidTime12h } from '../utils/dateUtils';
 import { haptics } from '../utils/haptics';
 
@@ -53,20 +54,11 @@ export interface ActivityFormModalProps {
   initialStreakGoal?: number;
   initialReminder?: HabitReminder;
   onClose: () => void;
-  onSave: (
-    name: string,
-    description: string,
-    requiresNote: boolean,
-    weeklyGoal?: number,
-    taskSequence?: SequenceTask[],
-    sequenceMode?: 'calendar' | 'log',
-    timeBoundType?: 'before' | 'after' | 'between' | null,
-    timeBoundStartTime?: string | null,
-    timeBoundEndTime?: string | null,
-    activityType?: 'goal' | 'endless',
-    streakGoal?: number,
-    reminders?: HabitReminder[],
-  ) => void;
+  /**
+   * Cleared settings come through as their clearing values (empty arrays,
+   * nulls), so the same object works for creating and for editing.
+   */
+  onSave: (input: ActivityInput) => void;
 }
 
 const GOAL_OPTIONS = [1, 2, 3, 4, 5, 6, 7];
@@ -286,20 +278,21 @@ export const ActivityFormModal: React.FC<ActivityFormModalProps> = ({
     if (!name.trim()) return haptics.warning();
     if (activityType === 'goal' && (!streakGoal || streakGoal < 1)) return haptics.warning();
     haptics.success();
-    onSave(
-      name.trim(),
-      description.trim(),
+    onSave({
+      name: name.trim(),
+      description: description.trim(),
       requiresNote,
-      weeklyModeEnabled ? weeklyGoal : undefined,
-      taskSeqEnabled && tasks.length > 0 ? tasks : [],
-      taskSeqEnabled && tasks.length > 0 ? sequenceMode : undefined,
-      timeBoundEnabled ? timeBoundType : null,
-      timeBoundEnabled ? to24h(timeBoundStartTime, startAmPm) : null,
-      timeBoundEnabled && timeBoundType === 'between' ? to24h(timeBoundEndTime, endAmPm) : null,
+      weeklyGoal: weeklyModeEnabled ? weeklyGoal : undefined,
+      taskSequence: taskSeqEnabled && tasks.length > 0 ? tasks : [],
+      sequenceMode: taskSeqEnabled && tasks.length > 0 ? sequenceMode : undefined,
+      timeBoundType: timeBoundEnabled ? timeBoundType : null,
+      timeBoundStartTime: timeBoundEnabled ? to24h(timeBoundStartTime, startAmPm) : null,
+      timeBoundEndTime:
+        timeBoundEnabled && timeBoundType === 'between' ? to24h(timeBoundEndTime, endAmPm) : null,
       activityType,
-      activityType === 'goal' ? streakGoal : undefined,
-      reminderEnabled ? [fromReminderDraft(reminderDraft)] : [],
-    );
+      streakGoal: activityType === 'goal' ? streakGoal : undefined,
+      reminders: reminderEnabled ? [fromReminderDraft(reminderDraft)] : [],
+    });
   };
 
   const isEditing = !!editingItemId;
