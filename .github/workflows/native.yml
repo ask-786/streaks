@@ -1,0 +1,52 @@
+name: Native
+
+# ci.yml only sees the JS side; the Kotlin in modules/ was first compiled by
+# the release build after merging. This compiles it on the PR instead.
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'modules/**'
+      - 'app.json'
+      - 'app.config.js'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/native.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: native-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compile:
+    name: Compile Android (Kotlin)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      # Caches Gradle's dependencies and build cache between runs.
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Expo Prebuild
+        run: pnpm exec expo prebuild --platform android --clean --no-install
+
+      # Compiling the app's Kotlin compiles every module it links first,
+      # habit-alarm included — without dexing or packaging an APK.
+      - name: Compile Kotlin
+        run: cd android && chmod +x ./gradlew && ./gradlew :app:compileDebugKotlin
