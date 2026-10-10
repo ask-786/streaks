@@ -22,6 +22,9 @@ import type { Activity, LogEntry } from './attendanceService';
  *
  * A fixed day is also marked `backfilled` for life (see `LogEntry`), so the
  * calendar never quietly launders a fix into an ordinary green square.
+ *
+ * The same window also bounds the reverse — taking back a log made by mistake —
+ * and changes to a day's notes; see `isDayCorrectable`.
  */
 
 /** How many days back a missed day stays fixable. 2 = yesterday and the day before. */
@@ -118,6 +121,24 @@ export const getBackfillEligibility = (
   if (remaining <= 0) return deny('quota_exhausted');
 
   return { allowed: true, remaining, used };
+};
+
+/**
+ * Correcting a day — discarding a log made by mistake, and adding, editing or
+ * deleting its notes — runs on the same window as fixing a missed one, so the
+ * record is open in both directions for exactly as long and then settles.
+ *
+ * Today counts as inside the window. A finished habit is closed for good.
+ */
+export const isDayCorrectable = (
+  activity: Activity | undefined,
+  dateStr: string,
+  today: string = todayStr(),
+): boolean => {
+  if (!activity || activity.completedAt) return false;
+  if (dateStr > today) return false;
+  const oldest = dayjs(today).subtract(BACKFILL_WINDOW_DAYS, 'day').format(DATE_FORMAT);
+  return dateStr >= oldest;
 };
 
 /** The sentence shown in place of the button when a day cannot be fixed. */

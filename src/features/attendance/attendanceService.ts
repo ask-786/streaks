@@ -480,6 +480,38 @@ export const attendanceService = {
   },
 
   /**
+   * Takes back a log made by mistake. Callers must clear `isDayCorrectable`
+   * first. Along with the entry go the things that only meant anything because
+   * the day was logged: the task locked in for it, and a "doing it later" mark.
+   * Notes stay — they can be removed one by one, and a note is never lost as a
+   * side effect.
+   *
+   * Removing a fixed entry also hands its quota slot back, since the quota is
+   * counted from the entries themselves.
+   */
+  discardLog: async (activityId: string, dateStr: string): Promise<boolean> => {
+    const logs = await attendanceService.getLogs();
+    const activityLogs = logs[activityId] ?? [];
+    if (!activityLogs.some((entry) => entry.date === dateStr)) return false;
+    logs[activityId] = activityLogs.filter((entry) => entry.date !== dateStr);
+    await attendanceService.saveLogs(logs);
+
+    const history = await attendanceService.getTaskHistory();
+    if (history[activityId]?.[dateStr]) {
+      delete history[activityId][dateStr];
+      await attendanceService.saveTaskHistory(history);
+    }
+
+    const skips = await attendanceService.getSequenceSkips();
+    if (skips[activityId]?.includes(dateStr)) {
+      skips[activityId] = skips[activityId].filter((d) => d !== dateStr);
+      await attendanceService.saveSequenceSkips(skips);
+    }
+
+    return true;
+  },
+
+  /**
    * Sets or clears the metric value on an existing log entry. Callers combine
    * with the previous value first when adding to a day (`combineValues`).
    */
@@ -524,6 +556,20 @@ export const attendanceService = {
     const updated = [...entries];
     updated[index] = { ...updated[index], text: text.trim() };
     notes[activityId][dateStr] = updated;
+    await attendanceService.saveNotes(notes);
+  },
+
+  /** Removes one NoteEntry by index, dropping the date key once it's empty. */
+  deleteNote: async (activityId: string, dateStr: string, index: number): Promise<void> => {
+    const notes = await attendanceService.getNotes();
+    const entries = notes[activityId]?.[dateStr];
+    if (!entries || index < 0 || index >= entries.length) return;
+    const remaining = entries.filter((_, i) => i !== index);
+    if (remaining.length > 0) {
+      notes[activityId][dateStr] = remaining;
+    } else {
+      delete notes[activityId][dateStr];
+    }
     await attendanceService.saveNotes(notes);
   },
 

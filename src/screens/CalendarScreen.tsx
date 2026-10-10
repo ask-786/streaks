@@ -40,9 +40,12 @@ export const CalendarScreen: React.FC = () => {
     activities,
     appendNote,
     editNote,
+    deleteNote,
     logMissedDay,
+    discardLog,
     setLogValue,
     getBackfillEligibility,
+    isDayCorrectable,
     isHideExtraDaysEnabled,
   } = useAttendanceStore();
   const selectedActivity = activities.find((a) => a.id === selectedActivityId);
@@ -117,6 +120,12 @@ export const CalendarScreen: React.FC = () => {
     selectedActivityId && logModalDateKey && !logModalEntry && logModalDateKey < today
       ? getBackfillEligibility(selectedActivityId, logModalDateKey)
       : undefined;
+  // Today and the two days behind it stay open: a mistaken log can be taken
+  // back, and notes added, edited or deleted.
+  const logModalCanCorrect =
+    !!selectedActivityId &&
+    !!logModalDateKey &&
+    isDayCorrectable(selectedActivityId, logModalDateKey);
 
   const jumpTo = (date: string) => {
     haptics.light();
@@ -296,6 +305,12 @@ export const CalendarScreen: React.FC = () => {
             ? (reason, value) => logMissedDay(selectedActivityId, logModalDateKey, reason, value)
             : undefined
         }
+        canCorrect={logModalCanCorrect}
+        onDiscardLog={
+          selectedActivityId && logModalEntry
+            ? () => discardLog(selectedActivityId, logModalDateKey)
+            : undefined
+        }
         metric={selectedActivity?.metric}
         value={logModalEntry?.value}
         onValueSave={
@@ -311,9 +326,16 @@ export const CalendarScreen: React.FC = () => {
             : undefined
         }
         onNoteEdit={
-          selectedActivityId && logModalEntry
+          selectedActivityId
             ? async (index, text) => {
                 await editNote(selectedActivityId, logModalDateKey, index, text);
+              }
+            : undefined
+        }
+        onNoteDelete={
+          selectedActivityId
+            ? async (index) => {
+                await deleteNote(selectedActivityId, logModalDateKey, index);
               }
             : undefined
         }

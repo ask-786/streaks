@@ -15,7 +15,11 @@ import {
   SequenceTask,
   withLogValue,
 } from '../features/attendance/attendanceService';
-import { getBackfillEligibility, BackfillEligibility } from '../features/attendance/backfill';
+import {
+  getBackfillEligibility,
+  BackfillEligibility,
+  isDayCorrectable,
+} from '../features/attendance/backfill';
 import {
   calculateCurrentStreak,
   calculateLongestStreak,
@@ -109,6 +113,11 @@ interface AttendanceState {
     reason: string,
     value?: number,
   ) => Promise<boolean>;
+  /**
+   * Takes back a log made by mistake — today or a day still inside the
+   * correction window (`isDayCorrectable`). Resolves false if refused.
+   */
+  discardLog: (activityId: string, dateStr: string) => Promise<boolean>;
   /** Logs today AND marks the sequence task as skipped. Streak is maintained but sequence does not advance. */
   logTodayWithSequenceSkip: (activityId: string, note?: string, value?: number) => Promise<void>;
   /**
@@ -136,6 +145,8 @@ interface AttendanceState {
   appendNote: (activityId: string, dateStr: string, text: string) => Promise<void>;
   /** Edits the text of an existing note entry by index. The original timestamp is preserved. */
   editNote: (activityId: string, dateStr: string, index: number, text: string) => Promise<void>;
+  /** Deletes a note entry by index. Only inside the correction window. */
+  deleteNote: (activityId: string, dateStr: string, index: number) => Promise<void>;
   exportData: () => Promise<string>;
   importData: (jsonData: string) => Promise<boolean>;
 
@@ -144,6 +155,8 @@ interface AttendanceState {
   getNoteEntries: (activityId: string, dateStr: string) => NoteEntry[] | undefined;
   /** Whether a past day can still be fixed, and how much of the quota is left. */
   getBackfillEligibility: (activityId: string, dateStr: string) => BackfillEligibility;
+  /** Whether a day's log and notes can still be changed — see `isDayCorrectable`. */
+  isDayCorrectable: (activityId: string, dateStr: string) => boolean;
 }
 
 export { NoteEntry, getTaskForDate };
@@ -617,6 +630,36 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     return true;
   },
 
+  discardLog: async (activityId: string, dateStr: string) => {
+    const { logs, taskHistory, sequenceSkips, activities } = get();
+    const activity = activities.find((a) => a.id === activityId);
+    // Re-checked here for the same reason as logMissedDay: midnight can pass
+    // while the sheet sits open.
+    if (!isDayCorrectable(activity, dateStr)) return false;
+    const entries = logs[activityId] ?? [];
+    if (!entries.some((entry) => entry.date === dateStr)) return false;
+
+    if (!(await attendanceService.discardLog(activityId, dateStr))) return false;
+
+    const updatedTaskHistory = { ...taskHistory };
+    if (updatedTaskHistory[activityId]?.[dateStr]) {
+      updatedTaskHistory[activityId] = { ...updatedTaskHistory[activityId] };
+      delete updatedTaskHistory[activityId][dateStr];
+    }
+
+    const updatedSkips = { ...sequenceSkips };
+    if (updatedSkips[activityId]?.includes(dateStr)) {
+      updatedSkips[activityId] = updatedSkips[activityId].filter((d) => d !== dateStr);
+    }
+
+    set({
+      logs: { ...logs, [activityId]: entries.filter((entry) => entry.date !== dateStr) },
+      taskHistory: updatedTaskHistory,
+      sequenceSkips: updatedSkips,
+    });
+    return true;
+  },
+
   logTodayWithSequenceSkip: async (activityId: string, note?: string, value?: number) => {
     const { logs, notes, sequenceSkips } = get();
     const today = todayStr();
@@ -752,9 +795,16 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
   },
 
   editNote: async (activityId: string, dateStr: string, index: number, text: string) => {
-    const { notes } = get();
+    const { notes, activities } = get();
     const trimmed = text.trim();
     if (!trimmed) return;
+    if (
+      !isDayCorrectable(
+        activities.find((a) => a.id === activityId),
+        dateStr,
+      )
+    )
+      return;
 
     await attendanceService.editNote(activityId, dateStr, index, trimmed);
 
@@ -765,6 +815,30 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     updated[index] = { ...updated[index], text: trimmed };
     updatedNotes[activityId] = { ...updatedNotes[activityId], [dateStr]: updated };
     set({ notes: updatedNotes });
+  },
+
+  deleteNote: async (activityId: string, dateStr: string, index: number) => {
+    const { notes, activities } = get();
+    if (
+      !isDayCorrectable(
+        activities.find((a) => a.id === activityId),
+        dateStr,
+      )
+    )
+      return;
+    const entries = notes[activityId]?.[dateStr];
+    if (!entries || index < 0 || index >= entries.length) return;
+
+    await attendanceService.deleteNote(activityId, dateStr, index);
+
+    const remaining = entries.filter((_, i) => i !== index);
+    const activityNotes = { ...notes[activityId] };
+    if (remaining.length > 0) {
+      activityNotes[dateStr] = remaining;
+    } else {
+      delete activityNotes[dateStr];
+    }
+    set({ notes: { ...notes, [activityId]: activityNotes } });
   },
 
   resetActivityData: async (id: string) => {
@@ -854,6 +928,13 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     return getBackfillEligibility(
       activities.find((a) => a.id === activityId),
       logs[activityId] ?? [],
+      dateStr,
+    );
+  },
+
+  isDayCorrectable: (activityId: string, dateStr: string) => {
+    return isDayCorrectable(
+      get().activities.find((a) => a.id === activityId),
       dateStr,
     );
   },

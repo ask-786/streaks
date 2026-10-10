@@ -11,6 +11,7 @@ import {
   ScrollView,
   Keyboard,
   BackHandler,
+  Alert,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { Text } from 'react-native-paper';
@@ -30,6 +31,7 @@ import {
   BackfillEligibility,
   describeBackfillBlock,
   BACKFILL_QUOTA,
+  BACKFILL_WINDOW_DAYS,
 } from '../features/attendance/backfill';
 import { formatTimeWithTz } from '../utils/dateUtils';
 import { haptics } from '../utils/haptics';
@@ -77,6 +79,13 @@ export interface LogDetailsModalProps {
   backfill?: BackfillEligibility;
   /** Records this day as done, with the reason the user typed. Resolves false if refused. */
   onBackfill?: (reason: string, value?: number) => Promise<boolean>;
+  /**
+   * Whether this day is still inside the correction window — its log can be
+   * discarded and its notes added, edited and deleted. See `isDayCorrectable`.
+   */
+  canCorrect?: boolean;
+  /** Takes back this day's log. Resolves false if refused. */
+  onDiscardLog?: () => Promise<boolean>;
   /** The habit's progress metric, if it tracks one. */
   metric?: HabitMetric;
   /** This day's metric value, in base units. */
@@ -90,6 +99,8 @@ export interface LogDetailsModalProps {
   onNoteAppend?: (text: string) => Promise<void>;
   /** Edits an existing note entry by index. */
   onNoteEdit?: (index: number, text: string) => Promise<void>;
+  /** Deletes an existing note entry by index. */
+  onNoteDelete?: (index: number) => Promise<void>;
   onClose: () => void;
 }
 
@@ -110,11 +121,14 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
   isBackfilled = false,
   backfill,
   onBackfill,
+  canCorrect = false,
+  onDiscardLog,
   metric,
   value,
   onValueSave,
   onNoteAppend,
   onNoteEdit,
+  onNoteDelete,
   onClose,
 }) => {
   const { colors } = useTheme();
@@ -260,6 +274,45 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
     setDraftNote('');
   };
 
+  const confirmDeleteNote = (index: number) => {
+    if (!onNoteDelete) return;
+    haptics.warning();
+    Alert.alert('Delete note?', 'This note will be removed from the day.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          await onNoteDelete(index);
+          haptics.success();
+        },
+      },
+    ]);
+  };
+
+  const confirmDiscardLog = () => {
+    if (!onDiscardLog) return;
+    haptics.warning();
+    Alert.alert(
+      'Discard this log?',
+      isBackfilled
+        ? 'The day goes back to missed, and the fix returns to your quota. Notes are kept.'
+        : 'The day goes back to not logged and your streak is recounted. Notes are kept.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Discard',
+          style: 'destructive',
+          onPress: async () => {
+            const done = await onDiscardLog();
+            if (done) haptics.success();
+            else haptics.error();
+          },
+        },
+      ],
+    );
+  };
+
   const handleCopy = async (text: string, index: number) => {
     await Clipboard.setStringAsync(text);
     haptics.success();
@@ -268,8 +321,12 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
     copyTimerRef.current = setTimeout(() => setCopiedIndex(null), 1500);
   };
 
-  // Only allow adding notes on today, and only if the activity itself is not completed
-  const canAddNote = isToday && !isActivityCompleted && !!onNoteAppend;
+  // Notes stay open for as long as the day itself does — today and the
+  // correction window behind it, and never once the habit is finished.
+  const canAddNote = canCorrect && !!onNoteAppend;
+  const canEditNote = canCorrect && !!onNoteEdit;
+  const canDeleteNote = canCorrect && !!onNoteDelete;
+  const canDiscardLog = isLogged && canCorrect && !!onDiscardLog;
   const hasNotes = notes && notes.length > 0;
   // Always show the notes section so users can annotate any logged day
   const showNotesSection = true;
@@ -651,6 +708,55 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                         </>
                       ) : null}
 
+                      {/* ── Taking back a log made by mistake ── */}
+                      {canDiscardLog ? (
+                        <>
+                          <View
+                            style={[styles.divider, { backgroundColor: colors.surfaceVariant }]}
+                          />
+                          <View style={styles.infoRow}>
+                            <View
+                              style={[
+                                styles.infoIconWrap,
+                                { backgroundColor: colors.surfaceVariant },
+                              ]}
+                            >
+                              <FontAwesome5 name="undo" size={13} color={colors.textSecondary} />
+                            </View>
+                            <View style={styles.infoTextWrap}>
+                              <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>
+                                Logged by mistake?
+                              </Text>
+                              <Text
+                                style={[styles.infoDescription, { color: colors.textTertiary }]}
+                              >
+                                A log can be taken back for {BACKFILL_WINDOW_DAYS} days after the
+                                day itself. After that it stays.
+                              </Text>
+                              <Pressable
+                                style={({ pressed }) => [
+                                  styles.fixBtn,
+                                  {
+                                    backgroundColor: colors.dangerMuted,
+                                    borderColor: colors.dangerBorder,
+                                    opacity: pressed ? 0.7 : 1,
+                                  },
+                                ]}
+                                onPress={confirmDiscardLog}
+                                android_ripple={{ color: colors.danger + '33', radius: 80 }}
+                                accessibilityRole="button"
+                                accessibilityLabel="Discard this log"
+                              >
+                                <Ionicons name="trash-outline" size={15} color={colors.danger} />
+                                <Text style={[styles.fixBtnText, { color: colors.danger }]}>
+                                  Discard this log
+                                </Text>
+                              </Pressable>
+                            </View>
+                          </View>
+                        </>
+                      ) : null}
+
                       {/* ── Fixing a day that was done but never logged ── */}
                       {!isLogged && backfill ? (
                         <>
@@ -1021,8 +1127,8 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                                             />
                                           </Pressable>
 
-                                          {/* Edit icon — only shown on today and activity is not completed */}
-                                          {!!onNoteEdit && isToday && !isActivityCompleted ? (
+                                          {/* Edit icon — only inside the correction window */}
+                                          {canEditNote ? (
                                             <Pressable
                                               style={({ pressed }) => [
                                                 styles.editIconBtn,
@@ -1043,6 +1149,33 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                                                 name="edit"
                                                 size={13}
                                                 color={colors.textSecondary}
+                                              />
+                                            </Pressable>
+                                          ) : null}
+
+                                          {canDeleteNote ? (
+                                            <Pressable
+                                              style={({ pressed }) => [
+                                                styles.editIconBtn,
+                                                {
+                                                  backgroundColor: colors.dangerMuted,
+                                                  opacity: pressed ? 0.55 : 1,
+                                                },
+                                              ]}
+                                              onPress={() => confirmDeleteNote(i)}
+                                              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                                              android_ripple={{
+                                                color: colors.danger + '33',
+                                                radius: 16,
+                                                borderless: true,
+                                              }}
+                                              accessibilityRole="button"
+                                              accessibilityLabel="Delete note"
+                                            >
+                                              <MaterialIcons
+                                                name="delete-outline"
+                                                size={13}
+                                                color={colors.danger}
                                               />
                                             </Pressable>
                                           ) : null}
@@ -1159,7 +1292,7 @@ export const LogDetailsModal: React.FC<LogDetailsModalProps> = ({
                         </Text>
                         {activityName ? (
                           <Text style={[styles.addNoteSubtitle, { color: colors.primary }]}>
-                            {isFixMode || isValueMode
+                            {isFixMode || isValueMode || !isToday
                               ? `${activityName} · ${dateStr}`
                               : activityName}
                           </Text>
