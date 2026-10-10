@@ -94,8 +94,8 @@ class AlarmActivity : Activity() {
     AlarmActions.done(this, current)
     val keyguard = getSystemService(KeyguardManager::class.java)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && keyguard.isKeyguardLocked) {
-      // Unlock first so the app can open; if the user backs out, the log is
-      // still queued and happens next time the app opens.
+      // Unlock first so the app can open; if the user backs out, the tap is
+      // still queued and the app asks to confirm it next time it opens.
       keyguard.requestDismissKeyguard(
         this,
         object : KeyguardManager.KeyguardDismissCallback() {

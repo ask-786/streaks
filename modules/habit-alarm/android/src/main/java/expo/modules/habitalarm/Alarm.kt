@@ -7,6 +7,7 @@ import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
 /**
  * One scheduled ring. `id` is unique per ring (a habit with a 14-day window has
@@ -50,7 +51,7 @@ data class Alarm(
 /**
  * SharedPreferences-backed state. It has to outlive the JS runtime: alarms are
  * re-armed after a reboot with no JS running, and "Mark done" taps are queued
- * here until the app next comes to the foreground and logs them.
+ * here until the app next comes to the foreground and the user confirms them.
  */
 object AlarmStore {
   private const val PREFS = "expo.modules.habitalarm"
@@ -75,22 +76,71 @@ object AlarmStore {
     setAlarms(context, getAlarms(context).filterNot { it.id == id })
   }
 
+  private fun localDate(at: Date) = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(at)
+
+  private fun pendingArray(context: Context): JSONArray =
+    prefs(context).getString(KEY_PENDING_DONE, null)?.let { JSONArray(it) } ?: JSONArray()
+
+  /**
+   * Queues a "Mark done" tap with the moment it happened, so a log confirmed
+   * hours (or days) later still lands on the right day at the right time, and
+   * a time window is judged against the tap rather than the app opening.
+   */
   fun addPendingDone(context: Context, activityId: String) {
-    val raw = prefs(context).getString(KEY_PENDING_DONE, null)
-    val array = if (raw != null) JSONArray(raw) else JSONArray()
-    val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-    array.put(JSONObject().put("activityId", activityId).put("date", today))
+    val now = Date()
+    val array = pendingArray(context)
+    array.put(
+      JSONObject()
+        .put("id", "$activityId:${now.time}")
+        .put("activityId", activityId)
+        .put("date", localDate(now))
+        .put("time", SimpleDateFormat("HH:mm", Locale.US).format(now))
+        .put("tappedAt", now.time)
+        .put("tz", TimeZone.getDefault().id),
+    )
     prefs(context).edit().putString(KEY_PENDING_DONE, array.toString()).apply()
   }
 
-  /** Returns and clears the queued "Mark done" taps. */
-  fun consumePendingDone(context: Context): List<Map<String, String>> {
-    val raw = prefs(context).getString(KEY_PENDING_DONE, null) ?: return emptyList()
-    prefs(context).edit().remove(KEY_PENDING_DONE).apply()
-    val array = JSONArray(raw)
+  /**
+   * The queued taps, left in place: they're only removed once the user has
+   * answered for them, so a confirmation cut short by the app closing asks again.
+   */
+  fun getPendingDone(context: Context): List<Map<String, Any>> {
+    val array = pendingArray(context)
     return (0 until array.length()).map {
       val entry = array.getJSONObject(it)
-      mapOf("activityId" to entry.getString("activityId"), "date" to entry.getString("date"))
+      val activityId = entry.getString("activityId")
+      // Taps queued before they carried a time have only their date to go on.
+      val tappedAt = entry.optLong("tappedAt", 0L)
+      mapOf(
+        "id" to entry.optString("id", "$activityId:${entry.getString("date")}"),
+        "activityId" to activityId,
+        "date" to entry.getString("date"),
+        "time" to entry.optString("time", ""),
+        "tappedAt" to tappedAt.toDouble(),
+        "tz" to entry.optString("tz", ""),
+      )
+    }
+  }
+
+  fun removePendingDone(context: Context, ids: Set<String>) {
+    val array = pendingArray(context)
+    val kept = JSONArray()
+    for (i in 0 until array.length()) {
+      val entry = array.getJSONObject(i)
+      val id = entry.optString("id", "${entry.getString("activityId")}:${entry.getString("date")}")
+      if (id !in ids) kept.put(entry)
+    }
+    prefs(context).edit().putString(KEY_PENDING_DONE, kept.toString()).apply()
+  }
+
+  /** Whether `activityId` was marked done today and the tap is still waiting on the app. */
+  fun hasPendingDoneToday(context: Context, activityId: String): Boolean {
+    val today = localDate(Date())
+    val array = pendingArray(context)
+    return (0 until array.length()).any {
+      val entry = array.getJSONObject(it)
+      entry.getString("activityId") == activityId && entry.getString("date") == today
     }
   }
 }
