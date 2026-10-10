@@ -13,9 +13,14 @@ import {
   SequenceDrop,
   SequenceDropsMap,
   SequenceTask,
+  insertByDate,
   withLogValue,
 } from '../features/attendance/attendanceService';
-import { getBackfillEligibility, BackfillEligibility } from '../features/attendance/backfill';
+import {
+  getBackfillEligibility,
+  BackfillEligibility,
+  isDayCorrectable,
+} from '../features/attendance/backfill';
 import {
   calculateCurrentStreak,
   calculateLongestStreak,
@@ -78,6 +83,12 @@ interface AttendanceState {
   sequenceDrops: SequenceDropsMap;
   selectedActivityId: string | null;
   isLoading: boolean;
+  /**
+   * True once `hydrate` has loaded stored data. Unlike `isLoading`, which is
+   * also false before hydration starts, this can't be mistaken for "loaded,
+   * and there's nothing here".
+   */
+  hasHydrated: boolean;
   isConfettiEnabled: boolean;
   isHideExtraDaysEnabled: boolean;
   isHapticsEnabled: boolean;
@@ -109,6 +120,23 @@ interface AttendanceState {
     reason: string,
     value?: number,
   ) => Promise<boolean>;
+  /**
+   * Logs a "Mark done" tap from the alarm once the user has confirmed it in
+   * the app. The entry carries the tap's own day, time and timezone, so a tap
+   * confirmed after midnight still lands on the day it was made. Resolves false
+   * if refused (habit gone or finished, or that day already logged).
+   */
+  logAlarmTap: (
+    activityId: string,
+    tap: { date: string; ts: string; tz?: string },
+    note?: string,
+    value?: number,
+  ) => Promise<boolean>;
+  /**
+   * Takes back a log made by mistake — today or a day still inside the
+   * correction window (`isDayCorrectable`). Resolves false if refused.
+   */
+  discardLog: (activityId: string, dateStr: string) => Promise<boolean>;
   /** Logs today AND marks the sequence task as skipped. Streak is maintained but sequence does not advance. */
   logTodayWithSequenceSkip: (activityId: string, note?: string, value?: number) => Promise<void>;
   /**
@@ -136,6 +164,8 @@ interface AttendanceState {
   appendNote: (activityId: string, dateStr: string, text: string) => Promise<void>;
   /** Edits the text of an existing note entry by index. The original timestamp is preserved. */
   editNote: (activityId: string, dateStr: string, index: number, text: string) => Promise<void>;
+  /** Deletes a note entry by index. Only inside the correction window. */
+  deleteNote: (activityId: string, dateStr: string, index: number) => Promise<void>;
   exportData: () => Promise<string>;
   importData: (jsonData: string) => Promise<boolean>;
 
@@ -144,10 +174,85 @@ interface AttendanceState {
   getNoteEntries: (activityId: string, dateStr: string) => NoteEntry[] | undefined;
   /** Whether a past day can still be fixed, and how much of the quota is left. */
   getBackfillEligibility: (activityId: string, dateStr: string) => BackfillEligibility;
+  /** Whether a day's log and notes can still be changed — see `isDayCorrectable`. */
+  isDayCorrectable: (activityId: string, dateStr: string) => boolean;
 }
 
 export { NoteEntry, getTaskForDate };
 export type { LogEntry, SequenceSkipsMap, SequenceDrop, SequenceDropsMap, SequenceTask };
+
+/**
+ * Brings the rest of the state in line with an entry that was just written for
+ * a day other than through `logToday` — a fixed missed day, or an alarm tap
+ * confirmed later. The entry (and `note`, if any) must already be on disk;
+ * this persists what follows from it and returns the slice to `set`.
+ */
+const settleNewEntry = async (
+  state: AttendanceState,
+  activityId: string,
+  newEntry: LogEntry,
+  note?: string,
+): Promise<Pick<AttendanceState, 'logs' | 'notes' | 'taskHistory' | 'activities'>> => {
+  const { logs, notes, taskHistory, activities, sequenceSkips, sequenceDrops } = state;
+  const dateStr = newEntry.date;
+  const activity = activities.find((a) => a.id === activityId);
+
+  // Keep the in-memory list ascending, the same way the service did on disk.
+  const updatedEntries = insertByDate(logs[activityId] ?? [], newEntry);
+  const updatedLogs = { ...logs, [activityId]: updatedEntries };
+
+  // Lock in the task for that day, exactly as logging it live would have. In
+  // 'log' mode this shifts the *upcoming* task by one step, which is correct:
+  // a session that happened is a session the sequence should have advanced on.
+  const updatedTaskHistory = { ...taskHistory };
+  if (activity?.taskSequence && activity.taskSequence.length > 0) {
+    const task = getTaskForDate(activity, dateStr, {
+      logs: updatedEntries.map((e) => e.date),
+      postponed: sequenceSkips[activityId] ?? [],
+      dropped: (sequenceDrops[activityId] ?? []).map((d) => d.date),
+    });
+    if (task) {
+      updatedTaskHistory[activityId] = { ...updatedTaskHistory[activityId], [dateStr]: task };
+      await attendanceService.saveTaskHistory(updatedTaskHistory);
+    }
+  }
+
+  // The note was stored as an ordinary one, so mirror it like appendNote does.
+  let updatedNotes = notes;
+  if (note) {
+    const existing = notes[activityId]?.[dateStr] ?? [];
+    updatedNotes = {
+      ...notes,
+      [activityId]: {
+        ...notes[activityId],
+        [dateStr]: [...existing, { text: note, time: dayjs().toISOString(), tz: getCurrentTz() }],
+      },
+    };
+  }
+
+  // A late entry can be the one that completes a goal — it stands for work
+  // that was actually done, so it settles the goal the same as any other log.
+  let updatedActivities = activities;
+  if (activity && activity.activityType === 'goal' && activity.streakGoal) {
+    const logDates = updatedEntries.map((e) => e.date);
+    const newStreak = activity.weeklyGoal
+      ? calculateCurrentWeeklyStreak(logDates, activity.weeklyGoal)
+      : calculateCurrentStreak(logDates);
+    if (newStreak >= activity.streakGoal) {
+      updatedActivities = activities.map((a) =>
+        a.id === activityId ? { ...a, completedAt: Date.now() } : a,
+      );
+      await attendanceService.saveActivities(updatedActivities);
+    }
+  }
+
+  return {
+    logs: updatedLogs,
+    notes: updatedNotes,
+    taskHistory: updatedTaskHistory,
+    activities: updatedActivities,
+  };
+};
 
 export const useAttendanceStore = create<AttendanceState>((set, get) => ({
   activities: [],
@@ -158,6 +263,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
   sequenceDrops: {},
   selectedActivityId: null,
   isLoading: false,
+  hasHydrated: false,
   isConfettiEnabled: true,
   isHideExtraDaysEnabled: true,
   isHapticsEnabled: true,
@@ -198,6 +304,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
         isHideExtraDaysEnabled,
         isHapticsEnabled,
         isLoading: false,
+        hasHydrated: true,
       });
     } catch {
       set({
@@ -211,6 +318,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
         isHideExtraDaysEnabled: true,
         isHapticsEnabled: true,
         isLoading: false,
+        hasHydrated: true,
       });
     }
   },
@@ -539,7 +647,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
   },
 
   logMissedDay: async (activityId: string, dateStr: string, reason: string, value?: number) => {
-    const { logs, notes, taskHistory, activities, sequenceSkips, sequenceDrops } = get();
+    const { logs, activities } = get();
     const trimmedReason = reason.trim();
     if (!trimmedReason) return false;
 
@@ -556,63 +664,66 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       return false;
     }
 
-    // Keep the in-memory list ascending, the same way the service just did on disk.
-    const insertAt = entries.findIndex((entry) => entry.date > dateStr);
-    const updatedEntries =
-      insertAt === -1
-        ? [...entries, newEntry]
-        : [...entries.slice(0, insertAt), newEntry, ...entries.slice(insertAt)];
-    const updatedLogs = { ...logs, [activityId]: updatedEntries };
+    set({
+      ...(await settleNewEntry(get(), activityId, newEntry, trimmedReason)),
+      isLoading: false,
+    });
+    return true;
+  },
 
-    // Lock in the task for that day, exactly as logging it live would have. In
-    // 'log' mode this shifts the *upcoming* task by one step, which is correct:
-    // a session that happened is a session the sequence should have advanced on.
-    const updatedTaskHistory = { ...taskHistory };
-    if (activity?.taskSequence && activity.taskSequence.length > 0) {
-      const task = getTaskForDate(activity, dateStr, {
-        logs: updatedEntries.map((e) => e.date),
-        postponed: sequenceSkips[activityId] ?? [],
-        dropped: (sequenceDrops[activityId] ?? []).map((d) => d.date),
-      });
-      if (task) {
-        updatedTaskHistory[activityId] = { ...updatedTaskHistory[activityId], [dateStr]: task };
-        await attendanceService.saveTaskHistory(updatedTaskHistory);
-      }
-    }
+  logAlarmTap: async (activityId, tap, note, value) => {
+    const { activities, logs } = get();
+    const activity = activities.find((a) => a.id === activityId);
+    if (!activity || activity.completedAt) return false;
+    if ((logs[activityId] ?? []).some((entry) => entry.date === tap.date)) return false;
+    const trimmedNote = note?.trim() || undefined;
 
-    // The reason is stored as an ordinary note, so mirror it like appendNote does.
-    const updatedNotes = { ...notes };
-    const existing = updatedNotes[activityId]?.[dateStr] ?? [];
-    updatedNotes[activityId] = {
-      ...updatedNotes[activityId],
-      [dateStr]: [
-        ...existing,
-        { text: trimmedReason, time: dayjs().toISOString(), tz: getCurrentTz() },
-      ],
+    // Stamped with the tap, not with now: the habit was done when the alarm
+    // was answered, however long the phone then sat locked.
+    const newEntry: LogEntry = {
+      ts: tap.ts,
+      date: tap.date,
+      ...(tap.tz ? { tz: tap.tz } : {}),
+      ...(value !== undefined ? { value } : {}),
     };
 
-    // A fixed day can be the one that completes a goal — it stands for work
-    // that was actually done, so it settles the goal the same as any other log.
-    let updatedActivities = activities;
-    if (activity && activity.activityType === 'goal' && activity.streakGoal) {
-      const logDates = updatedEntries.map((e) => e.date);
-      const newStreak = activity.weeklyGoal
-        ? calculateCurrentWeeklyStreak(logDates, activity.weeklyGoal)
-        : calculateCurrentStreak(logDates);
-      if (newStreak >= activity.streakGoal) {
-        updatedActivities = activities.map((a) =>
-          a.id === activityId ? { ...a, completedAt: Date.now() } : a,
-        );
-        await attendanceService.saveActivities(updatedActivities);
-      }
+    set({ isLoading: true });
+    if (!(await attendanceService.insertLog(activityId, newEntry))) {
+      set({ isLoading: false });
+      return false;
+    }
+    if (trimmedNote) await attendanceService.appendNote(activityId, tap.date, trimmedNote);
+
+    set({ ...(await settleNewEntry(get(), activityId, newEntry, trimmedNote)), isLoading: false });
+    return true;
+  },
+
+  discardLog: async (activityId: string, dateStr: string) => {
+    const { logs, taskHistory, sequenceSkips, activities } = get();
+    const activity = activities.find((a) => a.id === activityId);
+    // Re-checked here for the same reason as logMissedDay: midnight can pass
+    // while the sheet sits open.
+    if (!isDayCorrectable(activity, dateStr)) return false;
+    const entries = logs[activityId] ?? [];
+    if (!entries.some((entry) => entry.date === dateStr)) return false;
+
+    if (!(await attendanceService.discardLog(activityId, dateStr))) return false;
+
+    const updatedTaskHistory = { ...taskHistory };
+    if (updatedTaskHistory[activityId]?.[dateStr]) {
+      updatedTaskHistory[activityId] = { ...updatedTaskHistory[activityId] };
+      delete updatedTaskHistory[activityId][dateStr];
+    }
+
+    const updatedSkips = { ...sequenceSkips };
+    if (updatedSkips[activityId]?.includes(dateStr)) {
+      updatedSkips[activityId] = updatedSkips[activityId].filter((d) => d !== dateStr);
     }
 
     set({
-      logs: updatedLogs,
-      notes: updatedNotes,
+      logs: { ...logs, [activityId]: entries.filter((entry) => entry.date !== dateStr) },
       taskHistory: updatedTaskHistory,
-      activities: updatedActivities,
-      isLoading: false,
+      sequenceSkips: updatedSkips,
     });
     return true;
   },
@@ -752,9 +863,16 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
   },
 
   editNote: async (activityId: string, dateStr: string, index: number, text: string) => {
-    const { notes } = get();
+    const { notes, activities } = get();
     const trimmed = text.trim();
     if (!trimmed) return;
+    if (
+      !isDayCorrectable(
+        activities.find((a) => a.id === activityId),
+        dateStr,
+      )
+    )
+      return;
 
     await attendanceService.editNote(activityId, dateStr, index, trimmed);
 
@@ -765,6 +883,30 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     updated[index] = { ...updated[index], text: trimmed };
     updatedNotes[activityId] = { ...updatedNotes[activityId], [dateStr]: updated };
     set({ notes: updatedNotes });
+  },
+
+  deleteNote: async (activityId: string, dateStr: string, index: number) => {
+    const { notes, activities } = get();
+    if (
+      !isDayCorrectable(
+        activities.find((a) => a.id === activityId),
+        dateStr,
+      )
+    )
+      return;
+    const entries = notes[activityId]?.[dateStr];
+    if (!entries || index < 0 || index >= entries.length) return;
+
+    await attendanceService.deleteNote(activityId, dateStr, index);
+
+    const remaining = entries.filter((_, i) => i !== index);
+    const activityNotes = { ...notes[activityId] };
+    if (remaining.length > 0) {
+      activityNotes[dateStr] = remaining;
+    } else {
+      delete activityNotes[dateStr];
+    }
+    set({ notes: { ...notes, [activityId]: activityNotes } });
   },
 
   resetActivityData: async (id: string) => {
@@ -854,6 +996,13 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     return getBackfillEligibility(
       activities.find((a) => a.id === activityId),
       logs[activityId] ?? [],
+      dateStr,
+    );
+  },
+
+  isDayCorrectable: (activityId: string, dateStr: string) => {
+    return isDayCorrectable(
+      get().activities.find((a) => a.id === activityId),
       dateStr,
     );
   },

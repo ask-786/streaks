@@ -10,16 +10,27 @@ export interface AlarmSpec {
   triggerAt: number;
 }
 
+/** A "Mark done" tap from the alarm, waiting for the user to confirm it in the app. */
 export interface PendingDone {
+  /** Stable per tap; pass back to `removePendingDone` once it's been answered. */
+  id: string;
   activityId: string;
   /** YYYY-MM-DD, device-local, when "Mark done" was tapped. */
   date: string;
+  /** HH:mm, device-local, when it was tapped. Empty for taps queued by older versions. */
+  time: string;
+  /** Epoch ms of the tap. 0 for taps queued by older versions. */
+  tappedAt: number;
+  /** IANA timezone at the tap. Empty for taps queued by older versions. */
+  tz: string;
 }
 
 interface HabitAlarmNativeModule {
   setAlarms(alarms: AlarmSpec[]): void;
   cancelSnoozes(activityIds: string[]): void;
-  consumePendingDone(): PendingDone[];
+  /** The queued taps. Reading leaves them queued; see `removePendingDone`. */
+  getPendingDone(): PendingDone[];
+  removePendingDone(ids: string[]): void;
   canUseFullScreenIntent(): boolean;
   openFullScreenIntentSettings(): void;
 }

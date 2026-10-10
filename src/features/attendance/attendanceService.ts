@@ -136,6 +136,14 @@ export interface LogEntry {
   value?: number;
 }
 
+/** `entries` with `entry` inserted before the first later day, keeping the list ascending. */
+export function insertByDate(entries: LogEntry[], entry: LogEntry): LogEntry[] {
+  const insertAt = entries.findIndex((e) => e.date > entry.date);
+  return insertAt === -1
+    ? [...entries, entry]
+    : [...entries.slice(0, insertAt), entry, ...entries.slice(insertAt)];
+}
+
 /** A copy of `entry` carrying `value`, or carrying none when it's null. */
 export function withLogValue(entry: LogEntry, value: number | null): LogEntry {
   const copy = { ...entry };
@@ -443,9 +451,6 @@ export const attendanceService = {
    * only the invariant every log path shares (one entry per day) and the one
    * this path adds (a reason is not optional). The reason is stored as an
    * ordinary note so it shows up in the day's timeline and in exports.
-   *
-   * Entries are inserted in date order rather than appended, so the stored list
-   * stays ascending the way every other write leaves it.
    */
   logPastDate: async (
     activityId: string,
@@ -456,10 +461,6 @@ export const attendanceService = {
     const trimmed = reason.trim();
     if (!trimmed) return null;
 
-    const logs = await attendanceService.getLogs();
-    const activityLogs = logs[activityId] || [];
-    if (activityLogs.some((entry) => entry.date === dateStr)) return null;
-
     const newEntry: LogEntry = {
       ts: dayjs().toISOString(),
       date: dateStr,
@@ -467,16 +468,58 @@ export const attendanceService = {
       backfilled: true,
       ...(value !== undefined ? { value } : {}),
     };
-    const insertAt = activityLogs.findIndex((entry) => entry.date > dateStr);
-    logs[activityId] =
-      insertAt === -1
-        ? [...activityLogs, newEntry]
-        : [...activityLogs.slice(0, insertAt), newEntry, ...activityLogs.slice(insertAt)];
-    await attendanceService.saveLogs(logs);
+    if (!(await attendanceService.insertLog(activityId, newEntry))) return null;
 
     await attendanceService.appendNote(activityId, dateStr, trimmed);
 
     return newEntry;
+  },
+
+  /**
+   * Stores `entry` as-is, in date order rather than appended, so the list stays
+   * ascending the way every other write leaves it. Refuses (false) when the
+   * entry's day already has a log — one entry per day is the invariant every
+   * log path shares.
+   */
+  insertLog: async (activityId: string, entry: LogEntry): Promise<boolean> => {
+    const logs = await attendanceService.getLogs();
+    const activityLogs = logs[activityId] || [];
+    if (activityLogs.some((e) => e.date === entry.date)) return false;
+    logs[activityId] = insertByDate(activityLogs, entry);
+    await attendanceService.saveLogs(logs);
+    return true;
+  },
+
+  /**
+   * Takes back a log made by mistake. Callers must clear `isDayCorrectable`
+   * first. Along with the entry go the things that only meant anything because
+   * the day was logged: the task locked in for it, and a "doing it later" mark.
+   * Notes stay — they can be removed one by one, and a note is never lost as a
+   * side effect.
+   *
+   * Removing a fixed entry also hands its quota slot back, since the quota is
+   * counted from the entries themselves.
+   */
+  discardLog: async (activityId: string, dateStr: string): Promise<boolean> => {
+    const logs = await attendanceService.getLogs();
+    const activityLogs = logs[activityId] ?? [];
+    if (!activityLogs.some((entry) => entry.date === dateStr)) return false;
+    logs[activityId] = activityLogs.filter((entry) => entry.date !== dateStr);
+    await attendanceService.saveLogs(logs);
+
+    const history = await attendanceService.getTaskHistory();
+    if (history[activityId]?.[dateStr]) {
+      delete history[activityId][dateStr];
+      await attendanceService.saveTaskHistory(history);
+    }
+
+    const skips = await attendanceService.getSequenceSkips();
+    if (skips[activityId]?.includes(dateStr)) {
+      skips[activityId] = skips[activityId].filter((d) => d !== dateStr);
+      await attendanceService.saveSequenceSkips(skips);
+    }
+
+    return true;
   },
 
   /**
@@ -524,6 +567,20 @@ export const attendanceService = {
     const updated = [...entries];
     updated[index] = { ...updated[index], text: text.trim() };
     notes[activityId][dateStr] = updated;
+    await attendanceService.saveNotes(notes);
+  },
+
+  /** Removes one NoteEntry by index, dropping the date key once it's empty. */
+  deleteNote: async (activityId: string, dateStr: string, index: number): Promise<void> => {
+    const notes = await attendanceService.getNotes();
+    const entries = notes[activityId]?.[dateStr];
+    if (!entries || index < 0 || index >= entries.length) return;
+    const remaining = entries.filter((_, i) => i !== index);
+    if (remaining.length > 0) {
+      notes[activityId][dateStr] = remaining;
+    } else {
+      delete notes[activityId][dateStr];
+    }
     await attendanceService.saveNotes(notes);
   },
 
