@@ -37,6 +37,8 @@ export interface NoteInputModalProps {
   subtitle?: string;
   /** Override the submit button label. Defaults to "Log & Save Note". */
   submitLabel?: string;
+  /** Override the cancel button label. Defaults to "Cancel". */
+  cancelLabel?: string;
   /** When false, the note is optional and Submit is always enabled. Defaults to true. */
   noteRequired?: boolean;
   /** When false, the note field is hidden and only the metric is asked for. Defaults to true. */
@@ -44,6 +46,12 @@ export interface NoteInputModalProps {
   /** The habit's metric, when the sheet should also ask for the day's value. */
   metric?: HabitMetric;
   onClose: () => void;
+  /**
+   * The cancel button, when it means something other than closing — e.g. "No,
+   * I didn't" versus "ask me later". Defaults to `onClose`; the close button,
+   * backdrop and hardware back always use `onClose`.
+   */
+  onCancel?: () => void;
   /** `value` is in the metric's base unit; undefined when none was entered. */
   onSubmit: (note: string, value?: number) => void;
 }
@@ -54,10 +62,12 @@ export const NoteInputModal: React.FC<NoteInputModalProps> = ({
   title,
   subtitle,
   submitLabel,
+  cancelLabel,
   noteRequired = true,
   showNote = true,
   metric,
   onClose,
+  onCancel,
   onSubmit,
 }) => {
   const { colors, elevation } = useTheme();
@@ -259,13 +269,15 @@ export const NoteInputModal: React.FC<NoteInputModalProps> = ({
             {/* Actions */}
             <View style={styles.actions}>
               <PressableScale
-                onPress={onClose}
+                onPress={onCancel ?? onClose}
                 scaleTo={0.96}
                 style={[styles.btnCancel, { backgroundColor: colors.surfaceVariant }]}
                 accessibilityRole="button"
-                accessibilityLabel="Cancel"
+                accessibilityLabel={cancelLabel ?? 'Cancel'}
               >
-                <Text style={[styles.btnCancelText, { color: colors.textSecondary }]}>Cancel</Text>
+                <Text style={[styles.btnCancelText, { color: colors.textSecondary }]}>
+                  {cancelLabel ?? 'Cancel'}
+                </Text>
               </PressableScale>
 
               <PressableScale

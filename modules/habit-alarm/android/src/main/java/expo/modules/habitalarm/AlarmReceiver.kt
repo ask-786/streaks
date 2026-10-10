@@ -12,6 +12,10 @@ class AlarmReceiver : BroadcastReceiver() {
       AlarmScheduler.ACTION_FIRE -> {
         val alarm = Alarm.readFrom(intent) ?: return
         AlarmStore.remove(context, alarm.id)
+        // Already marked done from an earlier ring today. The app hasn't been
+        // opened to confirm it yet, so its schedule doesn't know — but ringing
+        // again for a habit the user just said they did is pure nagging.
+        if (AlarmStore.hasPendingDoneToday(context, alarm.activityId)) return
         // Starting a foreground service from the background is allowed here:
         // broadcasts from setAlarmClock alarms are exempt.
         ContextCompat.startForegroundService(context, AlarmService.startIntent(context, alarm))

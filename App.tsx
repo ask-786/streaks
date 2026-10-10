@@ -5,7 +5,7 @@ import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useAttendanceStore } from './src/store/attendanceStore';
 import { useNotifications } from './src/hooks/useNotifications';
-import { useAlarmActions } from './src/hooks/useAlarmActions';
+import { AlarmDoneConfirm } from './src/components/AlarmDoneConfirm';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { ThemeProvider, useTheme } from './src/hooks/useTheme';
 
@@ -22,8 +22,6 @@ function AppContent() {
 
   // Initialize and observe notifications
   useNotifications();
-  // Log habits marked done from a ringing alarm
-  useAlarmActions();
 
   useEffect(() => {
     // Load all persisted logged dates on app launch
@@ -34,6 +32,8 @@ function AppContent() {
     <PaperProvider theme={paperTheme}>
       <StatusBar style={isDark ? 'light' : 'dark'} backgroundColor={colors.background} />
       <AppNavigator />
+      {/* Confirms habits marked done from a ringing alarm before logging them */}
+      <AlarmDoneConfirm />
     </PaperProvider>
   );
 }

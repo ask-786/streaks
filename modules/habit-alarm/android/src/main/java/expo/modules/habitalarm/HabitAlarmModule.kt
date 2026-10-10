@@ -46,8 +46,12 @@ class HabitAlarmModule : Module() {
       AlarmScheduler.cancelSnoozes(context, activityIds.toSet())
     }
 
-    Function("consumePendingDone") {
-      AlarmStore.consumePendingDone(context)
+    Function("getPendingDone") {
+      AlarmStore.getPendingDone(context)
+    }
+
+    Function("removePendingDone") { ids: List<String> ->
+      AlarmStore.removePendingDone(context, ids.toSet())
     }
 
     /** Android 14+ lets the user turn off full-screen alerts per app; below that it's always on. */

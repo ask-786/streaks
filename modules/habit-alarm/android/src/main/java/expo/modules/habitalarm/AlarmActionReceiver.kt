@@ -39,7 +39,7 @@ object AlarmActions {
     dismiss(context)
   }
 
-  /** Queues the log for JS; the caller is responsible for opening the app. */
+  /** Queues the tap for the app to confirm; the caller is responsible for opening the app. */
   fun done(context: Context, alarm: Alarm) {
     AlarmStore.addPendingDone(context, alarm.activityId)
     dismiss(context)
