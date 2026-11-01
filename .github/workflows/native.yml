@@ -41,7 +41,7 @@ jobs:
           java-version: '17'
 
       # Caches Gradle's dependencies and build cache between runs.
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
 
       - name: Expo Prebuild
         run: pnpm exec expo prebuild --platform android --clean --no-install
